@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from jose import jwt
+from jose import JWTError, jwt
 
 from .config import settings
 
@@ -51,3 +51,26 @@ def create_access_token(
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
     )
+
+def decode_access_token(token: str) -> tuple[int, str]:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except JWTError as exc:
+        raise ValueError("Invalid or expired access token.") from exc
+
+    subject = payload.get("sub")
+    role = payload.get("role")
+
+    if subject is None or role is None:
+        raise ValueError("Access token is missing required claims.")
+
+    try:
+        subject_id = int(subject)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Access token subject is invalid.") from exc
+
+    return subject_id, str(role)

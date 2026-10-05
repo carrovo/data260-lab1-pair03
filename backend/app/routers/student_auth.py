@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,7 @@ from backend.app.schemas.student_auth import (
 )
 from backend.app.security import (
     create_access_token,
+    decode_access_token,
     hash_password,
     verify_password,
 )
@@ -21,7 +23,7 @@ router = APIRouter(
     prefix="/auth",
     tags=["student authentication"],
 )
-
+bearer_scheme = HTTPBearer(auto_error=False)
 
 def get_db():
     db = SessionLocal()
@@ -31,6 +33,38 @@ def get_db():
     finally:
         db.close()
 
+def get_current_student(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> Student:
+    unauthorized_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired access token.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    if credentials is None:
+        raise unauthorized_error
+
+    try:
+        student_id, role = decode_access_token(
+            credentials.credentials
+        )
+    except ValueError:
+        raise unauthorized_error
+
+    if role != "student":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Student access is required.",
+        )
+
+    student = db.get(Student, student_id)
+
+    if student is None:
+        raise unauthorized_error
+
+    return student
 
 @router.post(
     "/signup",
@@ -102,3 +136,12 @@ def login(
         access_token=access_token,
         student=StudentResponse.model_validate(student),
     )
+
+@router.get(
+    "/me",
+    response_model=StudentResponse,
+)
+def read_current_student(
+    current_student: Student = Depends(get_current_student),
+):
+    return current_student
