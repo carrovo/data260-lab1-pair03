@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from backend.app.routers.student_auth import router as student_auth_router
+from backend.app.routers.jobs import router as jobs_router
 
 app = FastAPI(
     title="DATA 260 Lab 1 — Pair 03",
@@ -7,6 +8,7 @@ app = FastAPI(
 )
 
 app.include_router(student_auth_router)
+app.include_router(jobs_router)
 
 @app.get("/")
 def read_root():
