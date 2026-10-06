@@ -1,0 +1,142 @@
+.app-shell {
+  min-height: 100vh;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px max(24px, calc((100% - 1100px) / 2));
+  background: #ffffff;
+  border-bottom: 1px solid #dfe5ee;
+}
+
+.brand {
+  color: #174ea6;
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+nav {
+  display: flex;
+  gap: 10px;
+}
+
+.nav-link {
+  padding: 8px 12px;
+  color: #465268;
+  text-decoration: none;
+  border-radius: 6px;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: #174ea6;
+  background: #edf4ff;
+}
+
+.main-content {
+  width: min(1100px, calc(100% - 32px));
+  margin: 48px auto;
+}
+
+.page-heading {
+  margin-bottom: 24px;
+}
+
+h1 {
+  margin: 0 0 8px;
+}
+
+p {
+  color: #657086;
+}
+
+.form-card {
+  width: min(480px, 100%);
+  margin: 0 auto;
+  padding: 32px;
+  background: #ffffff;
+  border: 1px solid #dfe5ee;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgb(23 32 51 / 8%);
+}
+
+form {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+label {
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  padding: 11px 12px;
+  color: #172033;
+  background: #ffffff;
+  border: 1px solid #bcc6d6;
+  border-radius: 6px;
+}
+
+input:focus {
+  border-color: #174ea6;
+  outline: 3px solid #dbe9ff;
+}
+
+button {
+  padding: 11px 18px;
+  color: #ffffff;
+  font-weight: 600;
+  background: #174ea6;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #123f87;
+}
+
+.form-card button {
+  margin-top: 10px;
+}
+
+.search-form {
+  grid-template-columns: 1fr 1fr auto;
+  align-items: end;
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid #dfe5ee;
+  border-radius: 10px;
+}
+
+.search-form div {
+  display: grid;
+  gap: 8px;
+}
+
+.empty-state {
+  margin-top: 24px;
+  padding: 48px;
+  color: #657086;
+  text-align: center;
+  background: #ffffff;
+  border: 1px dashed #bcc6d6;
+  border-radius: 10px;
+}
+
+@media (max-width: 700px) {
+  .site-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .search-form {
+    grid-template-columns: 1fr;
+  }
+}
