@@ -39,3 +39,13 @@ export function fetchJobs({ keyword = '', city = '' } = {}) {
 
   return apiRequest(path)
 }
+
+export function signupStudent(studentData) {
+    return apiRequest('/auth/signup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(studentData),
+    })
+  }

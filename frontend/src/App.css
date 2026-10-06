@@ -191,3 +191,11 @@ button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
 }
+
+.success-message {
+  padding: 12px 16px;
+  color: #176238;
+  background: #eefaf3;
+  border: 1px solid #a9ddbd;
+  border-radius: 6px;
+}
