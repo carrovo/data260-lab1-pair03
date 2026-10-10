@@ -66,6 +66,10 @@ export function fetchJobs({ keyword = '', city = '' } = {}) {
   return apiRequest(path)
 }
 
+export function fetchJob(jobId) {
+  return apiRequest(`/jobs/${encodeURIComponent(jobId)}`)
+}
+
 export function signupStudent(studentData) {
   return apiRequest('/auth/signup', {
     method: 'POST',

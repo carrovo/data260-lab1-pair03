@@ -188,11 +188,28 @@ button:hover {
   margin-top: 24px;
 }
 
+.job-card-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.job-card-link:focus-visible {
+  outline: 3px solid #174ea6;
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
 .job-card {
   padding: 24px;
   background: #ffffff;
   border: 1px solid #dfe5ee;
   border-radius: 10px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.job-card-link:hover .job-card {
+  border-color: #9db9e3;
+  box-shadow: 0 8px 20px rgb(23 32 51 / 8%);
 }
 
 .job-card-heading {
@@ -220,6 +237,85 @@ button:hover {
   font-weight: 600;
 }
 
+.job-detail-page {
+  width: min(820px, 100%);
+  margin: 0 auto;
+}
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 20px;
+  color: #174ea6;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.job-detail-card,
+.job-detail-state {
+  padding: 32px;
+  background: #ffffff;
+  border: 1px solid #dfe5ee;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgb(23 32 51 / 8%);
+}
+
+.job-detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.job-detail-heading h1 {
+  margin-bottom: 10px;
+}
+
+.job-detail-eyebrow {
+  margin: 0 0 8px;
+  color: #174ea6;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.job-city {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  color: #174ea6;
+  background: #edf4ff;
+  border-radius: 999px;
+}
+
+.job-created-date {
+  margin: 24px 0;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #dfe5ee;
+}
+
+.job-description h2 {
+  margin: 0 0 12px;
+  font-size: 1.2rem;
+}
+
+.job-description p {
+  margin-bottom: 0;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.job-detail-state {
+  text-align: center;
+}
+
+.job-detail-state .error-message {
+  text-align: left;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
@@ -231,4 +327,10 @@ button:disabled {
   background: #eefaf3;
   border: 1px solid #a9ddbd;
   border-radius: 6px;
+}
+
+@media (max-width: 700px) {
+  .job-detail-heading {
+    flex-direction: column;
+  }
 }

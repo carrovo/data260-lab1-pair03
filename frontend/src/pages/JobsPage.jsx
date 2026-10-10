@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { fetchJobs } from '../api'
 
 function JobsPage() {
@@ -104,18 +104,24 @@ function JobsPage() {
 
       <div className="job-list">
         {jobs.map((job) => (
-          <article className="job-card" key={job.id}>
-            <div className="job-card-heading">
-              <h2>{job.title}</h2>
-              <span>{job.city}</span>
-            </div>
+          <Link
+            className="job-card-link"
+            key={job.id}
+            to={`/jobs/${job.id}`}
+          >
+            <article className="job-card">
+              <div className="job-card-heading">
+                <h2>{job.title}</h2>
+                <span>{job.city}</span>
+              </div>
 
-            <p className="company-name">
-              {job.company.name} · {job.company.city}
-            </p>
+              <p className="company-name">
+                {job.company.name} · {job.company.city}
+              </p>
 
-            <p>{job.description}</p>
-          </article>
+              <p>{job.description}</p>
+            </article>
+          </Link>
         ))}
       </div>
     </section>

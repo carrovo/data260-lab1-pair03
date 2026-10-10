@@ -7,6 +7,7 @@ import {
 } from 'react-router-dom'
 import SignupPage from './pages/SignupPage'
 import LoginPage from './pages/LoginPage'
+import JobDetailPage from './pages/JobDetailPage'
 import JobsPage from './pages/JobsPage'
 import useAuth from './auth/useAuth'
 import './App.css'
@@ -67,6 +68,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/jobs" replace />} />
           <Route path="/jobs" element={<JobsPage />} />
+          <Route path="/jobs/:jobId" element={<JobDetailPage />} />
           <Route element={<GuestOnlyRoute />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
