@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { fetchJobs } from '../api'
 
 function JobsPage() {
+  const location = useLocation()
   const [keyword, setKeyword] = useState('')
   const [city, setCity] = useState('')
   const [jobs, setJobs] = useState([])
@@ -57,6 +59,12 @@ function JobsPage() {
         <h1>Find jobs and internships</h1>
         <p>Search by keyword, job title, company, or city.</p>
       </div>
+
+      {location.state?.successMessage && (
+        <p className="success-message">
+          {location.state.successMessage}
+        </p>
+      )}
 
       <form className="search-form" onSubmit={handleSubmit}>
         <div>

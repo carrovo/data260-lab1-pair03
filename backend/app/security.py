@@ -24,8 +24,13 @@ def verify_password(
     plain_password: str,
     hashed_password: str,
 ) -> bool:
+    plain_password_bytes = plain_password.encode("utf-8")
+
+    if len(plain_password_bytes) > 72:
+        return False
+
     return bcrypt.checkpw(
-        plain_password.encode("utf-8"),
+        plain_password_bytes,
         hashed_password.encode("utf-8"),
     )
 

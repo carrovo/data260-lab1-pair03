@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { signupStudent } from '../api'
+import { useNavigate } from 'react-router-dom'
+import useAuth from '../auth/useAuth'
 
 const initialFormData = {
   full_name: '',
@@ -12,7 +13,8 @@ function SignupPage() {
   const [formData, setFormData] = useState(initialFormData)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
+  const { signUp } = useAuth()
+  const navigate = useNavigate()
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -27,18 +29,19 @@ function SignupPage() {
     event.preventDefault()
     setLoading(true)
     setError('')
-    setMessage('')
 
     try {
-      const student = await signupStudent(formData)
+      const response = await signUp(formData)
 
-      setMessage(
-        `Account created successfully for ${student.full_name}.`,
-      )
       setFormData(initialFormData)
+      navigate('/jobs', {
+        replace: true,
+        state: {
+          successMessage: `Account created successfully for ${response.student.full_name}.`,
+        },
+      })
     } catch (requestError) {
       setError(requestError.message)
-    } finally {
       setLoading(false)
     }
   }
@@ -89,7 +92,6 @@ function SignupPage() {
           value={formData.password}
           onChange={handleChange}
           minLength="8"
-          maxLength="72"
           required
         />
 
@@ -97,8 +99,6 @@ function SignupPage() {
           {loading ? 'Creating account...' : 'Create account'}
         </button>
       </form>
-
-      {message && <p className="success-message">{message}</p>}
       {error && <p className="error-message">{error}</p>}
     </section>
   )

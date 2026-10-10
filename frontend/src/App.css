@@ -20,6 +20,7 @@
 
 nav {
   display: flex;
+  align-items: center;
   gap: 10px;
 }
 
@@ -34,6 +35,34 @@ nav {
 .nav-link.active {
   color: #174ea6;
   background: #edf4ff;
+}
+
+.auth-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.student-name {
+  color: #465268;
+  font-weight: 600;
+}
+
+.nav-button {
+  padding: 8px 12px;
+  color: #174ea6;
+  background: #edf4ff;
+}
+
+.nav-button:hover {
+  background: #dbe9ff;
+}
+
+.session-loading {
+  display: grid;
+  min-height: 100vh;
+  color: #657086;
+  place-items: center;
 }
 
 .main-content {
@@ -134,6 +163,10 @@ button:hover {
     align-items: flex-start;
     flex-direction: column;
     gap: 14px;
+  }
+
+  nav {
+    flex-wrap: wrap;
   }
 
   .search-form {
