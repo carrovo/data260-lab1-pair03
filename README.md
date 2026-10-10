@@ -37,3 +37,17 @@ Build the foundation of the application:
 - Do not commit `.env` files, passwords, API keys, virtual environments, or dependency folders.
 - Both partners should make regular commits.
 - The final Lab 1 version will be tagged `lab1`.
+
+## Application Resume Schema Migration
+
+After creating the base MySQL schema, add the application resume metadata and
+align the application status default by running this command from the repository
+root:
+
+```bash
+.venv/bin/python -m backend.migrate_application_resumes
+```
+
+The migration is safe to run more than once. It preserves existing applications,
+changes legacy `submitted` statuses to `Pending`, and leaves resume metadata empty
+for legacy rows that predate required resume uploads.

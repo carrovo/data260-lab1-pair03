@@ -10,13 +10,15 @@ from sqlalchemy.pool import StaticPool
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-jwt-secret")
 
+from backend.app.config import settings  # noqa: E402
 from backend.app.database import Base  # noqa: E402
 from backend.app.main import app  # noqa: E402
 from backend.app.routers import student_auth  # noqa: E402
 
 
 @pytest.fixture
-def auth_test_context():
+def auth_test_context(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "resume_upload_dir", tmp_path / "resumes")
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},

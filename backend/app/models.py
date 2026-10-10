@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from .application_status import ApplicationStatus
 from .database import Base
 
 
@@ -80,8 +81,20 @@ class Application(Base):
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
     status: Mapped[str] = mapped_column(
         String(50),
-        default="submitted",
+        default=ApplicationStatus.PENDING.value,
+        server_default=ApplicationStatus.PENDING.value,
     )
+    # These columns remain nullable so databases with pre-upload application
+    # rows can be migrated without deleting or fabricating resume data.
+    resume_storage_key: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    resume_original_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    resume_size_bytes: Mapped[int | None] = mapped_column(nullable=True)
     applied_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
