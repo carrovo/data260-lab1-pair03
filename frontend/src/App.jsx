@@ -7,10 +7,13 @@ import {
   useLocation,
 } from 'react-router-dom'
 import ApplicationsPage from './pages/ApplicationsPage'
+import EventDetailPage from './pages/EventDetailPage'
+import EventsPage from './pages/EventsPage'
 import SignupPage from './pages/SignupPage'
 import LoginPage from './pages/LoginPage'
 import JobDetailPage from './pages/JobDetailPage'
 import JobsPage from './pages/JobsPage'
+import RegistrationsPage from './pages/RegistrationsPage'
 import useAuth from './auth/useAuth'
 import './App.css'
 
@@ -59,10 +62,16 @@ function App() {
           <NavLink className="nav-link" to="/jobs">
             Jobs
           </NavLink>
+          <NavLink className="nav-link" to="/events">
+            Events
+          </NavLink>
           {isAuthenticated ? (
             <div className="auth-nav">
               <NavLink className="nav-link" to="/applications">
                 Applications
+              </NavLink>
+              <NavLink className="nav-link" to="/registrations">
+                My Registrations
               </NavLink>
               <span className="student-name">{student.full_name}</span>
               <button
@@ -91,8 +100,11 @@ function App() {
           <Route path="/" element={<Navigate to="/jobs" replace />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:jobId" element={<JobDetailPage />} />
+          <Route path="/events" element={<EventsPage />} />
+          <Route path="/events/:eventId" element={<EventDetailPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/applications" element={<ApplicationsPage />} />
+            <Route path="/registrations" element={<RegistrationsPage />} />
           </Route>
           <Route element={<GuestOnlyRoute />}>
             <Route path="/login" element={<LoginPage />} />

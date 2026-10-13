@@ -140,3 +140,34 @@ export function fetchApplicationResume(applicationId, token) {
     },
   )
 }
+
+export function fetchEvents(keyword = '') {
+  const parameters = new URLSearchParams()
+
+  if (keyword.trim()) {
+    parameters.set('keyword', keyword.trim())
+  }
+
+  const queryString = parameters.toString()
+  const path = queryString ? `/events?${queryString}` : '/events'
+
+  return apiRequest(path)
+}
+
+export function fetchEvent(eventId) {
+  return apiRequest(`/events/${encodeURIComponent(eventId)}`)
+}
+
+export function registerForEvent(eventId, token) {
+  return apiRequest(
+    `/events/${encodeURIComponent(eventId)}/registrations`,
+    {
+      method: 'POST',
+      token,
+    },
+  )
+}
+
+export function fetchMyRegistrations(token) {
+  return apiRequest('/registrations/me', { token })
+}
