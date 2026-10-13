@@ -18,7 +18,10 @@ function getErrorMessage(data, fallbackMessage) {
   return fallbackMessage
 }
 
-async function apiRequest(path, { token, ...options } = {}) {
+async function apiRequest(
+  path,
+  { token, responseType = 'json', ...options } = {},
+) {
   const headers = new Headers(options.headers)
 
   if (token) {
@@ -44,6 +47,10 @@ async function apiRequest(path, { token, ...options } = {}) {
     const requestError = new Error(message)
     requestError.status = response.status
     throw requestError
+  }
+
+  if (responseType === 'blob') {
+    return response.blob()
   }
 
   return response.json()
@@ -92,4 +99,44 @@ export function loginStudent(credentials) {
 
 export function fetchCurrentStudent(token) {
   return apiRequest('/auth/me', { token })
+}
+
+export function submitApplication(jobId, resumeFile, token) {
+  const formData = new FormData()
+
+  formData.append('resume', resumeFile)
+
+  return apiRequest(
+    `/jobs/${encodeURIComponent(jobId)}/applications`,
+    {
+      method: 'POST',
+      body: formData,
+      token,
+    },
+  )
+}
+
+export function fetchMyApplications(token, applicationStatus = '') {
+  const parameters = new URLSearchParams()
+
+  if (applicationStatus) {
+    parameters.set('status', applicationStatus)
+  }
+
+  const queryString = parameters.toString()
+  const path = queryString
+    ? `/applications/me?${queryString}`
+    : '/applications/me'
+
+  return apiRequest(path, { token })
+}
+
+export function fetchApplicationResume(applicationId, token) {
+  return apiRequest(
+    `/applications/${encodeURIComponent(applicationId)}/resume`,
+    {
+      responseType: 'blob',
+      token,
+    },
+  )
 }

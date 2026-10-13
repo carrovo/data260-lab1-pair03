@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import useAuth from '../auth/useAuth'
 
 
@@ -13,6 +13,7 @@ function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const { signIn } = useAuth()
+  const location = useLocation()
   const navigate = useNavigate()
 
   function handleChange(event) {
@@ -31,8 +32,12 @@ function LoginPage() {
 
     try {
       const response = await signIn(formData)
+      const returnLocation = location.state?.from
+      const returnPath = returnLocation?.pathname
+        ? `${returnLocation.pathname}${returnLocation.search || ''}`
+        : '/jobs'
 
-      navigate('/jobs', {
+      navigate(returnPath, {
         replace: true,
         state: {
           successMessage: `Welcome back, ${response.student.full_name}.`,

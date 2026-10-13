@@ -4,7 +4,9 @@ import {
   Outlet,
   Route,
   Routes,
+  useLocation,
 } from 'react-router-dom'
+import ApplicationsPage from './pages/ApplicationsPage'
 import SignupPage from './pages/SignupPage'
 import LoginPage from './pages/LoginPage'
 import JobDetailPage from './pages/JobDetailPage'
@@ -14,8 +16,25 @@ import './App.css'
 
 function GuestOnlyRoute() {
   const { isAuthenticated } = useAuth()
+  const location = useLocation()
 
-  return isAuthenticated ? <Navigate to="/jobs" replace /> : <Outlet />
+  const returnLocation = location.state?.from
+  const returnPath = returnLocation?.pathname
+    ? `${returnLocation.pathname}${returnLocation.search || ''}`
+    : '/jobs'
+
+  return isAuthenticated ? <Navigate to={returnPath} replace /> : <Outlet />
+}
+
+function ProtectedRoute() {
+  const { isAuthenticated } = useAuth()
+  const location = useLocation()
+
+  return isAuthenticated ? (
+    <Outlet />
+  ) : (
+    <Navigate to="/login" replace state={{ from: location }} />
+  )
 }
 
 function App() {
@@ -42,6 +61,9 @@ function App() {
           </NavLink>
           {isAuthenticated ? (
             <div className="auth-nav">
+              <NavLink className="nav-link" to="/applications">
+                Applications
+              </NavLink>
               <span className="student-name">{student.full_name}</span>
               <button
                 className="nav-button"
@@ -69,6 +91,9 @@ function App() {
           <Route path="/" element={<Navigate to="/jobs" replace />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:jobId" element={<JobDetailPage />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/applications" element={<ApplicationsPage />} />
+          </Route>
           <Route element={<GuestOnlyRoute />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
