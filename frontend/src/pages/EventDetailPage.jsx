@@ -165,19 +165,22 @@ function EventDetailPage() {
   }
 
   return (
-    <section className="event-detail-page">
+    <section className="page-shell detail-page event-detail-page">
       <Link className="back-link" to="/events">
         ← Back to events
       </Link>
 
       {loading && (
-        <div className="event-detail-state" role="status">
-          Loading event details...
+        <div className="state-panel detail-state" role="status">
+          <span className="state-icon state-icon-loading" aria-hidden="true">···</span>
+          <h2>Loading event details</h2>
+          <p>Getting this event ready for you.</p>
         </div>
       )}
 
       {!loading && notFound && (
-        <div className="event-detail-state">
+        <div className="state-panel detail-state">
+          <span className="state-icon" aria-hidden="true">?</span>
           <h1>Event not found</h1>
           <p>
             This event may have been removed or the link may be incorrect.
@@ -186,7 +189,7 @@ function EventDetailPage() {
       )}
 
       {!loading && error && (
-        <div className="event-detail-state">
+        <div className="state-panel detail-state">
           <h1>Unable to load this event</h1>
           <p className="error-message">{error}</p>
         </div>
@@ -194,16 +197,21 @@ function EventDetailPage() {
 
       {!loading && event && (
         <div className="event-detail-stack">
-          <article className="event-detail-card">
+          <article className="surface-card event-detail-card">
             <div className="event-detail-heading">
-              <div>
-                <p className="job-detail-eyebrow">Upcoming event</p>
+              <div className="detail-title-group">
+                <span className="detail-company-mark" aria-hidden="true">
+                  {event.company?.name?.charAt(0).toUpperCase() || 'E'}
+                </span>
+                <div>
+                <p className="page-eyebrow">UPCOMING EVENT</p>
                 <h1>{event.title}</h1>
                 <p className="company-name">
                   {event.company?.name || 'Independent event'}
                 </p>
+                </div>
               </div>
-              <span className="event-city">{event.city}</span>
+              <span className="location-badge">{event.city}</span>
             </div>
 
             <dl className="event-detail-schedule">
@@ -223,10 +231,14 @@ function EventDetailPage() {
             </div>
           </article>
 
-          <section className="registration-panel">
-            <div>
-              <p className="job-detail-eyebrow">Student registration</p>
-              <h2>Attend this event</h2>
+          <section className="surface-card registration-panel">
+            <div className="panel-heading">
+              <span className="panel-heading-icon" aria-hidden="true">✓</span>
+              <div>
+                <p className="page-eyebrow">STUDENT REGISTRATION</p>
+                <h2>Attend this event</h2>
+                <p>Reserve your place using your student account.</p>
+              </div>
             </div>
 
             {!isAuthenticated && (
@@ -264,7 +276,7 @@ function EventDetailPage() {
 
             {isAuthenticated && !checkingRegistration && !registration && (
               <button
-                className="registration-button"
+                className="primary-button registration-button"
                 type="button"
                 disabled={registering}
                 onClick={handleRegistration}

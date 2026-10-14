@@ -230,19 +230,22 @@ function JobDetailPage() {
   const createdDate = job ? formatCreatedDate(job.created_at) : null
 
   return (
-    <section className="job-detail-page">
+    <section className="page-shell detail-page job-detail-page">
       <Link className="back-link" to="/jobs">
         ← Back to jobs
       </Link>
 
       {loading && (
-        <div className="job-detail-state" role="status">
-          Loading job details...
+        <div className="state-panel detail-state" role="status">
+          <span className="state-icon state-icon-loading" aria-hidden="true">···</span>
+          <h2>Loading job details</h2>
+          <p>Getting this opportunity ready for you.</p>
         </div>
       )}
 
       {!loading && notFound && (
-        <div className="job-detail-state">
+        <div className="state-panel detail-state">
+          <span className="state-icon" aria-hidden="true">?</span>
           <h1>Job not found</h1>
           <p>
             This job may have been removed or the link may be incorrect.
@@ -251,7 +254,7 @@ function JobDetailPage() {
       )}
 
       {!loading && error && (
-        <div className="job-detail-state">
+        <div className="state-panel detail-state">
           <h1>Unable to load this job</h1>
           <p className="error-message">{error}</p>
         </div>
@@ -259,19 +262,37 @@ function JobDetailPage() {
 
       {!loading && job && (
         <div className="job-detail-stack">
-          <article className="job-detail-card">
+          <article className="surface-card job-detail-card">
             <div className="job-detail-heading">
-              <div>
-                <p className="job-detail-eyebrow">Job opportunity</p>
-                <h1>{job.title}</h1>
-                <p className="company-name">{job.company.name}</p>
+              <div className="detail-title-group">
+                <span className="detail-company-mark" aria-hidden="true">
+                  {job.company.name.charAt(0).toUpperCase()}
+                </span>
+                <div>
+                  <p className="page-eyebrow">JOB OPPORTUNITY</p>
+                  <h1>{job.title}</h1>
+                  <p className="company-name">{job.company.name}</p>
+                </div>
               </div>
-              <span className="job-city">{job.city}</span>
+              <span className="location-badge">{job.city}</span>
             </div>
 
-            {createdDate && (
-              <p className="job-created-date">Posted {createdDate}</p>
-            )}
+            <dl className="detail-meta-grid">
+              <div>
+                <dt>Job location</dt>
+                <dd>{job.city}</dd>
+              </div>
+              <div>
+                <dt>Company location</dt>
+                <dd>{job.company.city}</dd>
+              </div>
+              {createdDate && (
+                <div>
+                  <dt>Posted</dt>
+                  <dd>{createdDate}</dd>
+                </div>
+              )}
+            </dl>
 
             <div className="job-description">
               <h2>Description</h2>
@@ -279,10 +300,14 @@ function JobDetailPage() {
             </div>
           </article>
 
-          <section className="application-panel">
-            <div>
-              <p className="job-detail-eyebrow">Student application</p>
-              <h2>Apply for this job</h2>
+          <section className="surface-card application-panel">
+            <div className="panel-heading">
+              <span className="panel-heading-icon" aria-hidden="true">↑</span>
+              <div>
+                <p className="page-eyebrow">STUDENT APPLICATION</p>
+                <h2>Apply for this job</h2>
+                <p>Submit an immutable PDF snapshot of your resume.</p>
+              </div>
             </div>
 
             {!isAuthenticated && (
@@ -326,8 +351,13 @@ function JobDetailPage() {
                 onSubmit={handleApplicationSubmit}
               >
                 <div className="file-field">
-                  <label htmlFor="resume">PDF resume</label>
+                  <span className="file-field-label" id="resume-label">
+                    PDF resume
+                  </span>
                   <input
+                    aria-describedby="resume-name resume-help"
+                    aria-labelledby="resume-label"
+                    className="file-input-visually-hidden"
                     id="resume"
                     ref={resumeInputRef}
                     type="file"
@@ -335,9 +365,28 @@ function JobDetailPage() {
                     onChange={handleResumeChange}
                     required
                   />
-                  <span>PDF only, up to 5 MiB.</span>
+                  <div className="file-picker-row">
+                    <label
+                      className="secondary-button file-picker-button"
+                      htmlFor="resume"
+                    >
+                      Choose PDF
+                    </label>
+                    <span
+                      className="file-picker-name"
+                      id="resume-name"
+                      aria-live="polite"
+                    >
+                      {resumeFile?.name || 'No file selected'}
+                    </span>
+                  </div>
+                  <span id="resume-help">PDF only, up to 5 MiB.</span>
                 </div>
-                <button type="submit" disabled={submitting}>
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={submitting || !resumeFile}
+                >
                   {submitting ? 'Submitting...' : 'Submit application'}
                 </button>
               </form>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuth from '../auth/useAuth'
+import AuthShell from '../components/AuthShell'
 
 const initialFormData = {
   full_name: '',
@@ -47,11 +48,15 @@ function SignupPage() {
   }
 
   return (
-    <section className="form-card">
-      <h1>Create a student account</h1>
-      <p>Sign up to search for jobs and internships.</p>
-
-      <form onSubmit={handleSubmit}>
+    <AuthShell
+      alternateText="Already have an account?"
+      alternateLinkText="Sign in"
+      alternateTo="/login"
+      description="Create your profile and start connecting with employers."
+      eyebrow="GET STARTED"
+      title="Create a student account"
+    >
+      <form className="auth-form" onSubmit={handleSubmit}>
         <label htmlFor="full-name">Full name</label>
         <input
           id="full-name"
@@ -59,6 +64,8 @@ function SignupPage() {
           type="text"
           value={formData.full_name}
           onChange={handleChange}
+          autoComplete="name"
+          placeholder="Your full name"
           maxLength="255"
           required
         />
@@ -70,6 +77,8 @@ function SignupPage() {
           type="email"
           value={formData.email}
           onChange={handleChange}
+          autoComplete="email"
+          placeholder="you@example.com"
           required
         />
 
@@ -80,6 +89,8 @@ function SignupPage() {
           type="text"
           value={formData.city}
           onChange={handleChange}
+          autoComplete="address-level2"
+          placeholder="San Jose"
           maxLength="100"
           required
         />
@@ -91,16 +102,18 @@ function SignupPage() {
           type="password"
           value={formData.password}
           onChange={handleChange}
+          autoComplete="new-password"
+          placeholder="At least 8 characters"
           minLength="8"
           required
         />
 
-        <button type="submit" disabled={loading}>
+        <button className="auth-submit-button" type="submit" disabled={loading}>
           {loading ? 'Creating account...' : 'Create account'}
         </button>
+        {error && <p className="error-message">{error}</p>}
       </form>
-      {error && <p className="error-message">{error}</p>}
-    </section>
+    </AuthShell>
   )
 }
 

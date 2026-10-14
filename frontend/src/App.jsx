@@ -1,5 +1,4 @@
 import {
-  NavLink,
   Navigate,
   Outlet,
   Route,
@@ -14,6 +13,7 @@ import LoginPage from './pages/LoginPage'
 import JobDetailPage from './pages/JobDetailPage'
 import JobsPage from './pages/JobsPage'
 import RegistrationsPage from './pages/RegistrationsPage'
+import StudentSidebar from './components/StudentSidebar'
 import useAuth from './auth/useAuth'
 import './App.css'
 
@@ -41,61 +41,26 @@ function ProtectedRoute() {
 }
 
 function App() {
-  const { initializing, isAuthenticated, logout, student } = useAuth()
+  const { initializing } = useAuth()
+  const location = useLocation()
+  const isAuthPage =
+    location.pathname === '/login' || location.pathname === '/signup'
 
   if (initializing) {
     return (
       <div className="session-loading" role="status">
-        Restoring your session...
+        <span className="session-loading-mark" aria-hidden="true">H</span>
+        <strong>Handshake</strong>
+        <span>Restoring your student session...</span>
       </div>
     )
   }
 
   return (
     <div className="app-shell">
-      <header className="site-header">
-        <NavLink className="brand" to="/jobs">
-          Career Portal
-        </NavLink>
+      {!isAuthPage && <StudentSidebar />}
 
-        <nav>
-          <NavLink className="nav-link" to="/jobs">
-            Jobs
-          </NavLink>
-          <NavLink className="nav-link" to="/events">
-            Events
-          </NavLink>
-          {isAuthenticated ? (
-            <div className="auth-nav">
-              <NavLink className="nav-link" to="/applications">
-                Applications
-              </NavLink>
-              <NavLink className="nav-link" to="/registrations">
-                My Registrations
-              </NavLink>
-              <span className="student-name">{student.full_name}</span>
-              <button
-                className="nav-button"
-                type="button"
-                onClick={logout}
-              >
-                Logout
-              </button>
-            </div>
-          ) : (
-            <>
-              <NavLink className="nav-link" to="/login">
-                Login
-              </NavLink>
-              <NavLink className="nav-link" to="/signup">
-                Sign Up
-              </NavLink>
-            </>
-          )}
-        </nav>
-      </header>
-
-      <main className="main-content">
+      <main className={isAuthPage ? 'auth-main' : 'workspace-main'}>
         <Routes>
           <Route path="/" element={<Navigate to="/jobs" replace />} />
           <Route path="/jobs" element={<JobsPage />} />

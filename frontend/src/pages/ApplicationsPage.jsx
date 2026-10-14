@@ -141,14 +141,15 @@ function ApplicationsPage() {
   }
 
   return (
-    <section className="applications-page">
-      <div className="applications-heading">
-        <div>
+    <section className="page-shell applications-page">
+      <div className="page-header applications-heading">
+        <div className="page-header-main">
+          <p className="page-eyebrow">CAREER ACTIVITY</p>
           <h1>My applications</h1>
           <p>Track your submitted applications and review your resumes.</p>
         </div>
 
-        <div className="status-filter">
+        <div className="surface-card status-filter">
           <label htmlFor="application-status">Status</label>
           <select
             id="application-status"
@@ -165,8 +166,10 @@ function ApplicationsPage() {
       </div>
 
       {loading && (
-        <div className="applications-state" role="status">
-          Loading applications...
+        <div className="state-panel" role="status">
+          <span className="state-icon state-icon-loading" aria-hidden="true">···</span>
+          <h2>Loading applications</h2>
+          <p>Checking the latest status of your submissions.</p>
         </div>
       )}
 
@@ -175,7 +178,8 @@ function ApplicationsPage() {
       {resumeError && <p className="error-message">{resumeError}</p>}
 
       {!loading && !error && applications.length === 0 && (
-        <div className="applications-state">
+        <div className="state-panel">
+          <span className="state-icon" aria-hidden="true">≡</span>
           <h2>No applications found</h2>
           <p>
             {statusFilter
@@ -193,9 +197,13 @@ function ApplicationsPage() {
       {!loading && !error && applications.length > 0 && (
         <div className="application-list">
           {applications.map((application) => (
-            <article className="application-card" key={application.id}>
+            <article className="surface-card application-card" key={application.id}>
               <div className="application-card-heading">
-                <div>
+                <div className="application-title-group">
+                  <span className="application-company-mark" aria-hidden="true">
+                    {application.job.company.name.charAt(0).toUpperCase()}
+                  </span>
+                  <div>
                   <Link
                     className="application-job-link"
                     to={`/jobs/${application.job.id}`}
@@ -205,6 +213,7 @@ function ApplicationsPage() {
                   <p className="company-name">
                     {application.job.company.name}
                   </p>
+                  </div>
                 </div>
                 <span
                   className={`status-badge status-${application.status.toLowerCase()}`}

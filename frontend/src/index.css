@@ -1,7 +1,27 @@
 :root {
-  font-family: Inter, system-ui, Arial, sans-serif;
-  color: #172033;
-  background: #f4f7fb;
+  --hs-lime: #d8ff3e;
+  --hs-blue: #2563eb;
+  --hs-blue-hover: #1d4ed8;
+  --hs-blue-soft: #eef4ff;
+  --hs-text: #18181b;
+  --hs-text-soft: #344054;
+  --hs-muted: #6b7280;
+  --hs-muted-light: #98a2b3;
+  --hs-bg: #fafafa;
+  --hs-card: #ffffff;
+  --hs-border: #e5e7eb;
+  --hs-soft: #f4f4f5;
+  --hs-success: #067647;
+  --hs-success-soft: #ecfdf3;
+  --hs-danger: #b42318;
+  --hs-danger-soft: #fef3f2;
+  --hs-warning: #b54708;
+  --hs-warning-soft: #fff7e6;
+  --sidebar-width: 218px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+  color: var(--hs-text);
+  background: var(--hs-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -14,10 +34,20 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: var(--hs-bg);
 }
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
 }

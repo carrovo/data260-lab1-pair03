@@ -51,22 +51,28 @@ function RegistrationsPage() {
   }, [accessToken, logout])
 
   return (
-    <section className="registrations-page">
-      <div className="page-heading">
-        <h1>My registrations</h1>
-        <p>Review the events you have registered to attend.</p>
+    <section className="page-shell registrations-page">
+      <div className="page-header">
+        <div className="page-header-main">
+          <p className="page-eyebrow">MY EVENTS</p>
+          <h1>My registrations</h1>
+          <p>Review the events you have registered to attend.</p>
+        </div>
       </div>
 
       {loading && (
-        <div className="events-state" role="status">
-          Loading registrations...
+        <div className="state-panel" role="status">
+          <span className="state-icon state-icon-loading" aria-hidden="true">···</span>
+          <h2>Loading registrations</h2>
+          <p>Gathering your upcoming events.</p>
         </div>
       )}
 
       {!loading && error && <p className="error-message">{error}</p>}
 
       {!loading && !error && registrations.length === 0 && (
-        <div className="events-state">
+        <div className="state-panel">
+          <span className="state-icon" aria-hidden="true">◇</span>
           <h2>No registrations yet</h2>
           <p>Your registered events will appear here.</p>
           <Link className="primary-link" to="/events">
@@ -78,9 +84,16 @@ function RegistrationsPage() {
       {!loading && !error && registrations.length > 0 && (
         <div className="registration-list">
           {registrations.map((registration) => (
-            <article className="registration-card" key={registration.id}>
+            <article
+              className="surface-card registration-card"
+              key={registration.id}
+            >
               <div className="registration-card-heading">
-                <div>
+                <div className="registration-title-group">
+                  <span className="registration-event-mark" aria-hidden="true">
+                    □
+                  </span>
+                  <div>
                   <Link
                     className="application-job-link"
                     to={`/events/${registration.event.id}`}
@@ -90,6 +103,7 @@ function RegistrationsPage() {
                   <p className="company-name">
                     {registration.event.company?.name || 'Independent event'}
                   </p>
+                  </div>
                 </div>
                 <span className="registered-badge">Registered</span>
               </div>

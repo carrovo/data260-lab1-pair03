@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import useAuth from '../auth/useAuth'
+import AuthShell from '../components/AuthShell'
 
 
 const initialFormData = {
@@ -50,11 +51,15 @@ function LoginPage() {
   }
 
   return (
-    <section className="form-card">
-      <h1>Student login</h1>
-      <p>Log in to access your student account.</p>
-
-      <form onSubmit={handleSubmit}>
+    <AuthShell
+      alternateText="New to Handshake?"
+      alternateLinkText="Create a student account"
+      alternateTo="/signup"
+      description="Access your applications, registrations, and saved session."
+      eyebrow="WELCOME BACK"
+      title="Sign in to your account"
+    >
+      <form className="auth-form" onSubmit={handleSubmit}>
         <label htmlFor="login-email">Email</label>
         <input
           id="login-email"
@@ -62,6 +67,8 @@ function LoginPage() {
           type="email"
           value={formData.email}
           onChange={handleChange}
+          autoComplete="email"
+          placeholder="you@example.com"
           required
         />
 
@@ -72,15 +79,17 @@ function LoginPage() {
           type="password"
           value={formData.password}
           onChange={handleChange}
+          autoComplete="current-password"
+          placeholder="Enter your password"
           required
         />
 
-        <button type="submit" disabled={loading}>
+        <button className="auth-submit-button" type="submit" disabled={loading}>
           {loading ? 'Logging in...' : 'Log in'}
         </button>
+        {error && <p className="error-message">{error}</p>}
       </form>
-      {error && <p className="error-message">{error}</p>}
-    </section>
+    </AuthShell>
   )
 }
 
