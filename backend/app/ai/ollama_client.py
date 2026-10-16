@@ -27,26 +27,51 @@ class ModelClient(ABC):
 
 
 class OllamaClient(ModelClient):
-    def __init__(self, host: str = OLLAMA_HOST, model: str = OLLAMA_MODEL, timeout: int = 120):
+    def __init__(
+        self,
+        host: str = OLLAMA_HOST,
+        model: str = OLLAMA_MODEL,
+        timeout: int = 240,
+    ):
         self.host = host.rstrip("/")
         self.model = model
         self.timeout = timeout
 
-    def complete(self, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def complete(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+
         url = f"{self.host}/api/chat"
+
         payload = {
             "model": self.model,
             "messages": messages,
             "tools": tools,
             "stream": False,
+
+            # Qwen3 can spend a long time reasoning before simple
+            # tool-selection calls. The lab agent does not need that.
+            "think": False,
+
+            # Keep generation predictable and reasonably small.
+            "options": {
+                "temperature": 0.1,
+                "num_ctx": 4096,
+            },
         }
+
         try:
-            resp = requests.post(url, json=payload, timeout=self.timeout)
+            resp = requests.post(
+                url,
+                json=payload,
+                timeout=(10, self.timeout),
+            )
+
             resp.raise_for_status()
+
         except requests.RequestException as exc:
-            # Surfaced as a normal assistant text turn so the agent loop
-            # doesn't crash if Ollama is down — the loop stops cleanly
-            # instead of raising out of run_assistant().
             return {
                 "role": "assistant",
                 "content": f"[model backend unreachable: {exc}]",
@@ -55,6 +80,7 @@ class OllamaClient(ModelClient):
 
         data = resp.json()
         message = data.get("message", {})
+
         return {
             "role": "assistant",
             "content": message.get("content"),

@@ -21,10 +21,11 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
     Xuanhua's side.
     """
     result = run_assistant(
-        db=db,
-        user_message=payload.message,
-        conversation=payload.conversation,
-        model_client=_model_client,
-        student_id=payload.student_id,
+    db=db,
+    user_message=payload.message,
+    conversation=payload.conversation,
+    model_client=_model_client,
+    student_id=payload.student_id,
+    auto_approve=payload.auto_approve,
     )
     return ChatResponse(**result)
