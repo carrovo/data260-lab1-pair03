@@ -10,7 +10,6 @@ export default function CompanyDashboard() {
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState(null);
-
   const [showForm, setShowForm] = useState(false);
 
   const [form, setForm] = useState({
@@ -19,6 +18,7 @@ export default function CompanyDashboard() {
     category: "internship",
     city: "San Jose",
     location: "",
+    is_remote: false,
     salary: "",
     skills: "",
     deadline: "",
@@ -30,7 +30,6 @@ export default function CompanyDashboard() {
       setError(null);
 
       const response = await api.get("/companies/jobs");
-
       setJobs(response.data || []);
     } catch (err) {
       setError(err);
@@ -44,11 +43,11 @@ export default function CompanyDashboard() {
   }, []);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
 
     setForm((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: type === "checkbox" ? checked : value,
     }));
   };
 
@@ -64,13 +63,14 @@ export default function CompanyDashboard() {
         : null;
 
       await api.post("/companies/jobs", {
-        title: form.title,
-        description: form.description || null,
+        title: form.title.trim(),
+        description: form.description.trim(),
         category: form.category,
         city: form.city,
-        location: form.location || null,
+        location: form.location.trim() || null,
+        is_remote: form.is_remote,
         salary: form.salary ? Number(form.salary) : null,
-        skills: form.skills || null,
+        skills: form.skills.trim() || null,
         deadline,
       });
 
@@ -80,13 +80,13 @@ export default function CompanyDashboard() {
         category: "internship",
         city: "San Jose",
         location: "",
+        is_remote: false,
         salary: "",
         skills: "",
         deadline: "",
       });
 
       setShowForm(false);
-
       await loadJobs();
     } catch (err) {
       setError(err);
@@ -108,28 +108,20 @@ export default function CompanyDashboard() {
       <div className="page-header">
         <div className="page-header-main">
           <p className="page-eyebrow">RECRUITING</p>
-
           <h1>Job Postings</h1>
-
           <p>
             Create opportunities, manage active postings, and review
             applicants from one place.
           </p>
         </div>
 
-        <div className="page-header-actions">
-          <button
-            type="button"
-            className={
-              showForm
-                ? "secondary-action-button"
-                : "primary-action-button"
-            }
-            onClick={() => setShowForm((prev) => !prev)}
-          >
-            {showForm ? "Cancel" : "+ Post a job"}
-          </button>
-        </div>
+        <button
+          type="button"
+          className="primary-action-button"
+          onClick={() => setShowForm((prev) => !prev)}
+        >
+          {showForm ? "Cancel" : "+ Post a job"}
+        </button>
       </div>
 
       <ErrorMessage error={error} />
@@ -167,18 +159,7 @@ export default function CompanyDashboard() {
 
       {showForm && (
         <section className="dashboard-card job-create-card">
-          <div className="card-heading">
-            <div className="card-heading-icon">＋</div>
-
-            <div>
-              <h2>Create a job posting</h2>
-
-              <p>
-                Add a new opportunity for students in your assigned
-                recruiting cities.
-              </p>
-            </div>
-          </div>
+          <h2>Create a job posting</h2>
 
           <form className="job-create-form" onSubmit={handleSubmit}>
             <div className="form-two-column">
@@ -204,6 +185,7 @@ export default function CompanyDashboard() {
                   <option value="internship">Internship</option>
                   <option value="full_time">Full time</option>
                   <option value="part_time">Part time</option>
+                  <option value="on_campus">On campus</option>
                 </select>
               </label>
             </div>
@@ -214,8 +196,9 @@ export default function CompanyDashboard() {
                 name="description"
                 value={form.description}
                 onChange={handleChange}
-                placeholder="Describe the role, responsibilities, and what the student will work on..."
+                placeholder="Describe the role and responsibilities..."
                 rows="5"
+                required
               />
             </label>
 
@@ -240,10 +223,20 @@ export default function CompanyDashboard() {
                   name="location"
                   value={form.location}
                   onChange={handleChange}
-                  placeholder="e.g. San Jose, CA / Hybrid"
+                  placeholder="e.g. Downtown San Jose"
                 />
               </label>
             </div>
+
+            <label>
+              <input
+                type="checkbox"
+                name="is_remote"
+                checked={form.is_remote}
+                onChange={handleChange}
+              />
+              Remote position
+            </label>
 
             <div className="form-three-column">
               <label>
@@ -251,10 +244,10 @@ export default function CompanyDashboard() {
                 <input
                   type="number"
                   min="0"
+                  step="0.01"
                   name="salary"
                   value={form.salary}
                   onChange={handleChange}
-                  placeholder="32"
                 />
               </label>
 
@@ -279,145 +272,62 @@ export default function CompanyDashboard() {
               </label>
             </div>
 
-            <div className="job-form-actions">
-              <button
-                type="submit"
-                className="primary-action-button"
-                disabled={posting}
-              >
-                {posting ? "Publishing..." : "Publish job"}
-              </button>
-            </div>
+            <button
+              type="submit"
+              className="primary-action-button"
+              disabled={posting}
+            >
+              {posting ? "Publishing..." : "Publish job"}
+            </button>
           </form>
         </section>
       )}
 
       <section className="job-list-section">
-        <div className="section-title-row">
-          <div>
-            <h2>Your job postings</h2>
-
-            <p>
-              {jobs.length === 0
-                ? "No jobs posted yet."
-                : `${jobs.length} ${
-                    jobs.length === 1 ? "opportunity" : "opportunities"
-                  } currently listed.`}
-            </p>
-          </div>
-        </div>
+        <h2>Your job postings</h2>
 
         {jobs.length === 0 ? (
-          <div className="dashboard-card empty-state job-empty-state">
-            <div className="empty-state-inner">
-              <div className="empty-state-icon">＋</div>
-
-              <h2>No job postings yet</h2>
-
-              <p>
-                Publish your first opportunity to start connecting with
-                students.
-              </p>
-            </div>
+          <div className="dashboard-card empty-state">
+            <h3>No job postings yet</h3>
+            <p>Publish your first opportunity to get started.</p>
           </div>
         ) : (
           <div className="job-card-grid">
             {jobs.map((job) => (
               <article
-                className="dashboard-card recruiter-job-card"
                 key={job.id}
+                className="dashboard-card"
               >
-                <div className="job-card-header">
-                  <div className="job-icon">
-                    {job.category === "internship" ? "I" : "J"}
-                  </div>
+                <h3>{job.title}</h3>
 
-                  <div className="job-title-area">
-                    <div className="job-title-top">
-                      <h3>{job.title}</h3>
+                <p>{job.description}</p>
 
-                      <span className="job-active-badge">
-                        Active
-                      </span>
-                    </div>
+                <p>
+                  <strong>Category:</strong>{" "}
+                  {job.category || "Not specified"}
+                </p>
 
-                    <p>
-                      {String(job.category || "")
-                        .replaceAll("_", " ")
-                        .replace(/\b\w/g, (letter) =>
-                          letter.toUpperCase()
-                        )}
-                    </p>
-                  </div>
-                </div>
+                <p>
+                  <strong>City:</strong>{" "}
+                  {job.city || "Not specified"}
+                </p>
 
-                {job.description && (
-                  <p className="job-card-description">
-                    {job.description}
-                  </p>
-                )}
+                <p>
+                  <strong>Location:</strong>{" "}
+                  {job.location || "Not specified"}
+                </p>
 
-                <div className="job-detail-grid">
-                  <div>
-                    <span>Location</span>
-                    <strong>
-                      {job.location || job.city || "Not specified"}
-                    </strong>
-                  </div>
+                <p>
+                  <strong>Skills:</strong>{" "}
+                  {job.skills || "Not specified"}
+                </p>
 
-                  <div>
-                    <span>City</span>
-                    <strong>{job.city || "Not specified"}</strong>
-                  </div>
-
-                  <div>
-                    <span>Posted</span>
-                    <strong>
-                      {job.posting_date
-                        ? new Date(
-                            job.posting_date
-                          ).toLocaleDateString()
-                        : "—"}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>Deadline</span>
-                    <strong>
-                      {job.deadline
-                        ? new Date(
-                            job.deadline
-                          ).toLocaleDateString()
-                        : "Open"}
-                    </strong>
-                  </div>
-                </div>
-
-                {job.skills && (
-                  <div className="job-skills">
-                    {job.skills
-                      .split(",")
-                      .map((skill) => skill.trim())
-                      .filter(Boolean)
-                      .map((skill) => (
-                        <span
-                          className="job-skill-tag"
-                          key={`${job.id}-${skill}`}
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                  </div>
-                )}
-
-                <div className="job-card-footer">
-                  <Link
-                    to={`/company/jobs/${job.id}/applicants`}
-                    className="primary-action-button"
-                  >
-                    View applicants
-                  </Link>
-                </div>
+                <Link
+                  to={`/company/jobs/${job.id}/applicants`}
+                  className="secondary-action-button"
+                >
+                  View applicants
+                </Link>
               </article>
             ))}
           </div>

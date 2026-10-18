@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 
 import api from "../../services/api";
 import Loading from "../../components/Loading";
@@ -15,12 +14,14 @@ export default function Events() {
   const [error, setError] = useState(null);
 
   const [form, setForm] = useState({
-    name: "",
+    title: "",
     description: "",
     date: "",
-    time: "",
+    startTime: "",
+    endTime: "",
     city: "San Jose",
     location: "",
+    major: "",
     eligibility: "",
   });
 
@@ -58,22 +59,34 @@ export default function Events() {
       setPosting(true);
       setError(null);
 
-      const dateTime = form.date
-        ? new Date(`${form.date}T00:00:00`).toISOString()
-        : null;
+      const startsAt = new Date(
+        `${form.date}T${form.startTime}:00`
+      ).toISOString();
+
+      const endsAt = new Date(
+        `${form.date}T${form.endTime}:00`
+      ).toISOString();
 
       await api.post("/companies/events", {
-        ...form,
-        date: dateTime,
+        title: form.title.trim(),
+        description: form.description.trim(),
+        city: form.city,
+        starts_at: startsAt,
+        ends_at: endsAt,
+        location: form.location.trim() || null,
+        major: form.major.trim() || null,
+        eligibility: form.eligibility.trim() || null,
       });
 
       setForm({
-        name: "",
+        title: "",
         description: "",
         date: "",
-        time: "",
+        startTime: "",
+        endTime: "",
         city: "San Jose",
         location: "",
+        major: "",
         eligibility: "",
       });
 
@@ -122,288 +135,243 @@ export default function Events() {
       <div className="page-header">
         <div className="page-header-main">
           <p className="page-eyebrow">RECRUITING EVENTS</p>
-
           <h1>Events</h1>
-
           <p>
-            Create recruiting events, connect with students, and manage
-            registrations from one place.
+            Create recruiting events and manage student
+            registrations.
           </p>
-        </div>
-
-        <div className="event-summary-chip">
-          <span>{events.length}</span>
-          {events.length === 1 ? "Event" : "Events"}
         </div>
       </div>
 
       <ErrorMessage error={error} />
 
-      <div className="events-layout">
-        {/* CREATE EVENT */}
-        <section className="dashboard-card event-create-card">
-          <div className="card-heading">
-            <div className="card-heading-icon">＋</div>
+      <section className="dashboard-card event-create-card">
+        <h2>Create an event</h2>
 
-            <div>
-              <h2>Create an event</h2>
-              <p>Publish a recruiting event for students.</p>
-            </div>
-          </div>
+        <form className="event-form" onSubmit={handleSubmit}>
+          <label>
+            Event title
+            <input
+              name="title"
+              value={form.title}
+              onChange={handleChange}
+              required
+            />
+          </label>
 
-          <form className="event-form" onSubmit={handleSubmit}>
+          <label>
+            Description
+            <textarea
+              name="description"
+              value={form.description}
+              onChange={handleChange}
+              rows="4"
+              required
+            />
+          </label>
+
+          <div className="form-two-column">
             <label>
-              Event name
+              Date
               <input
-                name="name"
-                value={form.name}
+                type="date"
+                name="date"
+                value={form.date}
                 onChange={handleChange}
-                placeholder="e.g. Data & Analytics Career Night"
                 required
               />
             </label>
 
             <label>
-              Description
-              <textarea
-                name="description"
-                value={form.description}
-                onChange={handleChange}
-                placeholder="Tell students what they can expect..."
-                rows="4"
-              />
-            </label>
-
-            <div className="form-two-column">
-              <label>
-                Date
-                <input
-                  type="date"
-                  name="date"
-                  value={form.date}
-                  onChange={handleChange}
-                  required
-                />
-              </label>
-
-              <label>
-                Time
-                <input
-                  name="time"
-                  value={form.time}
-                  onChange={handleChange}
-                  placeholder="5:00 PM"
-                />
-              </label>
-            </div>
-
-            <div className="form-two-column">
-              <label>
-                City
-                <select
-                  name="city"
-                  value={form.city}
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="San Jose">San Jose</option>
-                  <option value="Santa Clara">Santa Clara</option>
-                  <option value="Fremont">Fremont</option>
-                </select>
-              </label>
-
-              <label>
-                Location
-                <input
-                  name="location"
-                  value={form.location}
-                  onChange={handleChange}
-                  placeholder="San Jose State University"
-                />
-              </label>
-            </div>
-
-            <label>
-              Eligibility
+              Start time
               <input
-                name="eligibility"
-                value={form.eligibility}
+                type="time"
+                name="startTime"
+                value={form.startTime}
                 onChange={handleChange}
-                placeholder="Open to students interested in analytics..."
+                required
               />
             </label>
-
-            <button
-              type="submit"
-              className="primary-action-button event-submit"
-              disabled={posting}
-            >
-              {posting ? "Publishing..." : "Publish event"}
-            </button>
-          </form>
-        </section>
-
-        {/* EVENT LIST */}
-        <section className="events-list-section">
-          <div className="section-title-row">
-            <div>
-              <h2>Your events</h2>
-              <p>Manage events created by your company.</p>
-            </div>
           </div>
 
-          {events.length === 0 ? (
-            <div className="dashboard-card empty-state events-empty">
-              <div className="empty-state-inner">
-                <div className="empty-state-icon">◇</div>
+          <div className="form-two-column">
+            <label>
+              End time
+              <input
+                type="time"
+                name="endTime"
+                value={form.endTime}
+                onChange={handleChange}
+                required
+              />
+            </label>
 
-                <h2>No events posted yet</h2>
+            <label>
+              City
+              <select
+                name="city"
+                value={form.city}
+                onChange={handleChange}
+                required
+              >
+                <option value="San Jose">San Jose</option>
+                <option value="Santa Clara">Santa Clara</option>
+                <option value="Fremont">Fremont</option>
+              </select>
+            </label>
+          </div>
 
-                <p>
-                  Create your first recruiting event to start connecting
-                  with students.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="event-card-grid">
-              {events.map((event) => {
-                const eventRegistrants = registrants[event.id] || [];
+          <label>
+            Location
+            <input
+              name="location"
+              value={form.location}
+              onChange={handleChange}
+            />
+          </label>
 
-                return (
-                  <article
-                    className="dashboard-card recruiter-event-card"
-                    key={event.id}
+          <label>
+            Major
+            <input
+              name="major"
+              value={form.major}
+              onChange={handleChange}
+              placeholder="e.g. Computer Science"
+            />
+          </label>
+
+          <label>
+            Eligibility
+            <input
+              name="eligibility"
+              value={form.eligibility}
+              onChange={handleChange}
+            />
+          </label>
+
+          <button
+            type="submit"
+            className="primary-action-button"
+            disabled={posting}
+          >
+            {posting ? "Publishing..." : "Publish event"}
+          </button>
+        </form>
+      </section>
+
+      <section className="events-list-section">
+        <h2>Your events</h2>
+
+        {events.length === 0 ? (
+          <div className="dashboard-card empty-state">
+            <h3>No events posted yet</h3>
+          </div>
+        ) : (
+          <div className="event-card-grid">
+            {events.map((event) => {
+              const eventRegistrants =
+                registrants[event.id] || [];
+
+              return (
+                <article
+                  key={event.id}
+                  className="dashboard-card recruiter-event-card"
+                >
+                  <h3>{event.title}</h3>
+
+                  <p>{event.description}</p>
+
+                  <p>
+                    <strong>Date:</strong>{" "}
+                    {new Date(
+                      event.starts_at
+                    ).toLocaleDateString()}
+                  </p>
+
+                  <p>
+                    <strong>Time:</strong>{" "}
+                    {new Date(
+                      event.starts_at
+                    ).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                    {" – "}
+                    {new Date(
+                      event.ends_at
+                    ).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+
+                  <p>
+                    <strong>City:</strong> {event.city}
+                  </p>
+
+                  <p>
+                    <strong>Location:</strong>{" "}
+                    {event.location || "Not specified"}
+                  </p>
+
+                  {event.major && (
+                    <p>
+                      <strong>Major:</strong> {event.major}
+                    </p>
+                  )}
+
+                  {event.eligibility && (
+                    <p>
+                      <strong>Eligibility:</strong>{" "}
+                      {event.eligibility}
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    className="secondary-action-button"
+                    onClick={() =>
+                      loadRegistrants(event.id)
+                    }
                   >
-                    <div className="event-card-top">
-                      <div className="event-date-badge">
-                        <span>
-                          {event.date
-                            ? new Date(event.date)
-                                .toLocaleString("en-US", {
-                                  month: "short",
-                                })
-                                .toUpperCase()
-                            : "—"}
-                        </span>
+                    {expandedEvent === event.id
+                      ? "Hide registrations"
+                      : "View registrations"}
+                  </button>
 
-                        <strong>
-                          {event.date
-                            ? new Date(event.date).getDate()
-                            : "—"}
-                        </strong>
-                      </div>
+                  {expandedEvent === event.id && (
+                    <div className="event-registrants">
+                      <h4>Registered students</h4>
 
-                      <div className="event-card-title">
-                        <h3>{event.name}</h3>
+                      {eventRegistrants.length === 0 ? (
+                        <p>No registrations yet.</p>
+                      ) : (
+                        eventRegistrants.map((student) => (
+                          <div
+                            key={`${event.id}-${student.student_id}`}
+                            className="registrant-row"
+                          >
+                            <strong>
+                              {student.full_name}
+                            </strong>
 
-                        <span className="event-status-badge">
-                          Upcoming
-                        </span>
-                      </div>
-                    </div>
+                            <span>{student.email}</span>
 
-                    {event.description && (
-                      <p className="event-description">
-                        {event.description}
-                      </p>
-                    )}
-
-                    <div className="event-meta-grid">
-                      <div>
-                        <span className="event-meta-label">Date</span>
-                        <strong>
-                          {event.date
-                            ? new Date(event.date).toLocaleDateString()
-                            : "Not specified"}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <span className="event-meta-label">Time</span>
-                        <strong>{event.time || "Not specified"}</strong>
-                      </div>
-
-                      <div>
-                        <span className="event-meta-label">City</span>
-                        <strong>{event.city || "Not specified"}</strong>
-                      </div>
-
-                      <div>
-                        <span className="event-meta-label">Location</span>
-                        <strong>
-                          {event.location || "Not specified"}
-                        </strong>
-                      </div>
-                    </div>
-
-                    {event.eligibility && (
-                      <div className="event-eligibility">
-                        <span>Eligibility</span>
-                        <p>{event.eligibility}</p>
-                      </div>
-                    )}
-
-                    <div className="event-card-footer">
-                      <button
-                        type="button"
-                        className="secondary-action-button"
-                        onClick={() => loadRegistrants(event.id)}
-                      >
-                        {expandedEvent === event.id
-                          ? "Hide registrations"
-                          : "View registrations"}
-                      </button>
-                    </div>
-
-                    {expandedEvent === event.id && (
-                      <div className="event-registrants">
-                        <div className="registrants-heading">
-                          <strong>Registered students</strong>
-                          <span>{eventRegistrants.length}</span>
-                        </div>
-
-                        {eventRegistrants.length === 0 ? (
-                          <p className="registrants-empty">
-                            No students have registered yet.
-                          </p>
-                        ) : (
-                          <div className="registrant-list">
-                            {eventRegistrants.map((student) => (
-                              <Link
-                                key={student.student_id}
-                                to={`/company/students/${student.student_id}`}
-                                className="registrant-item"
-                              >
-                                <div className="student-avatar">
-                                  {student.name
-                                    ? student.name
-                                        .charAt(0)
-                                        .toUpperCase()
-                                    : "S"}
-                                </div>
-
-                                <div>
-                                  <strong>{student.name}</strong>
-
-                                  <span>
-                                    {student.college_name ||
-                                      student.email}
-                                  </span>
-                                </div>
-                              </Link>
-                            ))}
+                            <span>
+                              {student.college_name ||
+                                "College not specified"}
+                            </span>
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
