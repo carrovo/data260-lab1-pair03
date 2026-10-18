@@ -51,3 +51,25 @@ root:
 The migration is safe to run more than once. It preserves existing applications,
 changes legacy `submitted` statuses to `Pending`, and leaves resume metadata empty
 for legacy rows that predate required resume uploads.
+
+## Canonical Shared-Schema Migration
+
+After the base schema and application-resume migration are present, add the
+agreed student/company shared fields, student preferences, and saved-item tables
+with:
+
+```bash
+.venv/bin/python -m backend.migrate_canonical_schema
+```
+
+This MySQL-only migration is additive and safe to rerun. It detects existing
+columns, indexes, and constraints before adding them, and never drops, renames,
+truncates, or deletes existing data. New profile, job, and event attributes are
+nullable for compatibility with existing rows; `jobs.is_remote` is backfilled by
+its database default of `FALSE`. A later data-quality checkpoint may backfill and
+tighten `jobs.category` after every legacy job has a verified category.
+
+The canonical saved-item table uses explicit `job_id` and `event_id` foreign
+keys. If a legacy company-only `saved_items.item_id` table is detected, the
+migration stops before making changes so that its data can be mapped in a
+separately coordinated, non-destructive backfill.

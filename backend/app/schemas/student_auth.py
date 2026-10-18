@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
@@ -24,6 +26,13 @@ class StudentSignupRequest(BaseModel):
     )
 
 
+class StudentCreate(StudentSignupRequest):
+    college_name: str | None = Field(default=None, max_length=255)
+    major: str | None = Field(default=None, max_length=255)
+    state: str | None = Field(default=None, max_length=100)
+    skills: str | None = None
+
+
 class StudentLoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1)
@@ -40,6 +49,27 @@ class StudentResponse(BaseModel):
     city: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class StudentProfileUpdate(BaseModel):
+    full_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+    city: str | None = Field(default=None, min_length=1, max_length=100)
+    college_name: str | None = Field(default=None, max_length=255)
+    major: str | None = Field(default=None, max_length=255)
+    state: str | None = Field(default=None, max_length=100)
+    skills: str | None = None
+
+
+class StudentProfileResponse(StudentResponse):
+    college_name: str | None
+    major: str | None
+    state: str | None
+    skills: str | None
+    created_at: datetime
 
 
 class StudentTokenResponse(BaseModel):
