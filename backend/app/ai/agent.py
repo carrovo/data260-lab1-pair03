@@ -555,24 +555,34 @@ def run_assistant(
                 repair_requested = True
                 break
 
+            server_arguments = {
+                key: value
+                for key, value in arguments.items()
+                if key != "student_id"
+            }
             decision = confirm_action(
                 name,
-                arguments,
+                server_arguments,
                 auto_approve=auto_approve,
             )
             if not decision["allowed"]:
-                return _finalize(
+                response = _finalize(
                     messages,
                     decision["message"],
                     tool_call_count,
                     "confirmation_required",
                 )
+                response["pending_action"] = {
+                    "tool_name": name,
+                    "arguments": server_arguments,
+                }
+                return response
 
             tool_result = _execute_tool_call(
                 db,
                 student_id,
                 name,
-                arguments,
+                server_arguments,
                 implementations,
             )
             if tool_result.startswith("Malformed arguments"):

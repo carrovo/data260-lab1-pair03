@@ -1,5 +1,6 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
+from backend.app.routers.assistant import router as assistant_router
 from backend.app.routers.applications import router as applications_router
 from backend.app.routers.events import router as events_router
 from backend.app.routers.student_auth import router as student_auth_router
@@ -25,6 +26,7 @@ app.include_router(student_auth_router)
 app.include_router(jobs_router)
 app.include_router(applications_router)
 app.include_router(events_router)
+app.include_router(assistant_router)
 
 @app.get("/")
 def read_root():
