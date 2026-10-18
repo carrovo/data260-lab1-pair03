@@ -10,6 +10,7 @@ const publicNavigation = [
 const studentNavigation = [
   { label: 'Applications', path: '/applications', icon: '≡' },
   { label: 'My Registrations', path: '/registrations', icon: '✓' },
+  { label: 'Assistant', path: '/assistant', icon: '✦' },
 ]
 
 function StudentSidebar() {

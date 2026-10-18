@@ -171,3 +171,14 @@ export function registerForEvent(eventId, token) {
 export function fetchMyRegistrations(token) {
   return apiRequest('/registrations/me', { token })
 }
+
+export function sendAssistantMessage(payload, token) {
+  return apiRequest('/assistant/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    token,
+  })
+}
