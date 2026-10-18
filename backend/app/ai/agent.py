@@ -217,7 +217,11 @@ def _execute_tool_call(
     if implementation is None:
         return f"Unknown tool '{name}'."
 
-    trusted_arguments = dict(arguments)
+    trusted_arguments = {
+        key: value
+        for key, value in arguments.items()
+        if key != "student_id"
+    }
     if (
         student_id is not None
         and _implementation_accepts_student_id(implementation)
