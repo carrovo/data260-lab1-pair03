@@ -27,6 +27,7 @@ import StudentSidebar from './components/StudentSidebar'
 import useAuth from './auth/useAuth'
 import { getToken } from './services/authStorage'
 import './App.css'
+import './styles/company.css'
 
 function GuestOnlyRoute() {
   const { isAuthenticated } = useAuth()
@@ -101,7 +102,15 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div
+      className={`app-shell${
+        isCompanyAuthPage
+          ? ' company-auth-root'
+          : isCompanyPath
+            ? ' company-portal-root'
+            : ''
+      }`}
+    >
       {!isCompanyPath && !isStudentAuthPage && <StudentSidebar />}
       {showCompanySidebar && <CompanySidebar />}
 

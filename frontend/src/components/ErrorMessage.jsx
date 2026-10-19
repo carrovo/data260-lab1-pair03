@@ -13,5 +13,9 @@ export default function ErrorMessage({ error }) {
       error?.message ||
       "Something went wrong. Please try again.";
 
-  return <div className="state-message state-error">{detail}</div>;
+  return (
+    <div className="company-state-message company-state-error" role="alert">
+      {detail}
+    </div>
+  );
 }

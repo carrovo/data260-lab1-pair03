@@ -1,0 +1,1527 @@
+/* Company portal styles are intentionally scoped so student pages keep their
+   independent layout and component rules. */
+
+.company-auth-root,
+.company-portal-root {
+  --company-blue: #2563eb;
+  --company-blue-hover: #1d4ed8;
+  --company-blue-soft: #eef4ff;
+  --company-lime: #d8ff3e;
+  --company-text: #18181b;
+  --company-text-soft: #344054;
+  --company-muted: #6b7280;
+  --company-muted-light: #98a2b3;
+  --company-bg: #fafafa;
+  --company-card: #ffffff;
+  --company-border: #e5e7eb;
+  --company-success: #067647;
+  --company-success-soft: #ecfdf3;
+  --company-danger: #b42318;
+  --company-danger-soft: #fef3f2;
+  color: var(--company-text);
+  background: var(--company-bg);
+}
+
+.company-auth-root .auth-main {
+  width: 100%;
+}
+
+.company-portal-root .workspace-main {
+  background: var(--company-bg);
+}
+
+.company-auth-root :is(a, button, input, select, textarea):focus-visible,
+.company-portal-root :is(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid rgb(37 99 235 / 24%);
+  outline-offset: 2px;
+}
+
+/* Company authentication */
+
+.company-auth-root .login-page {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 2vw;
+  background:
+    radial-gradient(circle at 15% 20%, rgb(37 99 235 / 8%), transparent 28%),
+    linear-gradient(135deg, #f5f7fb 0%, #eef2f8 100%);
+}
+
+.company-auth-root .login-shell {
+  display: grid;
+  width: min(1450px, 96vw);
+  min-height: 700px;
+  grid-template-columns: 1.05fr 0.95fr;
+  overflow: hidden;
+  background: var(--company-card);
+  border: 1px solid rgb(227 230 234 / 90%);
+  border-radius: 26px;
+  box-shadow: 0 24px 70px rgb(27 39 67 / 12%),
+    0 4px 16px rgb(27 39 67 / 4%);
+}
+
+.company-auth-root .login-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 60px 64px 44px;
+  overflow: hidden;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 80% 10%, rgb(255 255 255 / 18%), transparent 25%),
+    radial-gradient(circle at 20% 90%, rgb(117 172 255 / 20%), transparent 30%),
+    linear-gradient(145deg, #071f49 0%, #0b3c88 45%, #0b5fff 100%);
+}
+
+.company-auth-root .login-hero::after {
+  position: absolute;
+  right: -110px;
+  bottom: -100px;
+  width: 340px;
+  height: 340px;
+  content: '';
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 50%;
+}
+
+.company-auth-root .hero-badge {
+  display: inline-flex;
+  width: fit-content;
+  padding: 7px 12px;
+  margin-bottom: 28px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgb(255 255 255 / 10%);
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 999px;
+}
+
+.company-auth-root .login-hero h1 {
+  max-width: 620px;
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(2.7rem, 3.8vw, 4rem);
+  line-height: 1.07;
+  letter-spacing: -0.04em;
+}
+
+.company-auth-root .hero-description {
+  max-width: 560px;
+  margin: 26px 0 34px;
+  color: rgb(255 255 255 / 80%);
+  font-size: 1.02rem;
+  line-height: 1.65;
+}
+
+.company-auth-root .hero-features {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.company-auth-root .hero-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.company-auth-root .hero-feature strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 0.96rem;
+}
+
+.company-auth-root .hero-feature p {
+  margin: 0;
+  color: rgb(255 255 255 / 68%);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.company-auth-root .feature-icon {
+  display: grid;
+  height: 30px;
+  flex: 0 0 30px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  background: rgb(255 255 255 / 14%);
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 50%;
+  place-items: center;
+}
+
+.company-auth-root .hero-footer {
+  position: relative;
+  z-index: 1;
+  margin: 38px 0 0;
+  color: rgb(255 255 255 / 55%);
+  font-size: 0.8rem;
+}
+
+.company-auth-root .login-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 42px 64px 50px;
+  background: var(--company-card);
+}
+
+.company-auth-root .login-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.company-auth-root .brand-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  color: var(--company-text);
+  font-size: 1.1rem;
+  font-weight: 900;
+  background: var(--company-lime);
+  border-radius: 12px;
+  place-items: center;
+}
+
+.company-auth-root .brand-name {
+  color: #101828;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.company-auth-root .brand-subtitle {
+  margin-top: 2px;
+  color: #8a94a6;
+  font-size: 0.76rem;
+}
+
+.company-auth-root .login-form-wrapper {
+  width: 100%;
+  max-width: 470px;
+  margin: auto;
+}
+
+.company-auth-root .login-heading {
+  margin-bottom: 30px;
+}
+
+.company-auth-root .login-eyebrow {
+  margin: 0 0 8px;
+  color: var(--company-blue);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.company-auth-root .login-heading h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 2.05rem;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+
+.company-auth-root .login-heading > p:last-child {
+  margin: 11px 0 0;
+  color: #737f91;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.company-auth-root .professional-login-form,
+.company-auth-root .company-signup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.company-auth-root .professional-login-form label,
+.company-auth-root .company-signup-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--company-text-soft);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.company-auth-root .professional-login-form input,
+.company-auth-root .company-signup-form input,
+.company-auth-root .company-signup-form select {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 14px;
+  color: #1d2939;
+  font: inherit;
+  background: #fbfcfe;
+  border: 1px solid #d9dee8;
+  border-radius: 10px;
+  transition: border-color 150ms ease, box-shadow 150ms ease,
+    background 150ms ease;
+}
+
+.company-auth-root .professional-login-form input::placeholder {
+  color: #a6afbd;
+}
+
+.company-auth-root .professional-login-form input:focus,
+.company-auth-root .company-signup-form input:focus,
+.company-auth-root .company-signup-form select:focus {
+  background: #ffffff;
+  border-color: var(--company-blue);
+  box-shadow: 0 0 0 4px rgb(37 99 235 / 10%);
+}
+
+.company-auth-root .login-primary-button,
+.company-auth-root .company-signup-button {
+  display: inline-flex;
+  width: 100%;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  padding: 0 18px;
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 700;
+  background: var(--company-blue);
+  border: 1px solid var(--company-blue);
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgb(37 99 235 / 18%);
+}
+
+.company-auth-root .login-primary-button:hover:not(:disabled),
+.company-auth-root .company-signup-button:hover:not(:disabled) {
+  background: var(--company-blue-hover);
+  border-color: var(--company-blue-hover);
+}
+
+.company-auth-root .login-divider {
+  position: relative;
+  margin: 26px 0 18px;
+  text-align: center;
+}
+
+.company-auth-root .login-divider::before {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  content: '';
+  background: #e6e9ef;
+}
+
+.company-auth-root .login-divider span {
+  position: relative;
+  padding: 0 12px;
+  color: #919aaa;
+  font-size: 0.78rem;
+  background: #ffffff;
+}
+
+.company-auth-root .create-account-button {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  color: #253858;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+  background: #ffffff;
+  border: 1px solid #d7deea;
+  border-radius: 10px;
+}
+
+.company-auth-root .create-account-button:hover {
+  background: #f8faff;
+  border-color: #bcc8dc;
+}
+
+.company-auth-root .company-signup-page {
+  width: min(460px, calc(100% - 32px));
+  padding: 34px;
+  margin: 60px auto;
+  background: #ffffff;
+  border: 1px solid var(--company-border);
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgb(27 39 67 / 9%);
+}
+
+.company-auth-root .company-signup-page h1 {
+  margin: 0 0 24px;
+  color: var(--company-text);
+  font-size: 1.75rem;
+  letter-spacing: -0.025em;
+}
+
+.company-auth-root .company-signup-page > p {
+  margin: 22px 0 0;
+  color: var(--company-muted);
+  font-size: 0.86rem;
+  text-align: center;
+}
+
+.company-auth-root .company-signup-page > p a {
+  color: var(--company-blue);
+  font-weight: 700;
+}
+
+/* Company navigation and workspace */
+
+.company-portal-root .company-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 100;
+  display: flex;
+  width: var(--sidebar-width);
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px 12px 14px;
+  background: #ffffff;
+  border-right: 1px solid var(--company-border);
+}
+
+.company-portal-root .company-sidebar-top {
+  min-width: 0;
+}
+
+.company-portal-root .company-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 5px 28px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.company-portal-root .company-sidebar-brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  color: var(--company-text);
+  font-size: 1rem;
+  font-weight: 900;
+  background: var(--company-lime);
+  border-radius: 7px;
+  transform: rotate(-2deg);
+  place-items: center;
+}
+
+.company-portal-root .company-sidebar-brand-text,
+.company-portal-root .company-sidebar-details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.company-portal-root .company-sidebar-brand-text strong {
+  color: #111827;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.company-portal-root .company-sidebar-brand-text span,
+.company-portal-root .company-sidebar-details span {
+  margin-top: 3px;
+  color: #9ca3af;
+  font-size: 0.68rem;
+}
+
+.company-portal-root .company-sidebar-navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.company-portal-root .company-sidebar-section-label {
+  margin: 0 10px 9px;
+  color: #9ca3af;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.company-portal-root .company-sidebar-nav-item {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 11px;
+  padding: 0 11px;
+  color: #3f3f46;
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.company-portal-root .company-sidebar-nav-item:hover {
+  color: var(--company-text);
+  background: #f3f4f6;
+}
+
+.company-portal-root .company-sidebar-nav-item.active {
+  color: var(--company-text);
+  font-weight: 700;
+  background: #ececec;
+}
+
+.company-portal-root .company-sidebar-nav-icon {
+  display: inline-flex;
+  width: 21px;
+  align-items: center;
+  justify-content: center;
+  color: #52525b;
+  font-size: 1rem;
+}
+
+.company-portal-root .company-sidebar-bottom {
+  padding-top: 14px;
+  border-top: 1px solid #eceff3;
+}
+
+.company-portal-root .company-sidebar-account {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 7px 13px;
+}
+
+.company-portal-root .company-sidebar-avatar {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  color: #ffffff;
+  font-size: 0.74rem;
+  font-weight: 800;
+  background: #1f2937;
+  border-radius: 50%;
+  place-items: center;
+}
+
+.company-portal-root .company-sidebar-details strong {
+  overflow: hidden;
+  color: #1f2937;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-portal-root .company-sidebar-logout {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 11px;
+  color: #4b5563;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.company-portal-root .company-sidebar-logout:hover {
+  color: #111827;
+  background: #f4f4f5;
+}
+
+/* Shared company pages */
+
+.company-portal-root .company-dashboard-page {
+  width: 100%;
+  max-width: 1380px;
+  padding: 36px 42px 64px;
+}
+
+.company-portal-root .company-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.company-portal-root .company-page-header-main h1 {
+  margin: 0;
+  color: var(--company-text);
+  font-size: 1.7rem;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+
+.company-portal-root .company-page-header-main > p:last-child {
+  max-width: 680px;
+  margin: 9px 0 0;
+  color: var(--company-muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.company-portal-root .company-page-eyebrow {
+  margin: 0 0 7px;
+  color: #71717a;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+}
+
+.company-portal-root .dashboard-card {
+  background: var(--company-card);
+  border: 1px solid var(--company-border);
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+.company-portal-root .primary-action-button,
+.company-portal-root .secondary-action-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+  border-radius: 10px;
+}
+
+.company-portal-root .primary-action-button {
+  color: #ffffff;
+  background: var(--company-blue);
+  border: 1px solid var(--company-blue);
+}
+
+.company-portal-root .primary-action-button:hover:not(:disabled) {
+  background: var(--company-blue-hover);
+  border-color: var(--company-blue-hover);
+}
+
+.company-portal-root .secondary-action-button {
+  color: #27272a;
+  background: #ffffff;
+  border: 1px solid #d4d4d8;
+}
+
+.company-portal-root .secondary-action-button:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.company-portal-root .company-state-message {
+  padding: 11px 14px;
+  margin: 10px 0 20px;
+  font-size: 0.88rem;
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+
+.company-portal-root .company-state-loading,
+.company-auth-root .company-state-loading {
+  color: #3949ab;
+  background: var(--company-blue-soft);
+  border-color: #d8e4ff;
+}
+
+.company-portal-root .company-state-error,
+.company-auth-root .company-state-error {
+  color: var(--company-danger);
+  background: var(--company-danger-soft);
+  border-color: #fecdca;
+}
+
+.company-auth-root .company-state-message {
+  padding: 10px 14px;
+  margin: 0;
+  font-size: 0.86rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.company-portal-root .empty-state {
+  display: flex;
+  min-height: 260px;
+  align-items: center;
+  justify-content: center;
+  padding: 42px;
+  color: var(--company-muted);
+  text-align: center;
+}
+
+.company-portal-root .empty-state-inner {
+  max-width: 420px;
+}
+
+.company-portal-root .empty-state-icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 18px;
+  color: var(--company-blue);
+  font-size: 1.5rem;
+  font-weight: 800;
+  background: var(--company-blue-soft);
+  border-radius: 16px;
+  place-items: center;
+}
+
+.company-portal-root .empty-state h2,
+.company-portal-root .empty-state h3 {
+  margin: 0;
+  color: var(--company-text);
+  font-size: 1.15rem;
+}
+
+.company-portal-root .empty-state p {
+  margin: 10px 0 0;
+  color: var(--company-muted);
+  line-height: 1.6;
+}
+
+.company-portal-root .page-back-link,
+.company-portal-root .inline-action-link {
+  color: var(--company-blue);
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.company-portal-root .page-back-link {
+  display: inline-flex;
+  margin-bottom: 18px;
+}
+
+.company-portal-root .page-back-link:hover,
+.company-portal-root .inline-action-link:hover {
+  color: var(--company-blue-hover);
+  text-decoration: underline;
+}
+
+/* Job dashboard */
+
+.company-portal-root .job-metric-grid,
+.company-portal-root .metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.company-portal-root .job-metric-card,
+.company-portal-root .metric-card {
+  padding: 20px 22px;
+}
+
+.company-portal-root .job-metric-card span,
+.company-portal-root .metric-label {
+  display: block;
+  color: var(--company-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.company-portal-root .job-metric-card strong,
+.company-portal-root .metric-value {
+  display: block;
+  margin-top: 7px;
+  color: var(--company-text);
+  font-size: 1.7rem;
+  font-weight: 800;
+}
+
+.company-portal-root .job-create-card,
+.company-portal-root .event-create-card {
+  padding: 27px;
+  margin-bottom: 30px;
+}
+
+.company-portal-root .job-create-card > h2,
+.company-portal-root .event-create-card > h2,
+.company-portal-root .job-list-section > h2,
+.company-portal-root .events-list-section > h2 {
+  margin: 0 0 20px;
+  color: var(--company-text);
+  font-size: 1.15rem;
+}
+
+.company-portal-root .job-create-form,
+.company-portal-root .event-form,
+.company-portal-root .company-profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.company-portal-root .job-create-form label,
+.company-portal-root .event-form label,
+.company-portal-root .company-profile-form label,
+.company-portal-root .student-filter-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: #475467;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.company-portal-root .job-create-form :is(input, textarea, select),
+.company-portal-root .event-form :is(input, textarea, select),
+.company-portal-root .company-profile-form :is(input, textarea, select),
+.company-portal-root .student-filter-grid input,
+.company-portal-root .data-table select {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 12px;
+  color: #1d2939;
+  font: inherit;
+  font-weight: 400;
+  background: #fbfcfe;
+  border: 1px solid #d8dee8;
+  border-radius: 9px;
+  transition: border-color 150ms ease, box-shadow 150ms ease,
+    background 150ms ease;
+}
+
+.company-portal-root .job-create-form :is(input, textarea, select):focus,
+.company-portal-root .event-form :is(input, textarea, select):focus,
+.company-portal-root .company-profile-form :is(input, textarea, select):focus,
+.company-portal-root .student-filter-grid input:focus,
+.company-portal-root .data-table select:focus {
+  background: #ffffff;
+  border-color: var(--company-blue);
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 10%);
+}
+
+.company-portal-root .job-create-form textarea,
+.company-portal-root .event-form textarea,
+.company-portal-root .company-profile-form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.company-portal-root .job-create-form label:has(input[type='checkbox']) {
+  flex-direction: row;
+  align-items: center;
+}
+
+.company-portal-root .job-create-form input[type='checkbox'] {
+  width: 18px;
+  min-height: 18px;
+  padding: 0;
+  accent-color: var(--company-blue);
+}
+
+.company-portal-root .form-two-column,
+.company-portal-root .form-three-column {
+  display: grid;
+  gap: 14px;
+}
+
+.company-portal-root .form-two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.company-portal-root .form-three-column {
+  grid-template-columns: 0.6fr 1.4fr 1fr;
+}
+
+.company-portal-root .job-list-section,
+.company-portal-root .events-list-section {
+  min-width: 0;
+}
+
+.company-portal-root .job-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.company-portal-root .job-card-grid > .dashboard-card {
+  display: flex;
+  min-height: 330px;
+  flex-direction: column;
+  padding: 23px;
+}
+
+.company-portal-root .job-card-grid h3 {
+  margin: 0 0 12px;
+  color: var(--company-text);
+  font-size: 1.05rem;
+}
+
+.company-portal-root .job-card-grid p {
+  margin: 0 0 10px;
+  color: var(--company-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.company-portal-root .job-card-grid p:first-of-type {
+  margin-bottom: 18px;
+}
+
+.company-portal-root .job-card-grid .secondary-action-button {
+  align-self: flex-end;
+  margin-top: auto;
+}
+
+/* Events */
+
+.company-portal-root .event-card-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.company-portal-root .recruiter-event-card {
+  padding: 24px;
+}
+
+.company-portal-root .recruiter-event-card h3 {
+  margin: 0 0 12px;
+  color: var(--company-text);
+  font-size: 1.08rem;
+}
+
+.company-portal-root .recruiter-event-card > p {
+  margin: 0 0 9px;
+  color: var(--company-muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.company-portal-root .recruiter-event-card > .secondary-action-button {
+  margin-top: 12px;
+}
+
+.company-portal-root .event-registrants {
+  display: grid;
+  gap: 8px;
+  padding-top: 18px;
+  margin-top: 18px;
+  border-top: 1px solid #edf0f5;
+}
+
+.company-portal-root .event-registrants h4 {
+  margin: 0 0 5px;
+  color: var(--company-text-soft);
+  font-size: 0.88rem;
+}
+
+.company-portal-root .event-registrants > p {
+  margin: 0;
+  color: var(--company-muted-light);
+  font-size: 0.82rem;
+}
+
+.company-portal-root .registrant-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) minmax(160px, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
+  color: var(--company-muted);
+  font-size: 0.8rem;
+  background: #f8fafc;
+  border-radius: 9px;
+}
+
+.company-portal-root .registrant-row strong {
+  color: var(--company-text-soft);
+}
+
+/* Applicants */
+
+.company-portal-root .data-table-wrapper {
+  overflow-x: auto;
+}
+
+.company-portal-root .data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.company-portal-root .data-table th {
+  padding: 13px 18px;
+  color: var(--company-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #f8fafc;
+  border-bottom: 1px solid #e7ebf2;
+}
+
+.company-portal-root .data-table td {
+  padding: 15px 18px;
+  color: var(--company-text-soft);
+  font-size: 0.88rem;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.company-portal-root .data-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.company-portal-root .table-primary-text {
+  color: var(--company-text);
+  font-weight: 700;
+}
+
+.company-portal-root .table-secondary-text {
+  margin-top: 3px;
+  color: var(--company-muted-light);
+  font-size: 0.78rem;
+}
+
+.company-portal-root .company-status-badge {
+  display: inline-flex;
+  padding: 5px 9px;
+  color: #b54708;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: #fff7e6;
+  border-radius: 999px;
+}
+
+.company-portal-root .data-table select {
+  min-width: 116px;
+  min-height: 38px;
+  padding: 6px 9px;
+}
+
+/* Student directory and profile */
+
+.company-portal-root .student-search-card {
+  padding: 26px;
+  margin-bottom: 28px;
+}
+
+.company-portal-root .card-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding-bottom: 20px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.company-portal-root .card-heading-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  color: var(--company-blue);
+  font-size: 1.4rem;
+  background: var(--company-blue-soft);
+  border-radius: 12px;
+  place-items: center;
+}
+
+.company-portal-root .card-heading h2,
+.company-portal-root .section-title-row h2 {
+  margin: 0;
+  color: var(--company-text);
+  font-size: 1.12rem;
+}
+
+.company-portal-root .card-heading p,
+.company-portal-root .section-title-row p {
+  margin: 5px 0 0;
+  color: var(--company-muted-light);
+  font-size: 0.8rem;
+}
+
+.company-portal-root .student-search-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.company-portal-root .student-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.company-portal-root .student-search-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.company-portal-root .student-results-section {
+  min-width: 0;
+}
+
+.company-portal-root .section-title-row {
+  margin-bottom: 18px;
+}
+
+.company-portal-root .student-results-loading {
+  padding: 50px;
+}
+
+.company-portal-root .student-empty-state {
+  min-height: 300px;
+}
+
+.company-portal-root .student-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.company-portal-root .student-directory-card {
+  display: flex;
+  min-height: 300px;
+  flex-direction: column;
+  padding: 22px;
+  transition: box-shadow 150ms ease;
+}
+
+.company-portal-root .student-directory-card:hover {
+  box-shadow: 0 2px 8px rgb(0 0 0 / 4%);
+}
+
+.company-portal-root .student-directory-top {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding-bottom: 17px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.company-portal-root .student-directory-avatar {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  color: var(--company-text);
+  font-size: 1rem;
+  font-weight: 800;
+  background: var(--company-lime);
+  border-radius: 13px;
+  place-items: center;
+}
+
+.company-portal-root .student-directory-title {
+  min-width: 0;
+}
+
+.company-portal-root .student-directory-title h3 {
+  margin: 0;
+  color: var(--company-text);
+  font-size: 1rem;
+}
+
+.company-portal-root .student-directory-title p {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--company-muted-light);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-portal-root .student-profile-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.company-portal-root .student-profile-details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.company-portal-root .student-profile-details span,
+.company-portal-root .student-section-label {
+  color: var(--company-muted-light);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.company-portal-root .student-profile-details strong {
+  color: var(--company-text-soft);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.company-portal-root .student-skills-section {
+  margin-top: 18px;
+}
+
+.company-portal-root .student-skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.company-portal-root .student-skill-tag {
+  padding: 5px 9px;
+  color: #3f3f46;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: #f1f1f2;
+  border-radius: 999px;
+}
+
+.company-portal-root .student-no-skills {
+  margin: 7px 0 0;
+  color: var(--company-muted-light);
+  font-size: 0.77rem;
+}
+
+.company-portal-root .student-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 22px;
+  margin-top: auto;
+}
+
+.company-portal-root .company-student-profile-card {
+  max-width: 760px;
+  padding: 28px;
+}
+
+.company-portal-root .company-student-profile-card h1 {
+  margin: 0 0 5px;
+  color: var(--company-text);
+  font-size: 1.55rem;
+}
+
+.company-portal-root .company-student-profile-card p {
+  padding-bottom: 10px;
+  margin: 0 0 10px;
+  color: var(--company-muted);
+  border-bottom: 1px solid #edf0f5;
+}
+
+.company-portal-root .company-student-profile-card p:last-child {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: 0;
+}
+
+/* Company profile */
+
+.company-portal-root .profile-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.7fr) minmax(520px, 1.5fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.company-portal-root .company-profile-summary {
+  padding: 26px;
+}
+
+.company-portal-root .company-avatar-section {
+  text-align: center;
+}
+
+.company-portal-root .company-avatar-placeholder {
+  display: grid;
+  width: 92px;
+  height: 92px;
+  margin: 0 auto 16px;
+  color: var(--company-text);
+  font-size: 1.6rem;
+  font-weight: 800;
+  background: var(--company-lime);
+  border-radius: 24px;
+  place-items: center;
+}
+
+.company-portal-root .company-avatar-section h2 {
+  margin: 0;
+  color: var(--company-text);
+  font-size: 1.15rem;
+}
+
+.company-portal-root .company-avatar-section p {
+  margin: 6px 0 0;
+  color: var(--company-muted-light);
+  font-size: 0.8rem;
+}
+
+.company-portal-root .profile-completion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 20px;
+  margin-top: 24px;
+  color: #475467;
+  font-size: 0.78rem;
+  border-top: 1px solid #edf0f5;
+}
+
+.company-portal-root .profile-completion strong {
+  color: var(--company-blue);
+}
+
+.company-portal-root .company-profile-form-card {
+  padding: 28px;
+}
+
+.company-portal-root .company-profile-form-card > h2 {
+  margin: 0 0 22px;
+  color: var(--company-text);
+  font-size: 1.15rem;
+}
+
+.company-portal-root .profile-success-message {
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  color: var(--company-success);
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: var(--company-success-soft);
+  border: 1px solid #b7ebc6;
+  border-radius: 9px;
+}
+
+/* Responsive company portal */
+
+@media (max-width: 1050px) {
+  .company-portal-root .student-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 950px) {
+  .company-portal-root .job-card-grid,
+  .company-portal-root .profile-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 850px) {
+  .company-auth-root .login-shell {
+    width: min(650px, 100%);
+    grid-template-columns: 1fr;
+  }
+
+  .company-auth-root .login-page {
+    padding: 18px;
+  }
+
+  .company-auth-root .login-hero {
+    padding: 46px 38px;
+  }
+
+  .company-auth-root .hero-features,
+  .company-auth-root .hero-footer {
+    display: none;
+  }
+
+  .company-auth-root .login-panel {
+    padding: 40px 34px 48px;
+  }
+
+  .company-portal-root .company-sidebar {
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+
+  .company-portal-root .company-sidebar-brand {
+    justify-content: center;
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .company-portal-root .company-sidebar-brand-text,
+  .company-portal-root .company-sidebar-section-label,
+  .company-portal-root .company-sidebar-nav-item > span:last-child,
+  .company-portal-root .company-sidebar-details,
+  .company-portal-root .company-sidebar-logout > span:last-child {
+    display: none;
+  }
+
+  .company-portal-root .company-sidebar-navigation {
+    align-items: center;
+  }
+
+  .company-portal-root .company-sidebar-nav-item {
+    width: 46px;
+    height: 46px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .company-portal-root .company-sidebar-nav-icon {
+    width: auto;
+  }
+
+  .company-portal-root .company-sidebar-account,
+  .company-portal-root .company-sidebar-logout {
+    justify-content: center;
+  }
+
+  .company-portal-root .company-dashboard-page {
+    padding: 28px 22px 50px;
+  }
+}
+
+@media (max-width: 750px) {
+  .company-portal-root .job-metric-grid,
+  .company-portal-root .metric-grid,
+  .company-portal-root .form-three-column,
+  .company-portal-root .student-filter-grid,
+  .company-portal-root .student-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .company-portal-root .data-table th,
+  .company-portal-root .data-table td {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 600px) {
+  .company-auth-root .login-page {
+    padding: 0;
+  }
+
+  .company-auth-root .login-shell {
+    width: 100%;
+    min-height: 100vh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .company-auth-root .login-hero {
+    padding: 34px 26px;
+  }
+
+  .company-auth-root .login-hero h1 {
+    font-size: 2.2rem;
+  }
+
+  .company-auth-root .hero-description {
+    margin-bottom: 0;
+  }
+
+  .company-auth-root .login-panel {
+    padding: 30px 24px 42px;
+  }
+
+  .company-auth-root .company-signup-page {
+    width: calc(100% - 24px);
+    padding: 26px 22px;
+    margin: 24px auto;
+  }
+
+  .company-portal-root .company-sidebar {
+    position: sticky;
+    inset: 0 0 auto;
+    width: 100%;
+    min-height: 64px;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--company-border);
+  }
+
+  .company-portal-root .company-sidebar-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .company-portal-root .company-sidebar-brand {
+    margin: 0 4px 0 0;
+  }
+
+  .company-portal-root .company-sidebar-brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .company-portal-root .company-sidebar-navigation {
+    flex-direction: row;
+  }
+
+  .company-portal-root .company-sidebar-nav-item {
+    width: auto;
+    min-width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    padding: 0 10px;
+  }
+
+  .company-portal-root .company-sidebar-nav-item > span:last-child {
+    display: inline;
+    font-size: 0.75rem;
+  }
+
+  .company-portal-root .company-sidebar-bottom {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 0 0 8px;
+    margin-left: auto;
+    border-top: 0;
+    border-left: 1px solid #eceff3;
+  }
+
+  .company-portal-root .company-sidebar-account {
+    padding: 0;
+  }
+
+  .company-portal-root .company-sidebar-logout {
+    width: 38px;
+    min-height: 38px;
+    padding: 0;
+  }
+
+  .company-portal-root .company-dashboard-page {
+    padding: 24px 16px 48px;
+  }
+
+  .company-portal-root .company-page-header,
+  .company-portal-root .form-two-column {
+    grid-template-columns: 1fr;
+  }
+
+  .company-portal-root .company-page-header {
+    flex-direction: column;
+  }
+
+  .company-portal-root .job-create-card,
+  .company-portal-root .event-create-card,
+  .company-portal-root .student-search-card,
+  .company-portal-root .company-profile-summary,
+  .company-portal-root .company-profile-form-card,
+  .company-portal-root .company-student-profile-card {
+    padding: 20px;
+  }
+
+  .company-portal-root .registrant-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

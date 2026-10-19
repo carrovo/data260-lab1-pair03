@@ -51,12 +51,12 @@ export default function CompanySignup() {
   };
 
   return (
-    <div className="auth-page">
+    <div className="company-signup-page">
       <h1>Create a Company Account</h1>
 
       <form
         onSubmit={handleSubmit}
-        className="form"
+        className="company-signup-form"
       >
         <label>
           Company name
@@ -130,7 +130,7 @@ export default function CompanySignup() {
         {loading ? (
           <Loading label="Creating account..." />
         ) : (
-          <button type="submit">
+          <button type="submit" className="company-signup-button">
             Sign up
           </button>
         )}

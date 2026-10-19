@@ -121,17 +121,17 @@ export default function CompanyDashboard() {
 
   if (loading) {
     return (
-      <div className="dashboard-page">
+      <div className="company-dashboard-page">
         <Loading label="Loading job postings..." />
       </div>
     );
   }
 
   return (
-    <div className="dashboard-page">
-      <div className="page-header">
-        <div className="page-header-main">
-          <p className="page-eyebrow">RECRUITING</p>
+    <div className="company-dashboard-page">
+      <div className="company-page-header">
+        <div className="company-page-header-main">
+          <p className="company-page-eyebrow">RECRUITING</p>
           <h1>Job Postings</h1>
           <p>
             Create opportunities, manage active postings, and review

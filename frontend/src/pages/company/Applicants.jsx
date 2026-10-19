@@ -99,20 +99,20 @@ export default function Applicants() {
 
   if (loading) {
     return (
-      <div className="dashboard-page">
+      <div className="company-dashboard-page">
         <Loading label="Loading applicants..." />
       </div>
     );
   }
 
   return (
-    <div className="dashboard-page">
+    <div className="company-dashboard-page">
       <Link to="/company/dashboard" className="page-back-link">
         ← Back to job postings
       </Link>
 
-      <div className="page-header">
-        <div className="page-header-main">
+      <div className="company-page-header">
+        <div className="company-page-header-main">
           <h1>Applicants</h1>
 
           <p>
@@ -200,7 +200,7 @@ export default function Applicants() {
                   </td>
 
                   <td>
-                    <span className="status-badge">
+                    <span className="company-status-badge">
                       {applicant.status}
                     </span>
                   </td>

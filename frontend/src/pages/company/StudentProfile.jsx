@@ -35,20 +35,22 @@ export default function StudentProfile() {
 
   if (loading) {
     return (
-      <Loading label="Loading student profile..." />
+      <div className="company-dashboard-page">
+        <Loading label="Loading student profile..." />
+      </div>
     );
   }
 
   return (
-    <div className="dashboard-page">
-      <Link to="/company/students">
+    <div className="company-dashboard-page">
+      <Link to="/company/students" className="page-back-link">
         &larr; Back to students
       </Link>
 
       <ErrorMessage error={error} />
 
       {student && (
-        <section className="dashboard-card">
+        <section className="dashboard-card company-student-profile-card">
           <h1>{student.full_name}</h1>
 
           <p>{student.email}</p>

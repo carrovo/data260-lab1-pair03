@@ -148,17 +148,17 @@ export default function Events() {
 
   if (loading) {
     return (
-      <div className="dashboard-page">
+      <div className="company-dashboard-page">
         <Loading label="Loading events..." />
       </div>
     );
   }
 
   return (
-    <div className="dashboard-page">
-      <div className="page-header">
-        <div className="page-header-main">
-          <p className="page-eyebrow">RECRUITING EVENTS</p>
+    <div className="company-dashboard-page">
+      <div className="company-page-header">
+        <div className="company-page-header-main">
+          <p className="company-page-eyebrow">RECRUITING EVENTS</p>
           <h1>Events</h1>
           <p>
             Create recruiting events and manage student

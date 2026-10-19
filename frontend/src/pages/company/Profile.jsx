@@ -106,7 +106,7 @@ export default function CompanyProfile() {
 
   if (loading) {
     return (
-      <div className="dashboard-page">
+      <div className="company-dashboard-page">
         <Loading label="Loading company profile..." />
       </div>
     );
@@ -130,10 +130,10 @@ export default function CompanyProfile() {
     ].filter(Boolean).length * 25;
 
   return (
-    <div className="dashboard-page">
-      <div className="page-header">
-        <div className="page-header-main">
-          <p className="page-eyebrow">
+    <div className="company-dashboard-page">
+      <div className="company-page-header">
+        <div className="company-page-header-main">
+          <p className="company-page-eyebrow">
             COMPANY SETTINGS
           </p>
 
@@ -177,7 +177,7 @@ export default function CompanyProfile() {
         <section className="dashboard-card company-profile-form-card">
           <h2>Company information</h2>
 
-          <form onSubmit={handleSave}>
+          <form className="company-profile-form" onSubmit={handleSave}>
             <label>
               Company name
               <input
