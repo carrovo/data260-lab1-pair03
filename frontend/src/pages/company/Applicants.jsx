@@ -11,6 +11,7 @@ export default function Applicants() {
   const [applicants, setApplicants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [resumeError, setResumeError] = useState(null);
 
   const loadApplicants = async () => {
     try {
@@ -77,6 +78,7 @@ export default function Applicants() {
   const previewResume = async (applicationId) => {
     try {
       setError(null);
+      setResumeError(null);
 
       const response = await api.get(
         `/companies/applications/${applicationId}/resume`,
@@ -93,6 +95,11 @@ export default function Applicants() {
         URL.revokeObjectURL(fileURL);
       }, 10000);
     } catch (err) {
+      if (err.response?.status === 404) {
+        setResumeError("Resume not found.");
+        return;
+      }
+
       setError(err);
     }
   };
@@ -123,6 +130,12 @@ export default function Applicants() {
       </div>
 
       <ErrorMessage error={error} />
+
+      {resumeError && (
+        <div className="error-message">
+          {resumeError}
+        </div>
+      )}
 
       <div className="metric-grid">
         <div className="dashboard-card metric-card">
@@ -214,15 +227,21 @@ export default function Applicants() {
                   </td>
 
                   <td>
-                    <button
-                      type="button"
-                      className="secondary-action-button"
-                      onClick={() =>
-                        previewResume(applicant.application_id)
-                      }
-                    >
-                      Preview resume
-                    </button>
+                    {applicant.resume_original_name ? (
+                      <button
+                        type="button"
+                        className="secondary-action-button"
+                        onClick={() =>
+                          previewResume(applicant.application_id)
+                        }
+                      >
+                        Preview resume
+                      </button>
+                    ) : (
+                      <span className="table-secondary-text">
+                        No resume available
+                      </span>
+                    )}
                   </td>
 
                   <td>

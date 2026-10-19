@@ -211,13 +211,13 @@ export default function StudentsSearch() {
               >
                 <div className="student-directory-top">
                   <div className="student-directory-avatar">
-                    {student.name
-                      ? student.name.charAt(0).toUpperCase()
+                    {student.full_name
+                      ? student.full_name.charAt(0).toUpperCase()
                       : "S"}
                   </div>
 
                   <div className="student-directory-title">
-                    <h3>{student.name}</h3>
+                    <h3>{student.full_name || "Student"}</h3>
                     <p>{student.email}</p>
                   </div>
                 </div>
