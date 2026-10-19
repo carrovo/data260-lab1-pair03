@@ -14,8 +14,18 @@ import LoginPage from './pages/LoginPage'
 import JobDetailPage from './pages/JobDetailPage'
 import JobsPage from './pages/JobsPage'
 import RegistrationsPage from './pages/RegistrationsPage'
+import CompanyApplicants from './pages/company/Applicants'
+import CompanyDashboard from './pages/company/Dashboard'
+import CompanyEvents from './pages/company/Events'
+import CompanyLogin from './pages/company/Login'
+import CompanyProfile from './pages/company/Profile'
+import CompanySignup from './pages/company/Signup'
+import CompanyStudentProfile from './pages/company/StudentProfile'
+import CompanyStudentsSearch from './pages/company/StudentsSearch'
+import CompanySidebar from './components/CompanySidebar'
 import StudentSidebar from './components/StudentSidebar'
 import useAuth from './auth/useAuth'
+import { getToken } from './services/authStorage'
 import './App.css'
 
 function GuestOnlyRoute() {
@@ -41,13 +51,46 @@ function ProtectedRoute() {
   )
 }
 
+function CompanyGuestOnlyRoute() {
+  const location = useLocation()
+  const returnLocation = location.state?.from
+  const returnPath = returnLocation?.pathname?.startsWith('/company/')
+    ? `${returnLocation.pathname}${returnLocation.search || ''}`
+    : '/company/dashboard'
+
+  return getToken('company') ? (
+    <Navigate to={returnPath} replace />
+  ) : (
+    <Outlet />
+  )
+}
+
+function CompanyProtectedRoute() {
+  const location = useLocation()
+
+  return getToken('company') ? (
+    <Outlet />
+  ) : (
+    <Navigate to="/company/login" replace state={{ from: location }} />
+  )
+}
+
 function App() {
   const { initializing } = useAuth()
   const location = useLocation()
-  const isAuthPage =
+  const isStudentAuthPage =
     location.pathname === '/login' || location.pathname === '/signup'
+  const isCompanyPath =
+    location.pathname === '/company' ||
+    location.pathname.startsWith('/company/')
+  const isCompanyAuthPage =
+    location.pathname === '/company/login' ||
+    location.pathname === '/company/signup'
+  const isAuthPage = isStudentAuthPage || isCompanyAuthPage
+  const showCompanySidebar =
+    isCompanyPath && !isCompanyAuthPage && Boolean(getToken('company'))
 
-  if (initializing) {
+  if (initializing && !isCompanyPath) {
     return (
       <div className="session-loading" role="status">
         <span className="session-loading-mark" aria-hidden="true">H</span>
@@ -59,7 +102,8 @@ function App() {
 
   return (
     <div className="app-shell">
-      {!isAuthPage && <StudentSidebar />}
+      {!isCompanyPath && !isStudentAuthPage && <StudentSidebar />}
+      {showCompanySidebar && <CompanySidebar />}
 
       <main className={isAuthPage ? 'auth-main' : 'workspace-main'}>
         <Routes>
@@ -76,6 +120,41 @@ function App() {
           <Route element={<GuestOnlyRoute />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+          </Route>
+          <Route
+            path="/company"
+            element={(
+              <Navigate
+                to={getToken('company')
+                  ? '/company/dashboard'
+                  : '/company/login'}
+                replace
+              />
+            )}
+          />
+          <Route element={<CompanyGuestOnlyRoute />}>
+            <Route path="/company/login" element={<CompanyLogin />} />
+            <Route path="/company/signup" element={<CompanySignup />} />
+          </Route>
+          <Route element={<CompanyProtectedRoute />}>
+            <Route
+              path="/company/dashboard"
+              element={<CompanyDashboard />}
+            />
+            <Route
+              path="/company/jobs/:jobId/applicants"
+              element={<CompanyApplicants />}
+            />
+            <Route path="/company/events" element={<CompanyEvents />} />
+            <Route
+              path="/company/students"
+              element={<CompanyStudentsSearch />}
+            />
+            <Route
+              path="/company/students/:studentId"
+              element={<CompanyStudentProfile />}
+            />
+            <Route path="/company/profile" element={<CompanyProfile />} />
           </Route>
         </Routes>
       </main>
