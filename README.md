@@ -73,3 +73,67 @@ The canonical saved-item table uses explicit `job_id` and `event_id` foreign
 keys. If a legacy company-only `saved_items.item_id` table is detected, the
 migration stops before making changes so that its data can be mapped in a
 separately coordinated, non-destructive backfill.
+
+## Deterministic Final Demo Data
+
+Run both migrations above before loading final demo data. The seed generator
+validates the canonical schema and stops without changing it when a required
+table or column is missing. It does not run or replace migrations.
+
+From the repository root, run:
+
+```bash
+.venv/bin/python -m backend.seed_final_data
+```
+
+The generator uses `SEED = 3`, the Pair 03 cities (San Jose, Santa Clara, and
+Fremont), and the fixed default base date `2030-01-15`. To make the displayed
+schedule relative to another documented date while retaining deterministic
+output, set an ISO date explicitly:
+
+```bash
+SEED_BASE_DATE=2031-01-15 .venv/bin/python -m backend.seed_final_data
+```
+
+Each successful run verifies and reports these exact reserved demo counts:
+
+| Entity | Count |
+|---|---:|
+| Students | 200 |
+| Companies | 50 |
+| Jobs | 300 |
+| Applications | 1,500 |
+| Events | 100 |
+| Student preference rows | 150 |
+| Event registrations | 600 |
+| Saved jobs and events | 600 |
+
+The following credentials are intentionally shared for classroom demos only.
+They must not be reused outside this lab:
+
+| Scenario | Email | Password |
+|---|---|---|
+| Student with complete job/event preferences | `seed3.student.001@demo.p03.example.com` | `Pair03Demo!2026` |
+| Student with partial preferences | `seed3.student.002@demo.p03.example.com` | `Pair03Demo!2026` |
+| Student with no preference row | `seed3.student.004@demo.p03.example.com` | `Pair03Demo!2026` |
+| Company owning multiple jobs and events | `seed3.company.001@demo.p03.example.com` | `Pair03Demo!2026` |
+
+The complete-preferences student predictably matches `Pair03 Seed3 Job 001 -
+Data Analyst Intern` and `Pair03 Seed3 Event 001 - Data Science Career Night`,
+and has both a saved job and saved event. `Pair03 Seed3 Job 002 - Untrusted
+Content Test` contains harmless prompt-injection demonstration text; `Pair03
+Seed3 Job 003 - Clean Content Control` is its clean comparison. Searches for a
+title such as `Quantum Botanist` or an event named `Underwater Basket Weaving`
+provide reliable no-match demonstrations.
+
+Seed ownership is limited to the reserved `seed3.*@demo.p03.example.com`
+accounts and `Pair03 Seed3` job/event natural keys. Reruns update those records
+in one transaction without duplicating applications, registrations,
+preferences, or saved items. The script never drops or truncates tables and
+does not delete unrelated user data. It refuses a legacy generic
+`saved_items.item_id` schema rather than rewriting it. Seeded applications keep
+resume metadata null and do not create or claim uploaded PDF files.
+
+The generator and its safety behavior are covered with disposable SQLite tests.
+It has not yet been executed against the real MySQL database; run the documented
+migrations and perform a reviewed MySQL smoke run before the final demo.
