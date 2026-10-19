@@ -332,6 +332,113 @@ def test_search_jobs_combines_filters_case_insensitively(ai_tool_context):
     assert "Alpha Analytics" in result
 
 
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "job",
+        "jobs",
+        "role",
+        "roles",
+        "position",
+        "positions",
+        "opportunity",
+        "opportunities",
+    ],
+)
+def test_search_jobs_normalizes_generic_trailing_title_words(
+    ai_tool_context,
+    suffix,
+):
+    engine, identifiers = ai_tool_context
+
+    with Session(engine) as db:
+        result = search_jobs(
+            db,
+            title=f"data analyst intern {suffix}",
+            city="San Jose",
+        )
+
+    assert _result_ids(result) == {identifiers["data_intern"]}
+    assert "Data Analyst Intern" in result
+
+
+def test_search_jobs_keeps_normal_title_search_behavior(ai_tool_context):
+    engine, identifiers = ai_tool_context
+
+    with Session(engine) as db:
+        result = search_jobs(db, title="Data Analyst Intern")
+
+    assert _result_ids(result) == {identifiers["data_intern"]}
+
+
+def test_normalized_job_title_preserves_compatible_filters(ai_tool_context):
+    engine, identifiers = ai_tool_context
+
+    with Session(engine) as db:
+        matching = search_jobs(
+            db,
+            title="data analyst intern opportunities",
+            company="Alpha",
+            category="internship",
+            city="San Jose",
+            min_salary="25.00",
+            skills="Python, SQL",
+            deadline_before="2030-06-30",
+        )
+
+    assert _result_ids(matching) == {identifiers["data_intern"]}
+
+
+@pytest.mark.parametrize(
+    "conflicting_filter",
+    [
+        {"company": "Beta"},
+        {"category": "full_time"},
+        {"city": "Santa Clara"},
+        {"min_salary": "31.00"},
+        {"skills": "AWS"},
+        {"deadline_before": "2029-12-31"},
+    ],
+)
+def test_normalized_job_title_keeps_other_filters_enforced(
+    ai_tool_context,
+    conflicting_filter,
+):
+    engine, _ = ai_tool_context
+
+    with Session(engine) as db:
+        result = search_jobs(
+            db,
+            title="data analyst intern positions",
+            **conflicting_filter,
+        )
+
+    assert result == "No jobs matched those filters."
+
+
+def test_normalized_job_title_preserves_genuine_no_match(ai_tool_context):
+    engine, _ = ai_tool_context
+
+    with Session(engine) as db:
+        result = search_jobs(db, title="Quantum Farmer roles")
+        generic_only = search_jobs(db, title="jobs")
+
+    assert result == "No jobs matched those filters."
+    assert generic_only == "No jobs matched those filters."
+
+
+def test_normalized_job_search_excludes_sensitive_fields(ai_tool_context):
+    engine, _ = ai_tool_context
+
+    with Session(engine) as db:
+        result = search_jobs(db, title="data analyst intern jobs")
+
+    assert all(secret not in result for secret in SENSITIVE_VALUES)
+    assert "private-primary-student-password" not in result
+    assert "password_hash" not in result
+    assert "storage_key" not in result
+
+
 def test_search_jobs_returns_clear_no_match_and_validation_strings(
     ai_tool_context,
 ):

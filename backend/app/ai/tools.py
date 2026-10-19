@@ -26,6 +26,16 @@ from backend.app.schemas.preferences import (
 
 
 MAX_TOOL_RESULTS = 10
+GENERIC_JOB_TITLE_SUFFIXES = frozenset({
+    "job",
+    "jobs",
+    "role",
+    "roles",
+    "position",
+    "positions",
+    "opportunity",
+    "opportunities",
+})
 
 
 class _ToolArguments(BaseModel):
@@ -248,6 +258,23 @@ def _format_decimal(value: Decimal | None) -> str:
     return f"{value:.2f}" if value is not None else "None"
 
 
+def _job_title_fallback(title: str) -> str | None:
+    """Remove only generic trailing search words from a title phrase."""
+
+    words = title.split()
+    end = len(words)
+
+    while end > 0:
+        trailing_word = words[end - 1].casefold().rstrip(".,!?;:")
+        if trailing_word not in GENERIC_JOB_TITLE_SUFFIXES:
+            break
+        end -= 1
+
+    if end == 0 or end == len(words):
+        return None
+    return " ".join(words[:end])
+
+
 def _validated_preferences(
     preferences: StudentPreferences,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
@@ -358,6 +385,15 @@ def search_jobs(db: Session, **arguments: Any) -> str:
             _without_trusted_context(arguments)
         )
         rows = db.execute(_job_search_statement(validated)).all()
+        if not rows and validated.title:
+            fallback_title = _job_title_fallback(validated.title)
+            if fallback_title is not None:
+                fallback_arguments = validated.model_copy(
+                    update={"title": fallback_title}
+                )
+                rows = db.execute(
+                    _job_search_statement(fallback_arguments)
+                ).all()
         if not rows:
             return "No jobs matched those filters."
 
