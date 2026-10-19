@@ -340,6 +340,46 @@ def test_demo_preferences_match_known_job_event_and_saved_items(
     assert saved_event.item_type == "event"
 
 
+def test_remote_data_science_fixture_and_november_event_query(
+    seeded_database,
+):
+    engine, _, _ = seeded_database
+
+    with Session(engine) as session:
+        job = session.scalar(
+            select(Job).where(Job.title == DEMO_MATCH_JOB_TITLE)
+        )
+        matching_jobs = search_jobs(
+            session,
+            category="internship",
+            is_remote=True,
+            skills="data science",
+        )
+        placeholder_city_events = search_events(
+            session,
+            city="any",
+            start_date="2029-11-01",
+            end_date="2029-11-30",
+            major="computer science",
+        )
+        real_city_events = search_events(
+            session,
+            city="Santa Clara",
+            start_date="2029-11-01",
+            end_date="2029-11-30",
+            major="Computer Science",
+        )
+
+    assert job.category == JobCategory.INTERNSHIP.value
+    assert job.is_remote is True
+    assert job.skills == "Data Science, Python, SQL, Tableau"
+    assert f"id={job.id}" in matching_jobs
+    assert "Pair03 Seed3 Event 002 - Interview Workshop" in (
+        placeholder_city_events
+    )
+    assert "Pair03 Seed3 Event 002 - Interview Workshop" in real_city_events
+
+
 def test_prompt_injection_and_clean_control_records_exist(seeded_database):
     engine, _, _ = seeded_database
 
@@ -401,6 +441,21 @@ def test_rerun_is_idempotent_and_preserves_non_seed_data():
                     .order_by(Student.email)
                 )
             )
+            demo_job_before = session.scalar(
+                select(Job).where(Job.title == DEMO_MATCH_JOB_TITLE)
+            )
+            demo_job_id_before = demo_job_before.id
+            demo_job_application_ids_before = tuple(
+                session.scalars(
+                    select(Application.id)
+                    .where(Application.job_id == demo_job_id_before)
+                    .order_by(Application.id)
+                )
+            )
+            seed_counts_before = (
+                session.scalar(select(func.count(Job.id))),
+                session.scalar(select(func.count(Application.id))),
+            )
         with Session(engine) as session:
             second = seed_final_data(session, output=StringIO())
 
@@ -417,8 +472,21 @@ def test_rerun_is_idempotent_and_preserves_non_seed_data():
                     Student.email == "ordinary.user@example.com"
                 )
             )
+            demo_jobs = list(
+                session.scalars(
+                    select(Job).where(Job.title == DEMO_MATCH_JOB_TITLE)
+                )
+            )
+            demo_job_application_ids_after = tuple(
+                session.scalars(
+                    select(Application.id)
+                    .where(Application.job_id == demo_jobs[0].id)
+                    .order_by(Application.id)
+                )
+            )
             counts = (
                 session.scalar(select(func.count(Student.id))),
+                session.scalar(select(func.count(Job.id))),
                 session.scalar(select(func.count(Application.id))),
                 session.scalar(select(func.count(Registration.id))),
                 session.scalar(select(func.count(SavedItem.id))),
@@ -427,7 +495,17 @@ def test_rerun_is_idempotent_and_preserves_non_seed_data():
         assert first == second
         assert ids_before == ids_after
         assert ordinary_user.full_name == "Ordinary User"
-        assert counts == (201, 1_500, 600, 600)
+        assert len(demo_jobs) == 1
+        assert demo_jobs[0].id == demo_job_id_before
+        assert demo_jobs[0].skills == "Data Science, Python, SQL, Tableau"
+        assert demo_jobs[0].skills.split(", ").count("Data Science") == 1
+        assert demo_job_application_ids_before
+        assert (
+            demo_job_application_ids_before
+            == demo_job_application_ids_after
+        )
+        assert seed_counts_before == (300, 1_500)
+        assert counts == (201, 300, 1_500, 600, 600)
     finally:
         engine.dispose()
 

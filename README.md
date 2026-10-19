@@ -95,6 +95,12 @@ output, set an ISO date explicitly:
 SEED_BASE_DATE=2031-01-15 .venv/bin/python -m backend.seed_final_data
 ```
 
+For reproducible assistant transcripts, the server-owned deterministic demo
+reference date is `2029-10-15`. Relative date phrases are calculated from that
+date, so “next month” means the complete range `2029-11-01` through
+`2029-11-30`. This assistant reference is independent of client conversation
+history and does not change or rerun the seed generator.
+
 Each successful run verifies and reports these exact reserved demo counts:
 
 | Entity | Count |

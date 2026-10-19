@@ -293,6 +293,8 @@ def test_get_missing_student_preferences(ai_tool_context, student_key):
         ({"company": "Alpha"}, {"data_intern", "data_engineer"}),
         ({"category": "internship"}, {"data_intern"}),
         ({"city": "Santa Clara"}, {"product_manager"}),
+        ({"is_remote": True}, {"product_manager", "data_engineer"}),
+        ({"is_remote": False}, {"data_intern"}),
         ({"min_salary": 130000}, {"data_engineer"}),
         ({"skills": "Python, AWS"}, {"data_engineer"}),
         ({"deadline_before": "2030-12-31"}, {"data_intern"}),
@@ -323,6 +325,7 @@ def test_search_jobs_combines_filters_case_insensitively(ai_tool_context):
             company="aLpHa",
             category="internship",
             city="sAn JoSe",
+            is_remote=False,
             min_salary="25.00",
             skills="python, sql",
             deadline_before="2030-06-30",
@@ -330,6 +333,51 @@ def test_search_jobs_combines_filters_case_insensitively(ai_tool_context):
 
     assert _result_ids(result) == {identifiers["data_intern"]}
     assert "Alpha Analytics" in result
+
+
+def test_search_jobs_omits_remote_filter_when_not_supplied(ai_tool_context):
+    engine, identifiers = ai_tool_context
+
+    with Session(engine) as db:
+        result = search_jobs(db)
+
+    assert _result_ids(result) == {
+        identifiers["data_intern"],
+        identifiers["product_manager"],
+        identifiers["data_engineer"],
+    }
+
+
+@pytest.mark.parametrize("invalid_remote", ["yes", "false", 1, 0])
+def test_search_jobs_rejects_non_boolean_remote_values(
+    ai_tool_context,
+    invalid_remote,
+):
+    engine, _ = ai_tool_context
+
+    with Session(engine) as db:
+        result = search_jobs(db, is_remote=invalid_remote)
+
+    assert result.startswith("Invalid tool arguments: is_remote:")
+
+
+def test_search_jobs_remote_filter_preserves_no_match_and_privacy(
+    ai_tool_context,
+):
+    engine, _ = ai_tool_context
+
+    with Session(engine) as db:
+        no_match = search_jobs(
+            db,
+            title="Data Analyst Intern",
+            is_remote=True,
+        )
+        remote_jobs = search_jobs(db, is_remote=True)
+
+    assert no_match == "No jobs matched those filters."
+    assert all(secret not in remote_jobs for secret in SENSITIVE_VALUES)
+    assert "password_hash" not in remote_jobs
+    assert "storage_key" not in remote_jobs
 
 
 @pytest.mark.parametrize(
@@ -516,6 +564,43 @@ def test_search_events_combines_filters(ai_tool_context):
 
     assert _result_ids(result) == {identifiers["data_fair"]}
     assert "company=Alpha Analytics" in result
+
+
+@pytest.mark.parametrize(
+    "placeholder_city",
+    ["any", "ALL", "Anywhere", "none", "No Preference"],
+)
+def test_search_events_treats_placeholder_city_as_omitted(
+    ai_tool_context,
+    placeholder_city,
+):
+    engine, identifiers = ai_tool_context
+
+    with Session(engine) as db:
+        result = search_events(db, city=placeholder_city)
+
+    assert _result_ids(result) == {
+        identifiers["data_fair"],
+        identifiers["cs_workshop"],
+        identifiers["alumni_event"],
+    }
+
+
+def test_search_events_keeps_real_city_date_and_major_filters(
+    ai_tool_context,
+):
+    engine, identifiers = ai_tool_context
+
+    with Session(engine) as db:
+        result = search_events(
+            db,
+            city="Santa Clara",
+            start_date="2030-06-01",
+            end_date="2030-06-30",
+            major="Computer Science",
+        )
+
+    assert _result_ids(result) == {identifiers["cs_workshop"]}
 
 
 def test_search_events_rejects_invalid_date_range(ai_tool_context):
@@ -841,10 +926,17 @@ def test_model_visible_tool_schemas_are_complete_and_trusted():
         "company",
         "category",
         "city",
+        "is_remote",
         "min_salary",
         "skills",
         "deadline_before",
     }
+    assert (
+        schemas_by_name["search_jobs"]["parameters"]["properties"][
+            "is_remote"
+        ]["type"]
+        == "boolean"
+    )
     assert set(
         schemas_by_name["search_events"]["parameters"]["properties"]
     ) == {

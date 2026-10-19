@@ -302,7 +302,7 @@ def _job_records(base_date: date) -> list[dict[str, Any]]:
         "location": "San Jose Demo Campus",
         "is_remote": True,
         "salary": Decimal("67500.00"),
-        "skills": "Python, SQL, Tableau",
+        "skills": "Data Science, Python, SQL, Tableau",
         "deadline": _base_datetime(base_date) + timedelta(days=90),
     })
     records[1].update({

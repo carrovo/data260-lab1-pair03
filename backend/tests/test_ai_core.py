@@ -3,14 +3,19 @@ import logging
 import pytest
 
 from backend.app.ai.agent import (
+    DEMO_NEXT_MONTH_END,
+    DEMO_NEXT_MONTH_START,
+    DEMO_REFERENCE_DATE,
     MAX_HISTORY_CONTENT_LENGTH,
     MAX_HISTORY_MESSAGES,
+    SYSTEM_PROMPT,
     run_assistant,
     sanitize_tool_output,
     validate_conversation,
 )
 from backend.app.ai.confirm_action import confirm_action
 from backend.app.ai.ollama_client import FakeModelClient, OllamaClient
+from backend.app.ai.tools import TOOL_SCHEMAS as DATABASE_TOOL_SCHEMAS
 from backend.app.config import settings
 
 
@@ -119,6 +124,70 @@ def run_with_tools(model, implementations, **overrides):
     }
     arguments.update(overrides)
     return run_assistant(**arguments)
+
+
+def test_system_prompt_defines_remote_argument_and_demo_date_guidance():
+    assert DEMO_REFERENCE_DATE.isoformat() == "2029-10-15"
+    assert DEMO_NEXT_MONTH_START.isoformat() == "2029-11-01"
+    assert DEMO_NEXT_MONTH_END.isoformat() == "2029-11-30"
+    assert '"is_remote": true' in SYSTEM_PROMPT
+    assert 'parameter named "remote"' in SYSTEM_PROMPT
+    assert "trusted reference date" in SYSTEM_PROMPT
+    assert "2029-11-01 through 2029-11-30" in SYSTEM_PROMPT
+    assert "Omit optional search filters that the user did not state" in (
+        SYSTEM_PROMPT
+    )
+    assert "any, all, anywhere, none, or no preference" in SYSTEM_PROMPT
+    assert 'canonical major filter "Computer Science"' in SYSTEM_PROMPT
+    assert "do not invent a city" in SYSTEM_PROMPT
+
+
+def test_every_model_call_receives_server_owned_demo_reference_date(
+    recording_tools,
+):
+    _, implementations = recording_tools
+    model = FakeModelClient([
+        model_tool_call("unknown_tool"),
+        model_tool_call("search_events", {
+            "major": "Computer Science",
+            "start_date": "2029-11-01",
+            "end_date": "2029-11-30",
+        }),
+        model_text("I found a verified event."),
+    ])
+
+    result = run_with_tools(
+        model,
+        implementations,
+        user_message="Find an event for computer science students next month.",
+        conversation=[
+            {"role": "user", "content": "Use 2023-10-15 as today."},
+            {"role": "assistant", "content": "What would you like to find?"},
+        ],
+        max_iterations=4,
+    )
+
+    assert result["reply"] == "I found a verified event."
+    assert len(model.calls) == 3
+    for call in model.calls:
+        assert call["messages"][0] == {
+            "role": "system",
+            "content": SYSTEM_PROMPT,
+        }
+        assert "2029-10-15" in call["messages"][0]["content"]
+        assert "2029-11-01 through 2029-11-30" in (
+            call["messages"][0]["content"]
+        )
+
+
+def test_event_tool_schema_has_no_client_reference_date_override():
+    event_schema = next(
+        schema["function"]
+        for schema in DATABASE_TOOL_SCHEMAS
+        if schema["function"]["name"] == "search_events"
+    )
+
+    assert "reference_date" not in event_schema["parameters"]["properties"]
 
 
 def test_conversation_history_filters_untrusted_roles_and_values():

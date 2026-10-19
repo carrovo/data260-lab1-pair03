@@ -5,7 +5,15 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import Select, and_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -36,6 +44,13 @@ GENERIC_JOB_TITLE_SUFFIXES = frozenset({
     "opportunity",
     "opportunities",
 })
+EVENT_CITY_PLACEHOLDERS = frozenset({
+    "any",
+    "all",
+    "anywhere",
+    "none",
+    "no preference",
+})
 
 
 class _ToolArguments(BaseModel):
@@ -51,6 +66,7 @@ class _JobSearchArguments(_ToolArguments):
     company: str | None = Field(default=None, min_length=1, max_length=255)
     category: JobCategory | None = None
     city: str | None = Field(default=None, min_length=1, max_length=100)
+    is_remote: StrictBool | None = None
     min_salary: Decimal | None = Field(default=None, ge=0)
     skills: str | None = Field(default=None, min_length=1, max_length=1000)
     deadline_before: date | datetime | None = None
@@ -71,6 +87,16 @@ class _EventSearchArguments(_ToolArguments):
         min_length=1,
         max_length=255,
     )
+
+    @field_validator("city", mode="before")
+    @classmethod
+    def omit_placeholder_city(cls, value: Any) -> Any:
+        if (
+            isinstance(value, str)
+            and value.strip().casefold() in EVENT_CITY_PLACEHOLDERS
+        ):
+            return None
+        return value
 
     @model_validator(mode="after")
     def validate_date_range(self):
@@ -110,7 +136,8 @@ TOOL_SCHEMAS = [
             "name": "search_jobs",
             "description": (
                 "Search jobs using any combination of title, company, "
-                "category, city, minimum salary, skills, and deadline."
+                "category, city, remote status, minimum salary, skills, "
+                "and deadline."
             ),
             "parameters": {
                 "type": "object",
@@ -122,6 +149,13 @@ TOOL_SCHEMAS = [
                         "enum": [category.value for category in JobCategory],
                     },
                     "city": {"type": "string"},
+                    "is_remote": {
+                        "type": "boolean",
+                        "description": (
+                            "True for remote jobs only; false for "
+                            "non-remote jobs only."
+                        ),
+                    },
                     "min_salary": {"type": "number", "minimum": 0},
                     "skills": {
                         "type": "string",
@@ -356,6 +390,8 @@ def _job_search_statement(arguments: _JobSearchArguments) -> Select:
         statement = statement.where(Job.category == arguments.category.value)
     if arguments.city:
         statement = statement.where(Job.city.ilike(f"%{arguments.city}%"))
+    if arguments.is_remote is not None:
+        statement = statement.where(Job.is_remote == arguments.is_remote)
     if arguments.min_salary is not None:
         statement = statement.where(Job.salary >= arguments.min_salary)
     if arguments.skills:
