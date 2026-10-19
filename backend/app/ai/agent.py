@@ -3,6 +3,8 @@
 import inspect
 import json
 import logging
+import re
+import sys
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -21,6 +23,41 @@ DEFAULT_MAX_ITERATIONS = 6
 MAX_HISTORY_MESSAGES = 40
 MAX_HISTORY_CONTENT_LENGTH = 8000
 ALLOWED_HISTORY_ROLES = frozenset({"user", "assistant"})
+EVIDENCE_PREFIX = "[assistant-evidence]"
+MAX_EVIDENCE_ARGUMENT_LENGTH = 2000
+MAX_EVIDENCE_STRING_LENGTH = 500
+MAX_EVIDENCE_COLLECTION_ITEMS = 30
+MAX_EVIDENCE_DEPTH = 4
+
+_SENSITIVE_ARGUMENT_KEY_PARTS = (
+    "action_token",
+    "api_key",
+    "authorization",
+    "cookie",
+    "credential",
+    "database_url",
+    "db_url",
+    "jwt",
+    "password",
+    "secret",
+    "student_id",
+    "token",
+)
+_DATABASE_URL_PREFIXES = (
+    "mariadb://",
+    "mariadb+",
+    "mysql://",
+    "mysql+",
+    "postgres://",
+    "postgres+",
+    "postgresql://",
+    "postgresql+",
+    "sqlite://",
+    "sqlite+",
+)
+_JWT_PATTERN = re.compile(
+    r"^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$"
+)
 
 ToolImplementation = Callable[..., str]
 ToolImplementations = Mapping[str, ToolImplementation]
@@ -63,6 +100,123 @@ SYSTEM_PROMPT = (
     "If a tool reports an error or no matches, report that result without "
     "inventing data. Keep responses concise and factual."
 )
+
+
+def _is_sensitive_argument_key(key: Any) -> bool:
+    normalized = str(key).lower().replace("-", "_")
+    return any(part in normalized for part in _SENSITIVE_ARGUMENT_KEY_PARTS)
+
+
+def _looks_like_sensitive_argument_value(value: str) -> bool:
+    normalized = value.strip()
+    lowered = normalized.lower()
+    return (
+        lowered.startswith("bearer ")
+        or lowered.startswith(_DATABASE_URL_PREFIXES)
+        or bool(_JWT_PATTERN.fullmatch(normalized))
+    )
+
+
+def _sanitize_evidence_value(
+    value: Any,
+    *,
+    depth: int = 0,
+) -> Any:
+    """Return a bounded, JSON-compatible value safe for terminal evidence."""
+
+    if depth >= MAX_EVIDENCE_DEPTH:
+        return "[TRUNCATED]"
+
+    if isinstance(value, Mapping):
+        sanitized: dict[str, Any] = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= MAX_EVIDENCE_COLLECTION_ITEMS:
+                sanitized["[TRUNCATED]"] = "[TRUNCATED]"
+                break
+            safe_key = str(key)[:MAX_EVIDENCE_STRING_LENGTH]
+            sanitized[safe_key] = (
+                "[REDACTED]"
+                if _is_sensitive_argument_key(key)
+                else _sanitize_evidence_value(item, depth=depth + 1)
+            )
+        return sanitized
+
+    if isinstance(value, Sequence) and not isinstance(
+        value,
+        (str, bytes, bytearray),
+    ):
+        sanitized_items = [
+            _sanitize_evidence_value(item, depth=depth + 1)
+            for item in value[:MAX_EVIDENCE_COLLECTION_ITEMS]
+        ]
+        if len(value) > MAX_EVIDENCE_COLLECTION_ITEMS:
+            sanitized_items.append("[TRUNCATED]")
+        return sanitized_items
+
+    if isinstance(value, (bytes, bytearray)):
+        return "[BINARY REDACTED]"
+
+    if isinstance(value, str):
+        if _looks_like_sensitive_argument_value(value):
+            return "[REDACTED]"
+        if len(value) > MAX_EVIDENCE_STRING_LENGTH:
+            return value[:MAX_EVIDENCE_STRING_LENGTH] + "...[TRUNCATED]"
+        return value
+
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+
+    return str(value)[:MAX_EVIDENCE_STRING_LENGTH]
+
+
+def _sanitized_arguments_json(arguments: Any) -> str:
+    try:
+        serialized = json.dumps(
+            _sanitize_evidence_value(arguments),
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    except (TypeError, ValueError):
+        serialized = json.dumps("[UNSERIALIZABLE ARGUMENTS]")
+
+    if len(serialized) > MAX_EVIDENCE_ARGUMENT_LENGTH:
+        return json.dumps(
+            serialized[:MAX_EVIDENCE_ARGUMENT_LENGTH] + "...[TRUNCATED]"
+        )
+    return serialized
+
+
+def _emit_evidence(message: str) -> None:
+    """Print rubric evidence immediately, independently of log configuration."""
+
+    try:
+        print(f"{EVIDENCE_PREFIX} {message}", file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        logger.warning("assistant_evidence_stream_unavailable")
+
+
+def _emit_tool_call_evidence(
+    name: Any,
+    arguments: Any,
+) -> tuple[str, str]:
+    safe_name = json.dumps(str(name), ensure_ascii=True)
+    safe_arguments = _sanitized_arguments_json(arguments)
+    _emit_evidence(
+        f"tool_call name={safe_name} arguments={safe_arguments}"
+    )
+    return safe_name, safe_arguments
+
+
+def _emit_run_completion_evidence(
+    exit_reason: str,
+    tool_call_count: int,
+) -> None:
+    safe_exit_reason = json.dumps(str(exit_reason), ensure_ascii=True)
+    _emit_evidence(
+        f"run_complete exit={safe_exit_reason} "
+        f"tool_calls={max(0, int(tool_call_count))}"
+    )
 
 
 def looks_like_prompt_injection(text: str) -> bool:
@@ -179,6 +333,7 @@ def _finalize(
             "content": reply,
         })
 
+    _emit_run_completion_evidence(exit_reason, tool_call_count)
     logger.info(
         "run_assistant complete exit=%s tool_calls=%d",
         exit_reason,
@@ -508,11 +663,15 @@ def run_assistant(
             raw_arguments = function.get("arguments", {})
             tool_call_count += 1
 
+            safe_name, safe_arguments = _emit_tool_call_evidence(
+                name,
+                raw_arguments,
+            )
             logger.info(
                 "tool_call iteration=%d name=%s args=%s",
                 iteration,
-                name,
-                raw_arguments,
+                safe_name,
+                safe_arguments,
             )
 
             try:
