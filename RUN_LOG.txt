@@ -1,0 +1,119 @@
+DATA 260 Lab 1 - Pair 03
+Run and Verification Log
+Verification date: 2026-10-19 (PDT)
+
+Repository snapshot
+-------------------
+Branch: integration/final-merge
+Commit: b9e40e62b5247de62297626c9b9959b954195c05
+Commit subject: Merge company UI fixes
+Working tree before documentation files were added: clean
+
+Environment used for final automated verification
+--------------------------------------------------
+Python: 3.12.14
+Node.js: v24.19.0
+npm: 11.9.0
+Backend tests use isolated test configuration and do not modify the live MySQL database.
+
+[1] Synchronize and verify the target branch
+Command:
+  git fetch origin integration/final-merge
+  git switch integration/final-merge
+  git pull --ff-only origin integration/final-merge
+  git rev-parse HEAD
+Result:
+  PASS - branch was already up to date.
+  HEAD = b9e40e62b5247de62297626c9b9959b954195c05
+
+[2] Collect backend tests
+Command:
+  python -m pytest --collect-only -q
+Result:
+  PASS - 236 tests collected across 10 test modules.
+
+[3] Run the complete backend test suite
+Command:
+  python -m pytest -q
+Result:
+  PASS - 236 passed, 0 failed in 27.54 seconds.
+  One Starlette/httpx deprecation warning was reported by a dependency.
+
+Test-module totals:
+  test_ai_core.py                  35
+  test_ai_tools.py                 73
+  test_canonical_schema.py         19
+  test_company_workflows.py        10
+  test_final_seed_data.py          16
+  test_student_applications.py     17
+  test_student_assistant.py        32
+  test_student_auth.py              7
+  test_student_events.py           11
+  test_student_jobs.py             16
+  TOTAL                           236
+
+[4] Install the locked frontend dependencies
+Command:
+  cd frontend
+  npm ci
+Result:
+  PASS - 172 packages installed from package-lock.json.
+
+[5] Run frontend lint
+Command:
+  cd frontend
+  npm run lint
+Result:
+  PASS - ESLint completed with no findings.
+
+[6] Build the production frontend
+Command:
+  cd frontend
+  npm run build
+Result:
+  PASS - Vite transformed 110 modules and completed the build in 244 ms.
+  dist/index.html                  0.45 kB (0.29 kB gzip)
+  dist/assets/index-DE9jFOlA.css  54.15 kB (9.16 kB gzip)
+  dist/assets/index-dFgC9iIO.js  389.45 kB (117.41 kB gzip)
+
+[7] Re-run the 20-turn tool-call reliability measurement
+Method:
+  Run the real agent loop with deterministic FakeModelClient responses.
+  Exercise four malformed-argument turns, four unknown-tool turns,
+  four text-instead-of-tool turns, four lost-chain turns, and four
+  initially correct turns. Permit exactly one error-specific repair.
+Result:
+  PASS - before repair: 4 valid, 16 failed (20% valid).
+  PASS - after repair: 20 valid, 0 failed (100% valid).
+  PASS - malformed arguments after repair: 0.
+  PASS - unknown tools after repair: 0.
+  PASS - text-instead-of-tool failures after repair: 0.
+  PASS - lost multi-step chains after repair: 0.
+
+[8] Deterministic seed verification covered by tests
+Command:
+  python -m pytest -q backend/tests/test_final_seed_data.py
+Result:
+  PASS - 16 passed, 0 failed in 2.14 seconds.
+  These tests also passed as part of the complete 236-test run.
+Expected reserved demo counts:
+  Students: 200
+  Companies: 50
+  Jobs: 300
+  Applications: 1,500
+  Events: 100
+  Student preference rows: 150
+  Event registrations: 600
+  Saved jobs and events: 600
+
+[9] Pair verification recording
+Result:
+  COMPLETED - the pair recorded the Lab 1 demonstration.
+  The final recording link is maintained in LabPair-03_Lab1_Report.pdf.
+
+Scope note
+----------
+The automated verification above used the repository's isolated test setup and
+deterministic model client. Live MySQL, Ollama, browser workflow, confirmation-
+gate, and prompt-injection demonstrations are documented separately in the
+report and pair verification recording.
