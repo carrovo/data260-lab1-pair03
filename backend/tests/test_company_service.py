@@ -24,7 +24,17 @@ def test_company_service_exposes_only_company_routes():
 
     paths = set(response.json()["paths"])
 
-    assert "/health" in paths
-    # Student-side and assistant routes belong to other services.
-    assert not any(p.startswith("/student") for p in paths)
-    assert not any(p.startswith("/assistant") for p in paths)
+    assert paths == {
+        "/",
+        "/health",
+        "/api/companies/applications/{application_id}/resume",
+        "/api/companies/applications/{application_id}/status",
+        "/api/companies/auth/login",
+        "/api/companies/auth/logout",
+        "/api/companies/auth/me",
+        "/api/companies/auth/signup",
+        "/api/companies/jobs/{job_id}/applicants",
+        "/api/companies/me",
+        "/api/companies/students",
+        "/api/companies/students/{student_id}/profile",
+    }
