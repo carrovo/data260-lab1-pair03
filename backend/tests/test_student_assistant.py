@@ -552,9 +552,15 @@ def test_altered_token_is_rejected(assistant_test_context):
         item_id=identifiers["first_job"],
     )
     action_token = pending["pending_action"]["action_token"]
-    replacement = "A" if action_token[-1] != "A" else "B"
+    # Change a character inside the signature. The final base64 character
+    # carries only 4 significant bits, so altering it can leave the token valid.
+    position = len(action_token) - 10
+    replacement = "A" if action_token[position] != "A" else "B"
+    altered_token = (
+        action_token[:position] + replacement + action_token[position + 1 :]
+    )
 
-    response = _confirm(client, token, action_token[:-1] + replacement, True)
+    response = _confirm(client, token, altered_token, True)
 
     assert response.status_code == 400
     assert _saved_items(engine) == []
