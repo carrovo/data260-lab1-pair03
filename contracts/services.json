@@ -1,0 +1,15 @@
+{
+  "pair": "03",
+  "port_base": 9030,
+  "services": [
+    {"name": "company",     "port": 9030, "image": "p03-company-service",     "health": true,  "status": "ready"},
+    {"name": "student",     "port": 9031, "image": "p03-student-service",     "health": true,  "status": "ready"},
+    {"name": "job",         "port": 9032, "image": "p03-job-service",         "health": true,  "status": "ready"},
+    {"name": "application", "port": 9033, "image": "p03-application-service", "health": true,  "status": "planned"},
+    {"name": "event",       "port": 9034, "image": "p03-event-service",       "health": true,  "status": "ready"},
+    {"name": "assistant",   "port": 9035, "image": "p03-assistant-service",   "health": true,  "status": "planned"},
+    {"name": "frontend",    "port": 9036, "image": "p03-frontend",            "health": false, "status": "planned"},
+    {"name": "kafka",       "port": 9037, "image": "p03-kafka",               "health": false, "status": "planned"},
+    {"name": "mongo",       "port": 9038, "image": "p03-mongo",               "health": false, "status": "planned"}
+  ]
+}

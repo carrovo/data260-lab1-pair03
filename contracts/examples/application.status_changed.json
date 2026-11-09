@@ -1,0 +1,14 @@
+{
+  "event_id": "5f0c1c1e-8d0a-4b6e-9a55-0d6f3c1a0003",
+  "event_type": "application.status_changed",
+  "trace_id": "9c4b0f2d6a1e4f1d8a77b2c3d4e5f603",
+  "occurred_at": "2026-11-08T21:02:00Z",
+  "producer": "company",
+  "payload": {
+    "application_id": "1",
+    "student_id": "1",
+    "job_id": "1",
+    "old_status": "Pending",
+    "new_status": "Reviewed"
+  }
+}
