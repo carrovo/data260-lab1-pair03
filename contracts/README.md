@@ -88,11 +88,15 @@ Consumer rules:
 | events | event |
 | registrations | event-worker |
 | saved_items, activity_logs | assistant (saved items), each service (its own log lines) |
+| job_index | job-index-worker |
+| notifications | notification-worker |
 | processed_events | every worker |
 | assistant_rules, student_memory, conversations | assistant |
 
 One service writes each collection. Others read it through that service's API
 or learn about changes from Kafka. Document `_id` is a string.
+
+Workers (one image, `p03-worker`, chosen with `WORKER_NAME`): `job-index-worker`, `notification-worker`, `event-worker`. Each reads `KAFKA_BOOTSTRAP` and `MONGO_URL` from the environment. Students read their notifications through the Student service API.
 
 ## 6. Open points for Xuanhua
 
