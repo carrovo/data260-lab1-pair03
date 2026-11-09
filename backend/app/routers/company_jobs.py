@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.models import Company, Job
+from backend.common.events import TRACE_HEADER
+from backend.common.outgoing import publish_safely
 from backend.app.routers.company_auth import (
     get_current_company,
     get_db,
@@ -53,6 +55,7 @@ def _owned_job_or_404(
 )
 def create_job(
     payload: JobCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_company: Company = Depends(get_current_company),
 ):
@@ -69,6 +72,17 @@ def create_job(
     db.add(job)
     db.commit()
     db.refresh(job)
+
+    publish_safely(
+        "job.created",
+        {
+            "job_id": str(job.id),
+            "company_id": str(current_company.id),
+            "title": job.title,
+        },
+        trace_id=request.headers.get(TRACE_HEADER),
+        key=str(job.id),
+    )
 
     return _owned_job_or_404(
         db,

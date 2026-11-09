@@ -219,14 +219,34 @@ class MongoProcessedEventStore:
 
 
 class ConfluentPublisher:
-    def __init__(self, bootstrap_servers: str) -> None:
+    """Kafka producer.
+
+    flush_timeout > 0 waits for delivery (workers, dead-letter messages).
+    flush_timeout = 0 hands the message to the client and returns at once,
+    so a web request never waits for a slow or missing broker.
+    """
+
+    def __init__(
+        self, bootstrap_servers: str, flush_timeout: float = 10.0
+    ) -> None:
         from confluent_kafka import Producer
 
         self._producer = Producer({"bootstrap.servers": bootstrap_servers})
+        self._flush_timeout = flush_timeout
+
+    @staticmethod
+    def _delivered(error: Any, message: Any) -> None:
+        if error is not None:
+            logger.error("kafka delivery failed: %s", error)
 
     def send(self, topic: str, key: str | None, value: str) -> None:
-        self._producer.produce(topic, key=key, value=value)
-        self._producer.flush(10)
+        self._producer.produce(
+            topic, key=key, value=value, on_delivery=self._delivered
+        )
+        if self._flush_timeout > 0:
+            self._producer.flush(self._flush_timeout)
+        else:
+            self._producer.poll(0)
 
 
 class ConfluentConsumerClient:
