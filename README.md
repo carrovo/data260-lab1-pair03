@@ -143,3 +143,69 @@ resume metadata null and do not create or claim uploaded PDF files.
 The generator and its safety behavior are covered with disposable SQLite tests.
 It has not yet been executed against the real MySQL database; run the documented
 migrations and perform a reviewed MySQL smoke run before the final demo.
+
+## Lab 2: run the stack with Docker Compose
+
+The Compose project is named `p03`; every container, volume and network carries
+that prefix. Host ports stay inside 9030 to 9039 (see `contracts/README.md`).
+
+### 1. One-time setup
+
+```bash
+cp .env.compose.example .env.compose
+# edit .env.compose: set MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD and JWT_SECRET_KEY
+```
+
+`.env.compose` is ignored by Git. Never commit real values.
+
+### 2. Build, start, inspect, stop
+
+```bash
+docker compose --env-file .env.compose up -d --build     # build and start (make up)
+docker compose --env-file .env.compose ps                # inspect       (make ps)
+docker compose --env-file .env.compose logs -f p03-job-index-worker
+docker compose --env-file .env.compose down              # stop         (make down)
+docker compose --env-file .env.compose down -v           # stop and delete the data volumes
+```
+
+`p03-db-init` creates the MySQL tables and runs the two Lab 1 migrations, and
+`p03-kafka-init` creates the five topics and their `.dlq` topics, before the
+services start.
+
+### 3. Load the demo data (SEED=3), once
+
+```bash
+docker compose --env-file .env.compose --profile seed run --rm p03-seed   # make seed
+```
+
+### 4. Check that it works
+
+```bash
+python scripts/smoke.py --skip student        # make smoke SMOKE_ARGS="--skip student"
+```
+
+Until `feature/lab2-student-services` is merged into `integration/lab2`, the
+Student service is not part of the default stack. After the merge, start the
+full stack with `--profile full` and run `make smoke` without `--skip`.
+
+End-to-end check of a Kafka flow (company posts a job, the Job service publishes
+`job.created`, the worker indexes it in MongoDB). The token from the Company
+service is accepted by the Job service because they share `JWT_SECRET_KEY`:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:9030/api/companies/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"demo@example.com","password":"Password123","name":"Demo Co","city":"San Jose","description":"Demo","contact_info":"demo@example.com"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+
+curl -s -X POST http://localhost:9032/api/companies/jobs \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -H 'X-Trace-Id: demo-trace-1' \
+  -d "{\"title\":\"Data Analyst Intern\",\"description\":\"Analyze data.\",\"city\":\"San Jose\",\"category\":\"internship\",\"location\":\"Downtown\",\"is_remote\":false,\"salary\":\"32.50\",\"skills\":\"Python, SQL\",\"deadline\":\"$(date -u -v+30d +%Y-%m-%dT%H:%M:%SZ)\"}"
+
+docker compose --env-file .env.compose logs p03-job-index-worker | tail -3
+docker exec p03-mongo mongosh p03 --quiet --eval 'printjson(db.job_index.find().toArray())'
+docker exec p03-mongo mongosh p03 --quiet --eval 'printjson(db.processed_events.find().toArray())'
+```
+
+The `date -v+30d` form is for macOS. On Linux use `date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ`.
