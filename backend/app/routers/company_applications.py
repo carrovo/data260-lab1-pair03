@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
@@ -18,7 +18,6 @@ from backend.app.routers.company_auth import (
     get_current_company,
     get_db,
 )
-from backend.common.events import TRACE_HEADER
 from backend.common.outgoing import publish_safely
 
 
@@ -205,7 +204,6 @@ def preview_application_resume(
 def update_application_status(
     application_id: int,
     payload: ApplicationStatusUpdate,
-    request: Request,
     db: Session = Depends(get_db),
     current_company: Company = Depends(get_current_company),
 ):
@@ -247,7 +245,6 @@ def update_application_status(
                 "old_status": old_status,
                 "new_status": application.status,
             },
-            trace_id=request.headers.get(TRACE_HEADER),
             key=str(application.id),
         )
 

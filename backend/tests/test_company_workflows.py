@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from backend.common.tracing import TraceMiddleware
 from backend.app.application_status import ApplicationStatus
 from backend.app.config import settings
 from backend.app.database import Base
@@ -70,6 +71,7 @@ def company_test_context(tmp_path, monkeypatch):
     Base.metadata.create_all(engine)
 
     test_app = FastAPI()
+    test_app.add_middleware(TraceMiddleware, service="test")
 
     test_app.include_router(company_auth_router)
     test_app.include_router(company_profile_router)

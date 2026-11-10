@@ -209,3 +209,22 @@ docker exec p03-mongo mongosh p03 --quiet --eval 'printjson(db.processed_events.
 ```
 
 The `date -v+30d` form is for macOS. On Linux use `date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ`.
+
+### Tracing: follow one request through every service
+
+Every request gets a trace id. A client can send its own `X-Trace-Id` (letters,
+digits, `.`, `_`, `-`, up to 64 characters); otherwise the service creates one.
+The id is returned in the `X-Trace-Id` response header, written to the access log
+(`trace_id=...`), put on the Kafka event, and stored by the worker in MongoDB.
+
+```bash
+curl -si -X POST http://localhost:9032/api/companies/jobs \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -H 'X-Trace-Id: trace-demo-2' \
+  -d "{...same job body as above...}" | grep -i x-trace-id
+
+docker compose --env-file .env.compose logs | grep trace-demo-2
+```
+
+The `grep` shows the access-log line from `p03-job-service` and the
+`processed ... trace_id=trace-demo-2` line from `p03-job-index-worker`.

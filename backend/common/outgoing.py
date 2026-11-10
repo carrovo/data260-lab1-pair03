@@ -14,6 +14,7 @@ from typing import Any
 
 from .events import make_event
 from .messaging import Publisher, publish_event
+from .tracing import get_trace_id
 
 logger = logging.getLogger("p03.outgoing")
 
@@ -58,7 +59,12 @@ def publish_safely(
     trace_id: str | None = None,
     key: str | None = None,
 ) -> bool:
-    """Publish one event. Returns True if it was handed to Kafka."""
+    """Publish one event. Returns True if it was handed to Kafka.
+
+    Without an explicit trace_id the event carries the id of the request that
+    caused it (see common/tracing.py).
+    """
+    trace_id = trace_id or get_trace_id()
     publisher = get_publisher()
     if publisher is None:
         return False

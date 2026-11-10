@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.common.tracing import TraceMiddleware
 from backend.app.routers.company_events import router as company_events_router
 from backend.app.routers.events import router as events_router
 
@@ -20,6 +21,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(TraceMiddleware, service="event")
 
 app.include_router(events_router)
 app.include_router(company_events_router)

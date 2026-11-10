@@ -1,5 +1,6 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
+from backend.common.tracing import TraceMiddleware
 from backend.app.routers.assistant import router as assistant_router
 from backend.app.routers.applications import router as applications_router
 from backend.app.routers.company_applications import (
@@ -29,6 +30,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(TraceMiddleware, service="app")
 
 app.include_router(student_auth_router)
 app.include_router(jobs_router)

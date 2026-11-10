@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.common.tracing import TraceMiddleware
 from backend.app.routers.company_applications import (
     router as company_applications_router,
 )
@@ -24,6 +25,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(TraceMiddleware, service="company")
 
 app.include_router(company_auth_router)
 app.include_router(company_profile_router)
