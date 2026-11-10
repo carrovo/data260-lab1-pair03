@@ -1,4 +1,4 @@
-.PHONY: test smoke up down ps seed
+.PHONY: test smoke up down ps seed kafka-demos
 
 ENVFILE ?= .env.compose
 COMPOSE = docker compose --env-file $(ENVFILE)
@@ -21,3 +21,7 @@ seed:
 # Until Xuanhua's branch is merged: make smoke SMOKE_ARGS="--skip student"
 smoke:
 	python scripts/smoke.py $(SMOKE_ARGS)
+
+# Kafka failure demos (duplicate, restart/replay, poison -> DLQ); needs the stack up
+kafka-demos:
+	bash scripts/kafka_demos.sh all
