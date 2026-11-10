@@ -228,3 +228,62 @@ docker compose --env-file .env.compose logs | grep trace-demo-2
 
 The `grep` shows the access-log line from `p03-job-service` and the
 `processed ... trace_id=trace-demo-2` line from `p03-job-index-worker`.
+
+## Lab 2: run the stack on Kubernetes
+
+Manifests live in `k8s/` and use the namespace `p03` and `p03-` names. They run
+the same pieces as Docker Compose: MySQL, MongoDB, Kafka (single node, KRaft),
+the Company, Job and Event services, and the three Kafka workers. Two Jobs
+prepare the data first: `p03-db-init` (MySQL tables and migrations) and
+`p03-kafka-init` (topics and their `.dlq` topics).
+
+### Local cluster (Docker Desktop)
+
+1. Docker Desktop, Settings, Kubernetes, enable it, wait until it is green.
+2. Build the images once (Kubernetes on Docker Desktop reuses them):
+   `docker compose --env-file .env.compose build`
+3. Create the secret from `.env.compose` and deploy:
+
+```bash
+kubectl config use-context docker-desktop
+make k8s-up          # creates the namespace and Secret p03-secrets, then applies k8s/
+make k8s-status
+kubectl -n p03 wait --for=condition=complete job/p03-db-init job/p03-kafka-init --timeout=300s
+kubectl -n p03 wait --for=condition=available deployment --all --timeout=300s
+```
+
+The Secret is built from `.env.compose` by `make k8s-secret`, so passwords and
+the JWT key are never written into a manifest or committed.
+
+### Load the demo data (SEED=3), once
+
+```bash
+make k8s-seed
+```
+
+### Reach a service from your laptop
+
+```bash
+kubectl -n p03 port-forward svc/p03-job-service 9032:9032 &
+curl -s http://localhost:9032/health
+```
+
+### Useful commands
+
+```bash
+kubectl -n p03 get pods -o wide
+kubectl -n p03 logs deploy/p03-job-index-worker --tail=20
+kubectl -n p03 logs job/p03-kafka-init
+kubectl -n p03 describe pod <pod>        # when something will not start
+make k8s-down                            # deletes the namespace and all data
+```
+
+### Known limits
+
+- Uploaded resumes use an `emptyDir` in the Company service, so they are not
+  shared with the Student service. A shared volume (or object storage) is needed
+  before the two sides run together in the cluster.
+- One replica of everything, no autoscaling. Kafka and the databases are
+  single-node, not highly available.
+- The student-side services (Student, Application, Assistant) are added when
+  their branch is merged.
