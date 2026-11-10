@@ -75,3 +75,23 @@ def test_every_service_build_points_at_an_existing_dockerfile_or_profile():
         if "full" in service.get("profiles", []):
             continue  # student Dockerfile arrives with the merge
         assert dockerfile.exists(), (name, dockerfile)
+
+
+def test_env_example_contains_only_placeholders():
+    """The committed template must never hold real passwords or keys."""
+    template = (ROOT / ".env.compose.example").read_text()
+    values = {
+        line.split("=", 1)[0]: line.split("=", 1)[1].strip()
+        for line in template.splitlines()
+        if "=" in line and not line.lstrip().startswith("#")
+    }
+    assert set(values) == {
+        "MYSQL_ROOT_PASSWORD",
+        "MYSQL_PASSWORD",
+        "JWT_SECRET_KEY",
+    }
+    for key, value in values.items():
+        assert value.startswith("change-me"), (
+            f"{key} in .env.compose.example is not a placeholder; "
+            "put real values in .env.compose (which Git ignores)"
+        )
