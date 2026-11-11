@@ -25,6 +25,7 @@ spec:
       containers:
         - name: mysql
           image: mysql:8.0
+          args: ["--max-connections=500"]
           ports:
             - {name: mysql, containerPort: 3306}
           env:

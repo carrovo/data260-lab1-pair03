@@ -22,6 +22,8 @@ services:
   p03-mysql:
     image: mysql:8.0
     container_name: p03-mysql
+    # six services x (20 + 20) pooled connections must fit under this (MySQL default is 151)
+    command: ["--max-connections=500"]
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env.compose}
       MYSQL_DATABASE: p03

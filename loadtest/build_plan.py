@@ -105,9 +105,15 @@ EMAIL = "seed3.student.${__groovy((1000 + (ctx.getThreadNum() % 200) + 1).toStri
 JSON = {"Content-Type": "application/json"}
 
 
+def once(inner):
+    # a real user logs in once, then keeps using the token
+    return ('<OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="Log in once" enabled="true"/>'
+            "<hashTree>" + inner + "</hashTree>")
+
+
 def student_login():
-    return step("Student login", "POST", HOST, "${student_port}", "/auth/login", ["200"], extract="token",
-                headers=JSON, body='{"email":"%s","password":"${password}"}' % EMAIL)
+    return once(step("Student login", "POST", HOST, "${student_port}", "/auth/login", ["200"], extract="token",
+                headers=JSON, body='{"email":"%s","password":"${password}"}' % EMAIL))
 
 
 user_vars = "".join([
@@ -137,8 +143,8 @@ groups = [
         step("Register for event", "POST", HOST, "${event_port}", "/events/${__Random(1,100)}/registrations", ["201", "409", "404"], token="token"),
     ]),
     thread_group("4 Company login + dashboard", [
-        step("Company login", "POST", HOST, "${company_port}", "/api/companies/auth/login", ["200"], extract="ctoken", headers=JSON,
-             body='{"email":"seed3.company.001@demo.p03.example.com","password":"${password}"}'),
+        once(step("Company login", "POST", HOST, "${company_port}", "/api/companies/auth/login", ["200"], extract="ctoken", headers=JSON,
+                  body='{"email":"seed3.company.001@demo.p03.example.com","password":"${password}"}')),
         step("Company jobs", "GET", HOST, "${job_port}", "/api/companies/jobs", ["200"], token="ctoken"),
         step("Company events", "GET", HOST, "${event_port}", "/api/companies/events", ["200"], token="ctoken"),
     ]),

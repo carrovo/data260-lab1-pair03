@@ -13,14 +13,18 @@ demo data first (`docker compose --env-file .env.compose --profile seed run --rm
 
 ## Run (non-GUI, no real secrets in any file)
 
-    cd loadtest
-    jmeter -n -t handshake.jmx -Jhost=localhost -Jusers=100 -Jrampup=60 -Jloops=5 \
-           -l results_100.jtl -e -o report_100
+Each virtual user logs in once and then repeats its scenario `loops` times. Ramp up quickly and
+use enough loops that all users are active at the same time (watch `Active:` in the output):
 
-Run again with `-Jusers=300` and `-Jusers=500` (use a new `-l` file and a new `-o` folder each time).
-`users` is per scenario, so 100 means 400 concurrent users in total. Other properties:
+    cd loadtest
+    jmeter -n -t handshake.jmx -Jusers=25  -Jrampup=20 -Jloops=30 -l results_100.jtl -e -o report_100
+    jmeter -n -t handshake.jmx -Jusers=75  -Jrampup=30 -Jloops=30 -l results_300.jtl -e -o report_300
+    jmeter -n -t handshake.jmx -Jusers=125 -Jrampup=30 -Jloops=30 -l results_500.jtl -e -o report_500
+
+`users` is per scenario, so 25 means 100 concurrent users in total (four scenarios). Use a new
+`-l` file and a new `-o` folder each time (JMeter appends to an old `.jtl`). Other properties:
 `host`, `*_port` (default 9030 to 9034), `think_ms` (default 500), `password`.
-For Kubernetes, port-forward the services first, or pass the load balancer address as `-Jhost`.
+For Kubernetes use a load balancer address as `-Jhost`; `kubectl port-forward` cannot carry this load.
 
 ## Expected status codes
 

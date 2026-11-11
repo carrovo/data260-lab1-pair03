@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     port_base: int = 9030
 
     database_url: str
+    # MySQL connection pool per service (SQLAlchemy defaults of 5+10 ran out at 300 users)
+    db_pool_size: int = 20
+    db_max_overflow: int = 20
+    db_pool_timeout: int = 10
 
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen3:8b"
