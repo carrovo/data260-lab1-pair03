@@ -16,12 +16,14 @@ from backend.app import repos  # noqa: E402
 from backend.app.config import settings  # noqa: E402
 from backend.app.database import Base  # noqa: E402
 from backend.app.models import Application, Company, Job, Student  # noqa: E402
-from backend.app.routers import company_auth, jobs as public_jobs  # noqa: E402
+from backend.app.routers import company_auth, events as public_events, jobs as public_jobs  # noqa: E402
+from backend.app.routers.company_events import router as company_events_router  # noqa: E402
+from backend.app.routers.events import router as public_events_router  # noqa: E402
 from backend.app.routers.company_auth import router as auth_router  # noqa: E402
 from backend.app.routers.company_jobs import router as company_jobs_router  # noqa: E402
 from backend.app.routers.company_profile import router as profile_router  # noqa: E402
 from backend.app.routers.jobs import router as public_jobs_router  # noqa: E402
-from backend.common.mongo_store import CompanyStore, JobStore  # noqa: E402
+from backend.common.mongo_store import CompanyStore, EventStore, JobStore  # noqa: E402
 from backend.common.tracing import TraceMiddleware  # noqa: E402
 
 COMPANY = {
@@ -47,6 +49,7 @@ def mongo_context(monkeypatch):
     database = mongomock.MongoClient()["p03_test"]
     CompanyStore(database).ensure_indexes()
     JobStore(database).ensure_indexes()
+    EventStore(database).ensure_indexes()
     monkeypatch.setattr(settings, "persistence", "mongo")
     monkeypatch.setattr(repos, "get_mongo_database", lambda: database)
 
@@ -59,7 +62,14 @@ def mongo_context(monkeypatch):
 
     app = FastAPI()
     app.add_middleware(TraceMiddleware, service="test")
-    for router in (auth_router, profile_router, company_jobs_router, public_jobs_router):
+    for router in (
+        auth_router,
+        profile_router,
+        company_jobs_router,
+        public_jobs_router,
+        company_events_router,
+        public_events_router,
+    ):
         app.include_router(router)
 
     def override_get_db():
@@ -68,6 +78,7 @@ def mongo_context(monkeypatch):
 
     app.dependency_overrides[company_auth.get_db] = override_get_db
     app.dependency_overrides[public_jobs.get_db] = override_get_db
+    app.dependency_overrides[public_events.get_db] = override_get_db
 
     with TestClient(app) as client:
         yield client, engine, database
@@ -424,3 +435,81 @@ def test_company_applicant_flow_with_jobs_in_mongo(mongo_context, monkeypatch):
         headers=other,
     )
     assert blocked.status_code == 403
+
+
+def _event_payload(**overrides):
+    from datetime import datetime, timedelta, timezone
+
+    start = datetime.now(timezone.utc) + timedelta(days=10)
+    base = {
+        "title": "Data Career Fair",
+        "description": "Meet recruiters",
+        "city": "San Jose",
+        "starts_at": start.isoformat(),
+        "ends_at": (start + timedelta(hours=3)).isoformat(),
+    }
+    return {**base, **overrides}
+
+
+def test_event_crud_and_public_listing_in_mongo(mongo_context):
+    client, engine, database = mongo_context
+    token = signup(client).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    created = client.post("/api/companies/events", json=_event_payload(), headers=headers)
+    assert created.status_code == 201
+    event = created.json()
+    assert event["company"]["name"] == COMPANY["name"]
+    assert database["events"].count_documents({}) == 1
+
+    assert [e["id"] for e in client.get("/api/companies/events", headers=headers).json()] == [event["id"]]
+    assert client.get(f"/api/companies/events/{event['id']}", headers=headers).status_code == 200
+
+    updated = client.put(
+        f"/api/companies/events/{event['id']}", json={"title": "Renamed"}, headers=headers
+    )
+    assert updated.status_code == 200 and updated.json()["title"] == "Renamed"
+
+    bad = client.put(
+        f"/api/companies/events/{event['id']}",
+        json={"ends_at": "2000-01-01T00:00:00+00:00"},
+        headers=headers,
+    )
+    assert bad.status_code == 422
+
+    assert [e["title"] for e in client.get("/events", params={"keyword": "renam"}).json()] == ["Renamed"]
+    assert client.get("/events", params={"keyword": "zzz"}).json() == []
+    assert client.get(f"/events/{event['id']}").json()["company"]["name"] == COMPANY["name"]
+    assert client.get("/events/999").status_code == 404
+
+    assert client.delete(f"/api/companies/events/{event['id']}", headers=headers).status_code == 204
+    assert database["events"].count_documents({}) == 0
+
+
+def test_event_ownership_and_registration_guard_in_mongo(mongo_context):
+    from backend.app.models import Registration
+
+    client, engine, database = mongo_context
+    owner = {"Authorization": "Bearer " + signup(client).json()["access_token"]}
+    other = {
+        "Authorization": "Bearer "
+        + signup(client, email="other@example.com", name="Other Co").json()["access_token"]
+    }
+    event = client.post("/api/companies/events", json=_event_payload(), headers=owner).json()
+
+    assert client.get(f"/api/companies/events/{event['id']}", headers=other).status_code == 404
+    assert client.delete(f"/api/companies/events/{event['id']}", headers=other).status_code == 404
+
+    with Session(engine) as db:
+        student = Student(
+            email="s@example.com", password_hash="x", full_name="S", city="San Jose"
+        )
+        db.add(student)
+        db.commit()
+        db.add(Registration(student_id=student.id, event_id=event["id"]))
+        db.commit()
+
+    assert client.delete(f"/api/companies/events/{event['id']}", headers=owner).status_code == 409
+    registrants = client.get(f"/api/companies/events/{event['id']}/registrants", headers=owner)
+    assert registrants.status_code == 200
+    assert [r["email"] for r in registrants.json()] == ["s@example.com"]

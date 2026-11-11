@@ -56,11 +56,18 @@ def _contains(text: str) -> dict[str, Any]:
     return {"$regex": re.escape(text), "$options": "i"}
 
 
+def _aware(value: Any) -> Any:
+    """MongoDB returns naive UTC datetimes; the API works with aware ones."""
+    if isinstance(value, datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
 def _clean(document: dict[str, Any] | None) -> SimpleNamespace | None:
     """Expose Mongo's _id as id and allow attribute access."""
     if document is None:
         return None
-    result = dict(document)
+    result = {key: _aware(value) for key, value in document.items()}
     result["id"] = result.pop("_id")
     return SimpleNamespace(**result)
 
@@ -218,4 +225,80 @@ class JobStore:
             .skip(offset)
             .limit(limit)
         )
+        return [_clean(row) for row in cursor]
+
+
+class EventStore:
+    def __init__(self, database: Any) -> None:
+        self._database = database
+        self._collection = database["events"]
+
+    def ensure_indexes(self) -> None:
+        self._collection.create_index([("company_id", 1), ("starts_at", 1)])
+        self._collection.create_index([("starts_at", 1)])
+
+    def create(
+        self,
+        company_id: int | None,
+        *,
+        title: str,
+        description: str,
+        city: str,
+        starts_at: datetime,
+        ends_at: datetime,
+        location: str | None = None,
+        major: str | None = None,
+        eligibility: str | None = None,
+        event_id: int | None = None,
+    ) -> SimpleNamespace:
+        document = {
+            "_id": int(event_id) if event_id else next_id(self._database, "events"),
+            "company_id": int(company_id) if company_id is not None else None,
+            "title": title,
+            "description": description,
+            "city": city,
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+            "location": location,
+            "major": major,
+            "eligibility": eligibility,
+        }
+        self._collection.insert_one(document)
+        return _clean(document)
+
+    def get(self, event_id: int) -> SimpleNamespace | None:
+        return _clean(self._collection.find_one({"_id": int(event_id)}))
+
+    def get_by_title(self, title: str) -> SimpleNamespace | None:
+        return _clean(self._collection.find_one({"title": title}))
+
+    def get_for_company(self, event_id: int, company_id: int) -> SimpleNamespace | None:
+        return _clean(
+            self._collection.find_one(
+                {"_id": int(event_id), "company_id": int(company_id)}
+            )
+        )
+
+    def get_many(self, event_ids: list[int]) -> dict[int, SimpleNamespace]:
+        cursor = self._collection.find({"_id": {"$in": [int(i) for i in event_ids]}})
+        return {row["_id"]: _clean(row) for row in cursor}
+
+    def update(self, event_id: int, fields: dict[str, Any]) -> SimpleNamespace | None:
+        self._collection.update_one({"_id": int(event_id)}, {"$set": fields})
+        return self.get(event_id)
+
+    def delete(self, event_id: int) -> None:
+        self._collection.delete_one({"_id": int(event_id)})
+
+    def list_for_company(self, company_id: int) -> list[SimpleNamespace]:
+        cursor = self._collection.find({"company_id": int(company_id)}).sort(
+            [("starts_at", 1), ("_id", 1)]
+        )
+        return [_clean(row) for row in cursor]
+
+    def list_upcoming(self, keyword: str = "", now: datetime | None = None) -> list[SimpleNamespace]:
+        query: dict[str, Any] = {"starts_at": {"$gte": now or utc_now()}}
+        if keyword:
+            query["title"] = _contains(keyword)
+        cursor = self._collection.find(query).sort([("starts_at", 1), ("_id", 1)])
         return [_clean(row) for row in cursor]

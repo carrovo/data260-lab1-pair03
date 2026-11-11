@@ -154,3 +154,30 @@ def test_decimal_salary_is_stored_as_a_number(stores):
         company.id, title="T", description="D", city="Fremont", salary=Decimal("85000.50")
     )
     assert jobs.get(job.id).salary == 85000.5
+
+
+def test_event_store_crud_ordering_and_aware_datetimes(stores):
+    from datetime import datetime, timedelta, timezone
+
+    from backend.common.mongo_store import EventStore
+
+    companies, _ = stores
+    company = make_company(companies)
+    events = EventStore(companies._collection.database)
+    now = datetime.now(timezone.utc)
+    late = events.create(company.id, title="Late", description="D", city="X",
+                         starts_at=now + timedelta(days=5), ends_at=now + timedelta(days=5, hours=1))
+    early = events.create(company.id, title="Early", description="D", city="X",
+                          starts_at=now + timedelta(days=1), ends_at=now + timedelta(days=1, hours=1))
+    past = events.create(company.id, title="Past", description="D", city="X",
+                         starts_at=now - timedelta(days=1), ends_at=now)
+
+    assert [e.title for e in events.list_for_company(company.id)] == ["Past", "Early", "Late"]
+    assert [e.title for e in events.list_upcoming()] == ["Early", "Late"]
+    assert [e.title for e in events.list_upcoming("lat")] == ["Late"]
+    assert events.get(early.id).starts_at.tzinfo is not None
+    assert events.get_for_company(early.id, company.id + 99) is None
+    assert set(events.get_many([early.id, late.id, 999])) == {early.id, late.id}
+    assert events.update(past.id, {"title": "Gone"}).title == "Gone"
+    events.delete(past.id)
+    assert events.get(past.id) is None

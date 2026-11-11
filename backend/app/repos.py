@@ -17,12 +17,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.config import settings
-from backend.app.models import Company, Job
-from backend.common.mongo_store import CompanyStore, JobStore
+from backend.app.models import Company, Event, Job
+from backend.common.mongo_store import CompanyStore, EventStore, JobStore
 
 
 _database: Any = None
@@ -40,6 +40,7 @@ def get_mongo_database() -> Any:
         database = MongoClient(url)[settings.mongo_db]
         CompanyStore(database).ensure_indexes()
         JobStore(database).ensure_indexes()
+        EventStore(database).ensure_indexes()
         _database = database
     return _database
 
@@ -147,6 +148,74 @@ class SqlJobRepo:
         self._db.commit()
 
 
+class SqlEventRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def create(self, company_id: int | None, data: dict[str, Any]) -> Event:
+        event = Event(company_id=company_id, **data)
+        self._db.add(event)
+        self._db.commit()
+        self._db.refresh(event)
+        return self.get(event.id)
+
+    def get(self, event_id: int) -> Event | None:
+        return self._db.scalar(
+            select(Event)
+            .where(Event.id == int(event_id))
+            .options(selectinload(Event.company))
+        )
+
+    def get_for_company(self, event_id: int, company_id: int) -> Event | None:
+        return self._db.scalar(
+            select(Event)
+            .where(Event.id == int(event_id), Event.company_id == int(company_id))
+            .options(selectinload(Event.company))
+        )
+
+    def get_many(self, event_ids: list[int]) -> dict[int, Event]:
+        if not event_ids:
+            return {}
+        rows = self._db.scalars(
+            select(Event)
+            .where(Event.id.in_([int(i) for i in event_ids]))
+            .options(selectinload(Event.company))
+        ).all()
+        return {row.id: row for row in rows}
+
+    def list_for_company(self, company_id: int) -> list[Event]:
+        return list(
+            self._db.scalars(
+                select(Event)
+                .where(Event.company_id == int(company_id))
+                .options(selectinload(Event.company))
+                .order_by(Event.starts_at.asc(), Event.id.asc())
+            ).all()
+        )
+
+    def list_upcoming(self, keyword: str = "") -> list[Event]:
+        statement = (
+            select(Event)
+            .where(Event.starts_at >= func.now())
+            .options(selectinload(Event.company))
+        )
+        if keyword:
+            statement = statement.where(Event.title.ilike(f"%{keyword}%"))
+        statement = statement.order_by(Event.starts_at.asc(), Event.id.asc())
+        return list(self._db.scalars(statement).all())
+
+    def update(self, event: Event, data: dict[str, Any]) -> Event:
+        for field, value in data.items():
+            setattr(event, field, value)
+        self._db.commit()
+        self._db.refresh(event)
+        return self.get(event.id)
+
+    def delete(self, event: Event) -> None:
+        self._db.delete(event)
+        self._db.commit()
+
+
 # ------------------------------------------------------------------- Mongo
 
 
@@ -218,12 +287,61 @@ class MongoJobRepo:
         self._jobs.delete(job.id)
 
 
+class MongoEventRepo:
+    def __init__(self, events: EventStore, companies: CompanyStore) -> None:
+        self._events = events
+        self._companies = companies
+
+    def _with_company(self, event: SimpleNamespace | None) -> SimpleNamespace | None:
+        if event is not None:
+            event.company = (
+                self._companies.get(event.company_id)
+                if event.company_id is not None
+                else None
+            )
+        return event
+
+    def _with_companies(self, events: list[SimpleNamespace]) -> list[SimpleNamespace]:
+        ids = list({e.company_id for e in events if e.company_id is not None})
+        by_id = self._companies.get_many(ids)
+        for event in events:
+            event.company = by_id.get(event.company_id)
+        return events
+
+    def create(self, company_id: int | None, data: dict[str, Any]) -> SimpleNamespace:
+        return self._with_company(self._events.create(company_id, **data))
+
+    def get(self, event_id: int) -> SimpleNamespace | None:
+        return self._with_company(self._events.get(event_id))
+
+    def get_for_company(self, event_id: int, company_id: int) -> SimpleNamespace | None:
+        return self._with_company(self._events.get_for_company(event_id, company_id))
+
+    def get_many(self, event_ids: list[int]) -> dict[int, SimpleNamespace]:
+        events = self._events.get_many(event_ids)
+        self._with_companies(list(events.values()))
+        return events
+
+    def list_for_company(self, company_id: int) -> list[SimpleNamespace]:
+        return self._with_companies(self._events.list_for_company(company_id))
+
+    def list_upcoming(self, keyword: str = "") -> list[SimpleNamespace]:
+        return self._with_companies(self._events.list_upcoming(keyword))
+
+    def update(self, event: SimpleNamespace, data: dict[str, Any]) -> SimpleNamespace:
+        return self._with_company(self._events.update(event.id, data))
+
+    def delete(self, event: SimpleNamespace) -> None:
+        self._events.delete(event.id)
+
+
 class Repos:
     """The repositories for one request."""
 
-    def __init__(self, companies: Any, jobs: Any) -> None:
+    def __init__(self, companies: Any, jobs: Any, events: Any) -> None:
         self.companies = companies
         self.jobs = jobs
+        self.events = events
 
 
 def make_repos(db: Session) -> Repos:
@@ -231,6 +349,8 @@ def make_repos(db: Session) -> Repos:
         database = get_mongo_database()
         company_store, job_store = CompanyStore(database), JobStore(database)
         return Repos(
-            MongoCompanyRepo(company_store), MongoJobRepo(job_store, company_store)
+            MongoCompanyRepo(company_store),
+            MongoJobRepo(job_store, company_store),
+            MongoEventRepo(EventStore(database), company_store),
         )
-    return Repos(SqlCompanyRepo(db), SqlJobRepo(db))
+    return Repos(SqlCompanyRepo(db), SqlJobRepo(db), SqlEventRepo(db))

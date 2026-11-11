@@ -20,7 +20,7 @@ from sqlalchemy.engine import Engine
 
 from backend.app.config import settings
 
-MONGO_OWNED_TABLES = ("companies", "jobs")
+MONGO_OWNED_TABLES = ("companies", "jobs", "events")
 
 
 def foreign_keys_to(
