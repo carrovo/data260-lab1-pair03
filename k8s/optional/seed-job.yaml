@@ -18,6 +18,9 @@ spec:
           image: p03-company-service:dev
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "backend.seed_final_data"]
+          envFrom:
+            - configMapRef:
+                name: p03-config
           env:
             - name: MYSQL_PASSWORD
               valueFrom: {secretKeyRef: {name: p03-secrets, key: MYSQL_PASSWORD}}

@@ -135,7 +135,8 @@ def test_config_points_at_the_in_cluster_services():
     assert config == {
         "KAFKA_BOOTSTRAP": "p03-kafka:9092",
         "MONGO_URL": "mongodb://p03-mongo:27017",
-        "MONGO_DB": "p03",
+        "MONGO_DB": "p03_handshake",
+        "PERSISTENCE": "sql",
     }
     names = {s["metadata"]["name"] for s in of_kind("Service")}
     assert {"p03-kafka", "p03-mongo", "p03-mysql"} <= names

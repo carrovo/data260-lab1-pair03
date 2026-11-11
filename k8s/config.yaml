@@ -9,4 +9,6 @@ metadata:
 data:
   KAFKA_BOOTSTRAP: p03-kafka:9092
   MONGO_URL: mongodb://p03-mongo:27017
-  MONGO_DB: p03
+  MONGO_DB: p03_handshake
+  # sql (default) or mongo: where companies, jobs and events live.
+  PERSISTENCE: sql

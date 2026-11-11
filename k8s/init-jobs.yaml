@@ -55,7 +55,11 @@ spec:
               done
               python -m backend.create_schema \
                 && python -m backend.migrate_application_resumes \
-                && python -m backend.migrate_canonical_schema
+                && python -m backend.migrate_canonical_schema \
+                && python -m backend.migrate_mongo_persistence
+          envFrom:
+            - configMapRef:
+                name: p03-config
           env:
             - name: MYSQL_PASSWORD
               valueFrom: {secretKeyRef: {name: p03-secrets, key: MYSQL_PASSWORD}}

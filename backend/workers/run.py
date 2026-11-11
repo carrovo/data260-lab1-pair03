@@ -4,7 +4,7 @@ Settings come from the environment (never from the image):
   WORKER_NAME        job-index-worker | notification-worker | event-worker
   KAFKA_BOOTSTRAP    for example p03-kafka:9092
   MONGO_URL          for example mongodb://p03-mongo:27017
-  MONGO_DB           defaults to p03
+  MONGO_DB           defaults to p03_handshake
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def main() -> None:
     from pymongo import MongoClient
 
     bootstrap = os.environ["KAFKA_BOOTSTRAP"]
-    db = MongoClient(os.environ["MONGO_URL"])[os.environ.get("MONGO_DB", "p03")]
+    db = MongoClient(os.environ["MONGO_URL"])[os.environ.get("MONGO_DB", "p03_handshake")]
 
     run_consumer(
         ConfluentConsumerClient(bootstrap, group_id=name, topic=topic),

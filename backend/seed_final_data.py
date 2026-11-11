@@ -765,6 +765,38 @@ def _seed_jobs_mongo(
     return by_number
 
 
+def _seed_events_mongo(
+    database: Any,
+    records: list[dict[str, Any]],
+    companies: dict[int, Any],
+) -> dict[int, Any]:
+    """Upsert the demo events into MongoDB (PERSISTENCE=mongo)."""
+    from backend.common.mongo_store import EventStore
+
+    store = EventStore(database)
+    store.ensure_indexes()
+    by_number = {}
+
+    for values in records:
+        company_number = values["company_number"]
+        company_id = (
+            companies[company_number].id if company_number is not None else None
+        )
+        fields = {
+            key: value
+            for key, value in values.items()
+            if key not in {"number", "company_number", "title"}
+        }
+        event = store.get_by_title(values["title"])
+        if event is None:
+            event = store.create(company_id, title=values["title"], **fields)
+        else:
+            event = store.update(event.id, {**fields, "company_id": company_id})
+        by_number[values["number"]] = event
+
+    return by_number
+
+
 def _seed_events(
     session: Session,
     records: list[dict[str, Any]],
@@ -1159,7 +1191,10 @@ def seed_final_data(
             stage_completed("companies")
             jobs = _seed_jobs(session, plan["jobs"], companies)
         stage_completed("jobs")
-        events = _seed_events(session, plan["events"], companies)
+        if settings.persistence == "mongo":
+            events = _seed_events_mongo(database, plan["events"], companies)
+        else:
+            events = _seed_events(session, plan["events"], companies)
         stage_completed("events")
         _seed_preferences(session, plan["preferences"], students)
         stage_completed("preferences")

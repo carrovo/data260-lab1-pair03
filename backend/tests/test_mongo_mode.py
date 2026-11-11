@@ -15,7 +15,7 @@ mongomock = pytest.importorskip("mongomock")
 from backend.app import repos  # noqa: E402
 from backend.app.config import settings  # noqa: E402
 from backend.app.database import Base  # noqa: E402
-from backend.app.models import Application, Company, Job, Student  # noqa: E402
+from backend.app.models import Application, Company, Event, Job, Student  # noqa: E402
 from backend.app.routers import company_auth, events as public_events, jobs as public_jobs  # noqa: E402
 from backend.app.routers.company_events import router as company_events_router  # noqa: E402
 from backend.app.routers.events import router as public_events_router  # noqa: E402
@@ -253,6 +253,7 @@ def test_seed_loads_companies_and_jobs_into_mongo_and_is_idempotent(monkeypatch)
     from backend.seed_final_data import (
         COMPANY_COUNT,
         DEFAULT_BASE_DATE,
+        EVENT_COUNT,
         JOB_COUNT,
         DEMO_COMPANY_EMAIL,
         DEMO_MATCH_JOB_TITLE,
@@ -280,8 +281,10 @@ def test_seed_loads_companies_and_jobs_into_mongo_and_is_idempotent(monkeypatch)
     assert (summary.companies, summary.jobs) == (COMPANY_COUNT, JOB_COUNT)
     assert database["companies"].count_documents({}) == COMPANY_COUNT
     assert database["jobs"].count_documents({}) == JOB_COUNT
+    assert database["events"].count_documents({}) == EVENT_COUNT
     with Session(engine) as db:
         assert db.query(Company).count() == 0
+        assert db.query(Event).count() == 0
         assert db.query(Job).count() == 0
         assert db.query(Application).count() == summary.applications
 
@@ -290,6 +293,7 @@ def test_seed_loads_companies_and_jobs_into_mongo_and_is_idempotent(monkeypatch)
     assert database["jobs"].find_one({"title": DEMO_MATCH_JOB_TITLE})["company_id"] == 1
 
     run()  # a second run changes nothing
+    assert database["events"].count_documents({}) == EVENT_COUNT
     assert database["companies"].count_documents({}) == COMPANY_COUNT
     assert database["jobs"].count_documents({}) == JOB_COUNT
 

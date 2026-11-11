@@ -31,7 +31,7 @@ send() {  # send <line>... ; one Kafka message per argument
     "$KBIN/kafka-console-producer.sh" --bootstrap-server "$BOOT" --topic "$TOPIC" 2>/dev/null
 }
 
-mongo() { docker exec "$MONGO" mongosh p03 --quiet --eval "$1"; }
+mongo() { docker exec "$MONGO" mongosh p03_handshake --quiet --eval "$1"; }
 
 logs() { docker logs "$WORKER" --tail "${1:-8}" 2>&1; }
 

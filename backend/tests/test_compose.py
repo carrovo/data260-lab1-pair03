@@ -107,3 +107,10 @@ def test_assistant_can_reach_ollama_on_the_host():
     env = COMPOSE["services"]["p03-assistant-service"]["environment"]
     assert "OLLAMA_BASE_URL" in env
     assert "host.docker.internal" in env["OLLAMA_BASE_URL"]
+
+
+def test_persistence_defaults_to_sql_and_mongo_uses_the_plan_database():
+    env = COMPOSE["x-service-env"]
+    assert env["PERSISTENCE"] == "${PERSISTENCE:-sql}"
+    assert env["MONGO_DB"] == COMPOSE["x-worker-env"]["MONGO_DB"] == "p03_handshake"
+    assert "backend.migrate_mongo_persistence" in COMPOSE["services"]["p03-db-init"]["command"]

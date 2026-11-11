@@ -205,8 +205,8 @@ curl -s -X POST http://localhost:9032/api/companies/jobs \
   -d "{\"title\":\"Data Analyst Intern\",\"description\":\"Analyze data.\",\"city\":\"San Jose\",\"category\":\"internship\",\"location\":\"Downtown\",\"is_remote\":false,\"salary\":\"32.50\",\"skills\":\"Python, SQL\",\"deadline\":\"$(date -u -v+30d +%Y-%m-%dT%H:%M:%SZ)\"}"
 
 docker compose --env-file .env.compose logs p03-job-index-worker | tail -3
-docker exec p03-mongo mongosh p03 --quiet --eval 'printjson(db.job_index.find().toArray())'
-docker exec p03-mongo mongosh p03 --quiet --eval 'printjson(db.processed_events.find().toArray())'
+docker exec p03-mongo mongosh p03_handshake --quiet --eval 'printjson(db.job_index.find().toArray())'
+docker exec p03-mongo mongosh p03_handshake --quiet --eval 'printjson(db.processed_events.find().toArray())'
 ```
 
 The `date -v+30d` form is for macOS. On Linux use `date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ`.
@@ -288,3 +288,12 @@ make k8s-down                            # deletes the namespace and all data
   on Docker Desktop but not on a cloud cluster without a hosted model.
 - One replica of everything, no autoscaling. Kafka and the databases are
   single-node, not highly available.
+
+## Persistence switch (MySQL or MongoDB)
+
+Companies, jobs and events can live in MySQL (default) or MongoDB. Set
+`PERSISTENCE=mongo` in `.env.compose` (Compose) or in `k8s/config.yaml` (Kubernetes);
+the database is `p03_handshake`. In Mongo mode `p03-db-init` drops the MySQL foreign keys
+that point at those three tables, and the seed loads them into MongoDB. Keep it on `sql`
+until the application, registration and assistant code reads jobs/companies/events through
+the repositories (`backend/app/repos.py`); those parts still use SQL joins.

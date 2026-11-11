@@ -7,11 +7,15 @@ x-service-env: &service-env
   DATABASE_URL: mysql+pymysql://p03_app:${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env.compose}@p03-mysql:3306/p03
   JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env.compose}
   KAFKA_BOOTSTRAP: p03-kafka:9092
+  # sql (default) or mongo: where companies, jobs and events live. See README.
+  PERSISTENCE: ${PERSISTENCE:-sql}
+  MONGO_URL: mongodb://p03-mongo:27017
+  MONGO_DB: p03_handshake
 
 x-worker-env: &worker-env
   KAFKA_BOOTSTRAP: p03-kafka:9092
   MONGO_URL: mongodb://p03-mongo:27017
-  MONGO_DB: p03
+  MONGO_DB: p03_handshake
 
 services:
   # ---------------------------------------------------------------- data
@@ -108,7 +112,8 @@ services:
     command: >
       sh -c "python -m backend.create_schema
       && python -m backend.migrate_application_resumes
-      && python -m backend.migrate_canonical_schema"
+      && python -m backend.migrate_canonical_schema
+      && python -m backend.migrate_mongo_persistence"
     networks: [p03-net]
 
   # Loads the SEED=3 demo data. Run once:  docker compose --env-file .env.compose --profile seed run --rm p03-seed
