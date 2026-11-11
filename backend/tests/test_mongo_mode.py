@@ -366,3 +366,61 @@ def test_mysql_drop_statements_use_the_constraint_names(monkeypatch):
         "ALTER TABLE `applications` DROP FOREIGN KEY `applications_ibfk_2`",
         "ALTER TABLE `events` DROP FOREIGN KEY `events_ibfk_1`",
     ]
+
+
+# ------------------------------------------------ applicants (SQL + Mongo)
+
+
+def test_company_applicant_flow_with_jobs_in_mongo(mongo_context, monkeypatch):
+    from backend.app.routers import company_applications
+    from backend.app.routers.company_applications import (
+        router as company_applications_router,
+    )
+
+    client, engine, _ = mongo_context
+    client.app.include_router(company_applications_router)
+    sent = []
+    monkeypatch.setattr(
+        company_applications, "publish_safely", lambda *a, **k: sent.append((a, k))
+    )
+
+    owner = headers(client)
+    other = headers(client, email="other@example.com", name="Other Co")
+    client.post("/api/companies/jobs", json=JOB, headers=owner)  # job 1 (Mongo)
+
+    with Session(engine) as db:
+        student = Student(
+            email="s@example.com", password_hash="x", full_name="Sam Student",
+            city="San Jose", major="Data Science",
+        )
+        db.add(student)
+        db.commit()
+        application = Application(student_id=student.id, job_id=1)
+        db.add(application)
+        db.commit()
+        application_id = application.id
+
+    listed = client.get("/api/companies/jobs/1/applicants", headers=owner)
+    assert listed.status_code == 200
+    assert [a["student_name"] for a in listed.json()] == ["Sam Student"]
+
+    assert client.get("/api/companies/jobs/1/applicants", headers=other).status_code == 403
+    assert client.get("/api/companies/jobs/99/applicants", headers=owner).status_code == 404
+
+    changed = client.put(
+        f"/api/companies/applications/{application_id}/status",
+        json={"status": "Reviewed"},
+        headers=owner,
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["status"] == "Reviewed"
+    (args, _kwargs), = sent
+    assert args[0] == "application.status_changed"
+    assert args[1]["job_id"] == "1"
+
+    blocked = client.put(
+        f"/api/companies/applications/{application_id}/status",
+        json={"status": "Declined"},
+        headers=other,
+    )
+    assert blocked.status_code == 403

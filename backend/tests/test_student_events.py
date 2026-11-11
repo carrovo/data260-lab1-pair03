@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.models import Company, Event, Registration, Student
-from backend.app.routers.events import register_for_event
+from backend.app.routers.registration_routes import register_for_event
 
 
 def signup_student(
