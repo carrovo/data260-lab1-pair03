@@ -28,3 +28,5 @@ build/
 
 # Runtime uploads
 /backend/uploads/
+loadtest/*.jtl
+loadtest/report_*/
