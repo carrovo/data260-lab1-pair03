@@ -175,6 +175,9 @@ class JobStore:
             )
         )
 
+    def get_by_title(self, title: str) -> SimpleNamespace | None:
+        return _clean(self._collection.find_one({"title": title}))
+
     def update(self, job_id: int, fields: dict[str, Any]) -> SimpleNamespace | None:
         fields = {k: _bson_value(v) for k, v in fields.items()}
         self._collection.update_one({"_id": int(job_id)}, {"$set": fields})

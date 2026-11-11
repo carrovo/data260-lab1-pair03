@@ -23,6 +23,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from backend.app.application_status import ApplicationStatus
+from backend.app.config import settings
 from backend.app.database import SessionLocal
 from backend.app.models import (
     Application,
@@ -695,6 +696,75 @@ def _seed_jobs(
     return by_number
 
 
+def _seed_companies_mongo(
+    database: Any,
+    records: list[dict[str, Any]],
+    password_hash: str,
+) -> dict[int, Any]:
+    """Upsert the demo companies into MongoDB (PERSISTENCE=mongo)."""
+    from backend.common.mongo_store import CompanyStore
+
+    store = CompanyStore(database)
+    store.ensure_indexes()
+    by_number = {}
+
+    for values in records:
+        fields = {
+            key: value
+            for key, value in values.items()
+            if key not in {"number", "email"}
+        }
+        company = store.get_by_email(values["email"])
+        if company is None:
+            company = store.create(
+                email=values["email"],
+                password_hash=password_hash,
+                name=values["name"],
+                city=values["city"],
+                description=values["description"],
+                contact_info=values["contact_info"],
+                created_at=values["created_at"],
+            )
+        else:
+            company = store.update(company.id, fields)
+        by_number[values["number"]] = company
+
+    return by_number
+
+
+def _seed_jobs_mongo(
+    database: Any,
+    records: list[dict[str, Any]],
+    companies: dict[int, Any],
+) -> dict[int, Any]:
+    """Upsert the demo jobs into MongoDB (PERSISTENCE=mongo)."""
+    from backend.common.mongo_store import JobStore
+
+    store = JobStore(database)
+    store.ensure_indexes()
+    by_number = {}
+
+    for values in records:
+        fields = {
+            key: value
+            for key, value in values.items()
+            if key not in {"number", "company_number", "title"}
+        }
+        company_id = companies[values["company_number"]].id
+        job = store.get_by_title(values["title"])
+        if job is None:
+            job = store.create(
+                company_id,
+                title=values["title"],
+                **fields,
+            )
+        else:
+            job = store.update(job.id, {**fields, "company_id": company_id})
+        by_number[values["number"]] = job
+
+    return by_number
+
+
 def _seed_events(
     session: Session,
     records: list[dict[str, Any]],
@@ -1069,13 +1139,25 @@ def seed_final_data(
             password_hash,
         )
         stage_completed("students")
-        companies = _seed_companies(
-            session,
-            plan["companies"],
-            password_hash,
-        )
-        stage_completed("companies")
-        jobs = _seed_jobs(session, plan["jobs"], companies)
+        if settings.persistence == "mongo":
+            from backend.app.repos import get_mongo_database
+
+            database = get_mongo_database()
+            companies = _seed_companies_mongo(
+                database,
+                plan["companies"],
+                password_hash,
+            )
+            stage_completed("companies")
+            jobs = _seed_jobs_mongo(database, plan["jobs"], companies)
+        else:
+            companies = _seed_companies(
+                session,
+                plan["companies"],
+                password_hash,
+            )
+            stage_completed("companies")
+            jobs = _seed_jobs(session, plan["jobs"], companies)
         stage_completed("jobs")
         events = _seed_events(session, plan["events"], companies)
         stage_completed("events")

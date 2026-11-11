@@ -231,3 +231,138 @@ def test_job_created_event_uses_the_mongo_ids(mongo_context, monkeypatch):
     assert args[0] == "job.created"
     assert args[1] == {"job_id": "1", "company_id": "1", "title": "Data Intern"}
     assert kwargs["key"] == "1"
+
+
+# ---------------------------------------------------------------- seed data
+
+
+def test_seed_loads_companies_and_jobs_into_mongo_and_is_idempotent(monkeypatch):
+    from io import StringIO
+
+    from backend.seed_final_data import (
+        COMPANY_COUNT,
+        DEFAULT_BASE_DATE,
+        JOB_COUNT,
+        DEMO_COMPANY_EMAIL,
+        DEMO_MATCH_JOB_TITLE,
+        seed_final_data,
+    )
+
+    database = mongomock.MongoClient()["p03_seed"]
+    monkeypatch.setattr(settings, "persistence", "mongo")
+    monkeypatch.setattr(repos, "get_mongo_database", lambda: database)
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+
+    def run():
+        with Session(engine) as session:
+            return seed_final_data(
+                session, base_date=DEFAULT_BASE_DATE, output=StringIO()
+            )
+
+    summary = run()
+    assert (summary.companies, summary.jobs) == (COMPANY_COUNT, JOB_COUNT)
+    assert database["companies"].count_documents({}) == COMPANY_COUNT
+    assert database["jobs"].count_documents({}) == JOB_COUNT
+    with Session(engine) as db:
+        assert db.query(Company).count() == 0
+        assert db.query(Job).count() == 0
+        assert db.query(Application).count() == summary.applications
+
+    demo = database["companies"].find_one({"email": DEMO_COMPANY_EMAIL})
+    assert demo["_id"] == 1
+    assert database["jobs"].find_one({"title": DEMO_MATCH_JOB_TITLE})["company_id"] == 1
+
+    run()  # a second run changes nothing
+    assert database["companies"].count_documents({}) == COMPANY_COUNT
+    assert database["jobs"].count_documents({}) == JOB_COUNT
+
+    # the seeded demo company can log in through the Mongo-backed router
+    app = FastAPI()
+    app.include_router(auth_router)
+
+    def override_get_db():
+        with Session(engine) as db:
+            yield db
+
+    app.dependency_overrides[company_auth.get_db] = override_get_db
+    from backend.seed_final_data import DEMO_PASSWORD
+
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/companies/auth/login",
+            json={"email": DEMO_COMPANY_EMAIL, "password": DEMO_PASSWORD},
+        )
+        assert login.status_code == 200
+        assert login.json()["company"]["id"] == 1
+    engine.dispose()
+
+
+# ------------------------------------------------------- MySQL FK migration
+
+
+def test_foreign_keys_into_companies_and_jobs_are_found():
+    from sqlalchemy import inspect
+
+    from backend.migrate_mongo_persistence import drop_foreign_keys, foreign_keys_to
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    found = {(table, referred) for table, _name, referred in foreign_keys_to(inspect(engine))}
+    assert ("applications", "jobs") in found
+    assert ("saved_items", "jobs") in found
+    assert ("events", "companies") in found
+    assert ("jobs", "companies") in found
+    assert not any(table in {"students"} for table, _ in found)
+
+    # SQLite cannot drop constraints, so the function only reports them
+    assert drop_foreign_keys(engine)
+    engine.dispose()
+
+
+def test_mysql_drop_statements_use_the_constraint_names(monkeypatch):
+    from backend import migrate_mongo_persistence as migration
+
+    executed = []
+
+    class FakeConnection:
+        def execute(self, statement):
+            executed.append(str(statement))
+
+    class FakeBegin:
+        def __enter__(self):
+            return FakeConnection()
+
+        def __exit__(self, *args):
+            return False
+
+    class FakeEngine:
+        dialect = type("D", (), {"name": "mysql"})()
+
+        def begin(self):
+            return FakeBegin()
+
+    monkeypatch.setattr(
+        migration, "inspect", lambda engine: object()
+    )
+    monkeypatch.setattr(
+        migration,
+        "foreign_keys_to",
+        lambda inspector, tables=migration.MONGO_OWNED_TABLES: [
+            ("applications", "applications_ibfk_2", "jobs"),
+            ("events", "events_ibfk_1", "companies"),
+        ],
+    )
+
+    migration.drop_foreign_keys(FakeEngine())
+
+    assert executed == [
+        "ALTER TABLE `applications` DROP FOREIGN KEY `applications_ibfk_2`",
+        "ALTER TABLE `events` DROP FOREIGN KEY `events_ibfk_1`",
+    ]
