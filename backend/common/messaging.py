@@ -24,6 +24,7 @@ from .events import (
     EventEnvelope,
     build_dlq_message,
     dlq_topic,
+    processed_event_key,
     processed_event_record,
 )
 
@@ -39,7 +40,7 @@ class Outcome(str, enum.Enum):
 
 
 class ProcessedEventStore(Protocol):
-    def seen(self, event_id: str) -> bool: ...
+    def seen(self, key: str) -> bool: ...
 
     def mark(self, record: dict[str, Any]) -> None: ...
 
@@ -104,7 +105,7 @@ def process_message(
         _dead_letter(publisher, topic, raw, f"invalid message: {exc}", 0)
         return Outcome.DEAD_LETTERED
 
-    if store.seen(envelope.event_id):
+    if store.seen(processed_event_key(consumer, envelope.event_id)):
         logger.info(
             "duplicate skipped event_id=%s trace_id=%s",
             envelope.event_id,
@@ -201,13 +202,13 @@ def run_consumer(
 
 
 class MongoProcessedEventStore:
-    """processed_events collection; _id is the event_id."""
+    """processed_events collection; _id is "<consumer>:<event_id>"."""
 
     def __init__(self, collection: Any) -> None:
         self._collection = collection
 
-    def seen(self, event_id: str) -> bool:
-        return self._collection.find_one({"_id": event_id}) is not None
+    def seen(self, key: str) -> bool:
+        return self._collection.find_one({"_id": key}) is not None
 
     def mark(self, record: dict[str, Any]) -> None:
         from pymongo.errors import DuplicateKeyError

@@ -98,7 +98,7 @@ def test_a_good_message_is_processed_and_recorded():
 
     assert outcome == Outcome.PROCESSED
     assert list(rows) == ["7"]
-    assert envelope.event_id in store.ids
+    assert any(key.endswith(f":{envelope.event_id}") for key in store.ids)
     assert publisher.sent == []
 
 
@@ -245,3 +245,35 @@ def test_publish_event_sends_json_to_the_topic_named_by_the_event_type():
     topic, key, value = publisher.sent[0]
     assert (topic, key) == ("job.created", "7")
     assert json.loads(value)["event_id"] == envelope.event_id
+
+
+def test_two_consumers_can_each_process_the_same_event():
+    store, publisher = FakeStore(), FakePublisher()
+    envelope = job_event()
+    handled = []
+
+    for name in ("job-index-worker", "notification-worker"):
+        outcome = process_message(
+            envelope.to_json(),
+            topic=TOPIC,
+            consumer=name,
+            handler=lambda e, name=name: handled.append(name),
+            store=store,
+            publisher=publisher,
+            sleep=lambda _seconds: None,
+        )
+        assert outcome == Outcome.PROCESSED
+
+    assert handled == ["job-index-worker", "notification-worker"]
+
+    again = process_message(
+        envelope.to_json(),
+        topic=TOPIC,
+        consumer="job-index-worker",
+        handler=lambda e: handled.append("duplicate"),
+        store=store,
+        publisher=publisher,
+        sleep=lambda _seconds: None,
+    )
+    assert again == Outcome.DUPLICATE_SKIPPED
+    assert "duplicate" not in handled

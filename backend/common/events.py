@@ -115,16 +115,23 @@ def make_event(
     )
 
 
+def processed_event_key(consumer: str, event_id: str) -> str:
+    """Idempotency key: one entry per (consumer, event)."""
+    return f"{consumer}:{event_id}"
+
+
 def processed_event_record(
     envelope: EventEnvelope, consumer: str
 ) -> dict[str, Any]:
     """Document written to the processed_events collection.
 
-    _id is the event_id, so inserting the same event twice fails on the
-    unique primary key. That is the idempotency guarantee.
+    _id is "<consumer>:<event_id>", so inserting the same event twice for
+    the same consumer fails on the unique primary key (the idempotency
+    guarantee), while a different consumer can still process the event.
     """
     return {
-        "_id": envelope.event_id,
+        "_id": processed_event_key(consumer, envelope.event_id),
+        "event_id": envelope.event_id,
         "event_type": envelope.event_type,
         "consumer": consumer,
         "trace_id": envelope.trace_id,

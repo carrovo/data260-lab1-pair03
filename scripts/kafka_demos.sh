@@ -47,7 +47,7 @@ wait_until() {
   done
   return 1
 }
-event_processed() { [ "$(mongo "db.processed_events.countDocuments({_id:'$1'})")" = "1" ]; }
+event_processed() { [ "$(mongo "db.processed_events.countDocuments({event_id:'$1'})")" = "1" ]; }
 now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 new_logs() { docker logs "$WORKER" --since "$SINCE" 2>&1; }   # needs SINCE set first
 worker_skipped_dup() { new_logs | grep -q "duplicate skipped"; }
@@ -55,7 +55,7 @@ two_dead_letters() { [ "$(new_logs | grep -c 'dead-lettered')" -ge 2 ]; }
 
 counts() {  # counts <job_id> <event_id>
   echo "job_index docs for job $1:        $(mongo "db.job_index.countDocuments({_id:'$1'})")"
-  [ -n "${2:-}" ] && echo "processed_events for this event: $(mongo "db.processed_events.countDocuments({_id:'$2'})")"
+  [ -n "${2:-}" ] && echo "processed_events for this event: $(mongo "db.processed_events.countDocuments({event_id:'$2'})")"
 }
 
 demo_duplicate() {

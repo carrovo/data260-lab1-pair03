@@ -106,14 +106,17 @@ def test_dead_letter_topic_name():
     assert dlq_topic("job.created") == "job.created.dlq"
 
 
-def test_processed_event_record_uses_event_id_as_key():
+def test_processed_event_record_uses_consumer_and_event_id_as_key():
     envelope = make_event(
         "job.created", {"job_id": "7", "company_id": "2", "title": "Intern"}
     )
 
     record = processed_event_record(envelope, "job-index-worker")
 
-    assert record["_id"] == envelope.event_id
+    assert record["_id"] == f"job-index-worker:{envelope.event_id}"
+    assert record["event_id"] == envelope.event_id
+    other = processed_event_record(envelope, "notification-worker")
+    assert other["_id"] != record["_id"]
     assert record["consumer"] == "job-index-worker"
 
 
