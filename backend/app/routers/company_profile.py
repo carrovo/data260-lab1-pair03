@@ -1,7 +1,9 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from backend.app.models import Company
+from backend.app.repos import make_repos
 from backend.app.routers.company_auth import (
     get_current_company,
     get_db,
@@ -19,7 +21,7 @@ router = APIRouter(
 
 @router.get("", response_model=CompanyResponse)
 def get_profile(
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     return current_company
 
@@ -28,15 +30,8 @@ def get_profile(
 def update_profile(
     payload: CompanyUpdate,
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     update_data = payload.model_dump(exclude_unset=True)
 
-    for field, value in update_data.items():
-        setattr(current_company, field, value)
-
-    db.add(current_company)
-    db.commit()
-    db.refresh(current_company)
-
-    return current_company
+    return make_repos(db).companies.update(current_company, update_data)

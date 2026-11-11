@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen3:8b"
 
+    # "sql" keeps companies and jobs in MySQL (unit tests, single-process app);
+    # "mongo" stores them in MongoDB (Compose and Kubernetes).
+    persistence: str = "sql"
+    mongo_url: str | None = None
+    mongo_db: str = "p03_handshake"
+
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60

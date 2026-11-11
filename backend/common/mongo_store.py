@@ -1,24 +1,43 @@
 """MongoDB stores for the company-owned collections (companies, jobs).
 
-Documents use string ids. Records migrated from MySQL keep their old integer
-id as a string ("7"); new records get a UUID string. Routers talk to these
-classes, never to pymongo directly, so tests can pass a mongomock database.
+Ids are integers, so Mongo records stay compatible with the MySQL tables and
+the JWT that refer to them. Records migrated from MySQL keep their old id; new
+records take the next number from a counter. Routers talk to these classes
+(through backend/app/repos.py), never to pymongo directly, so tests can pass a
+mongomock database. Documents come back as objects with attribute access
+(company.name), the same way the SQL models behave.
 """
 
 from __future__ import annotations
 
 import os
 import re
-import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 
 DEFAULT_DB = "p03_handshake"
 
 
-def new_id() -> str:
-    return str(uuid.uuid4())
+def next_id(database: Any, name: str) -> int:
+    """Next integer id for a collection, from the counters collection."""
+    from pymongo import ReturnDocument
+
+    counter = database["counters"].find_one_and_update(
+        {"_id": name},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    return int(counter["seq"])
+
+
+def raise_counter_to(database: Any, name: str, value: int) -> None:
+    """After loading seed data with fixed ids, make new ids start above them."""
+    database["counters"].update_one(
+        {"_id": name}, {"$max": {"seq": int(value)}}, upsert=True
+    )
 
 
 def utc_now() -> datetime:
@@ -37,13 +56,13 @@ def _contains(text: str) -> dict[str, Any]:
     return {"$regex": re.escape(text), "$options": "i"}
 
 
-def _clean(document: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Expose Mongo's _id as id, the name the API and the frontend use."""
+def _clean(document: dict[str, Any] | None) -> SimpleNamespace | None:
+    """Expose Mongo's _id as id and allow attribute access."""
     if document is None:
         return None
     result = dict(document)
     result["id"] = result.pop("_id")
-    return result
+    return SimpleNamespace(**result)
 
 
 def _bson_value(value: Any) -> Any:
@@ -52,6 +71,7 @@ def _bson_value(value: Any) -> Any:
 
 class CompanyStore:
     def __init__(self, database: Any) -> None:
+        self._database = database
         self._collection = database["companies"]
 
     def ensure_indexes(self) -> None:
@@ -66,11 +86,11 @@ class CompanyStore:
         city: str,
         description: str | None = None,
         contact_info: str | None = None,
-        company_id: str | None = None,
+        company_id: int | None = None,
         created_at: datetime | None = None,
-    ) -> dict[str, Any]:
+    ) -> SimpleNamespace:
         document = {
-            "_id": company_id or new_id(),
+            "_id": int(company_id) if company_id else next_id(self._database, "companies"),
             "email": email,
             "password_hash": password_hash,
             "name": name,
@@ -83,27 +103,28 @@ class CompanyStore:
         self._collection.insert_one(document)  # DuplicateKeyError on same email
         return _clean(document)
 
-    def get(self, company_id: str) -> dict[str, Any] | None:
-        return _clean(self._collection.find_one({"_id": str(company_id)}))
+    def get(self, company_id: int) -> SimpleNamespace | None:
+        return _clean(self._collection.find_one({"_id": int(company_id)}))
 
-    def get_by_email(self, email: str) -> dict[str, Any] | None:
+    def get_by_email(self, email: str) -> SimpleNamespace | None:
         return _clean(self._collection.find_one({"email": email}))
 
-    def update(self, company_id: str, fields: dict[str, Any]) -> dict[str, Any] | None:
-        self._collection.update_one({"_id": str(company_id)}, {"$set": fields})
+    def update(self, company_id: int, fields: dict[str, Any]) -> SimpleNamespace | None:
+        self._collection.update_one({"_id": int(company_id)}, {"$set": fields})
         return self.get(company_id)
 
-    def ids_with_name_containing(self, text: str) -> list[str]:
+    def ids_with_name_containing(self, text: str) -> list[int]:
         cursor = self._collection.find({"name": _contains(text)}, {"_id": 1})
         return [row["_id"] for row in cursor]
 
-    def get_many(self, company_ids: list[str]) -> dict[str, dict[str, Any]]:
-        cursor = self._collection.find({"_id": {"$in": [str(i) for i in company_ids]}})
+    def get_many(self, company_ids: list[int]) -> dict[int, SimpleNamespace]:
+        cursor = self._collection.find({"_id": {"$in": [int(i) for i in company_ids]}})
         return {row["_id"]: _clean(row) for row in cursor}
 
 
 class JobStore:
     def __init__(self, database: Any) -> None:
+        self._database = database
         self._collection = database["jobs"]
 
     def ensure_indexes(self) -> None:
@@ -112,7 +133,7 @@ class JobStore:
 
     def create(
         self,
-        company_id: str,
+        company_id: int,
         *,
         title: str,
         description: str,
@@ -123,12 +144,12 @@ class JobStore:
         salary: Any = None,
         skills: str | None = None,
         deadline: datetime | None = None,
-        job_id: str | None = None,
+        job_id: int | None = None,
         created_at: datetime | None = None,
-    ) -> dict[str, Any]:
+    ) -> SimpleNamespace:
         document = {
-            "_id": job_id or new_id(),
-            "company_id": str(company_id),
+            "_id": int(job_id) if job_id else next_id(self._database, "jobs"),
+            "company_id": int(company_id),
             "title": title,
             "description": description,
             "city": city,
@@ -143,19 +164,27 @@ class JobStore:
         self._collection.insert_one(document)
         return _clean(document)
 
-    def get(self, job_id: str) -> dict[str, Any] | None:
-        return _clean(self._collection.find_one({"_id": str(job_id)}))
+    def get(self, job_id: int) -> SimpleNamespace | None:
+        return _clean(self._collection.find_one({"_id": int(job_id)}))
 
-    def get_for_company(self, job_id: str, company_id: str) -> dict[str, Any] | None:
+    def get_for_company(self, job_id: int, company_id: int) -> SimpleNamespace | None:
         """Ownership check: a company only sees its own job."""
         return _clean(
             self._collection.find_one(
-                {"_id": str(job_id), "company_id": str(company_id)}
+                {"_id": int(job_id), "company_id": int(company_id)}
             )
         )
 
-    def list_for_company(self, company_id: str) -> list[dict[str, Any]]:
-        cursor = self._collection.find({"company_id": str(company_id)}).sort(
+    def update(self, job_id: int, fields: dict[str, Any]) -> SimpleNamespace | None:
+        fields = {k: _bson_value(v) for k, v in fields.items()}
+        self._collection.update_one({"_id": int(job_id)}, {"$set": fields})
+        return self.get(job_id)
+
+    def delete(self, job_id: int) -> None:
+        self._collection.delete_one({"_id": int(job_id)})
+
+    def list_for_company(self, company_id: int) -> list[SimpleNamespace]:
+        cursor = self._collection.find({"company_id": int(company_id)}).sort(
             [("created_at", -1), ("_id", -1)]
         )
         return [_clean(row) for row in cursor]
@@ -164,9 +193,10 @@ class JobStore:
         self,
         keyword: str = "",
         city: str = "",
-        company_ids: list[str] | None = None,
+        company_ids: list[int] | None = None,
         limit: int = 100,
-    ) -> list[dict[str, Any]]:
+        offset: int = 0,
+    ) -> list[SimpleNamespace]:
         """Keyword matches title, description or (via company_ids) company name."""
         query: dict[str, Any] = {}
         if keyword:
@@ -182,6 +212,7 @@ class JobStore:
         cursor = (
             self._collection.find(query)
             .sort([("created_at", -1), ("_id", -1)])
+            .skip(offset)
             .limit(limit)
         )
         return [_clean(row) for row in cursor]
