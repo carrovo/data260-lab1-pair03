@@ -1,54 +1,35 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
-import { fetchMyRegistrations } from '../api'
+import { loadMyRegistrations, selectMyRegistrations } from '../store/eventsSlice'
 import useAuth from '../auth/useAuth'
 import { formatEventDateTime } from '../eventDateTime'
 
 
 function RegistrationsPage() {
   const { accessToken, logout } = useAuth()
-  const [registrations, setRegistrations] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const dispatch = useDispatch()
+  const {
+    items: registrations,
+    status,
+    error: requestError,
+  } = useSelector(selectMyRegistrations)
+  const loading = status === 'idle' || status === 'loading'
+  const unauthorized = requestError?.status === 401
+  const error =
+    requestError && !unauthorized
+      ? requestError.message || 'Unable to load your registrations.'
+      : ''
 
   useEffect(() => {
-    let cancelled = false
+    dispatch(loadMyRegistrations(accessToken))
+  }, [accessToken, dispatch])
 
-    async function loadRegistrations() {
-      setLoading(true)
-      setError('')
-
-      try {
-        const registrationData = await fetchMyRegistrations(accessToken)
-
-        if (!cancelled) {
-          setRegistrations(registrationData)
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setRegistrations([])
-
-          if (requestError.status === 401) {
-            logout()
-          } else {
-            setError(
-              requestError.message || 'Unable to load your registrations.',
-            )
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
+  useEffect(() => {
+    if (unauthorized) {
+      logout()
     }
-
-    loadRegistrations()
-
-    return () => {
-      cancelled = true
-    }
-  }, [accessToken, logout])
+  }, [unauthorized, logout])
 
   return (
     <section className="page-shell registrations-page">

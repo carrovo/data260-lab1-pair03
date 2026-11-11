@@ -1,16 +1,27 @@
 import { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 
-import api from "../../services/api";
+import {
+  clearCreateError,
+  createMyJob,
+  loadMyJobs,
+  selectJobCreate,
+  selectMyJobs,
+} from "../../store/jobsSlice";
 import Loading from "../../components/Loading";
 import ErrorMessage from "../../components/ErrorMessage";
 
 export default function CompanyDashboard() {
-  const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [posting, setPosting] = useState(false);
-  const [error, setError] = useState(null);
+  const dispatch = useDispatch();
+  const myJobs = useSelector(selectMyJobs);
+  const createState = useSelector(selectJobCreate);
   const [showForm, setShowForm] = useState(false);
+
+  const jobs = myJobs.items;
+  const loading = myJobs.status === "idle" || myJobs.status === "loading";
+  const posting = createState.status === "loading";
+  const error = createState.error || myJobs.error;
 
   const [form, setForm] = useState({
     title: "",
@@ -24,47 +35,10 @@ export default function CompanyDashboard() {
     deadline: "",
   });
 
-  const loadJobs = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await api.get("/companies/jobs");
-      setJobs(response.data || []);
-    } catch (err) {
-      setError(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    let active = true;
-
-    async function loadInitialJobs() {
-      try {
-        const response = await api.get("/companies/jobs");
-
-        if (active) {
-          setJobs(response.data || []);
-        }
-      } catch (err) {
-        if (active) {
-          setError(err);
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadInitialJobs();
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    dispatch(clearCreateError());
+    dispatch(loadMyJobs());
+  }, [dispatch]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -78,15 +52,12 @@ export default function CompanyDashboard() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    try {
-      setPosting(true);
-      setError(null);
+    const deadline = form.deadline
+      ? new Date(`${form.deadline}T23:59:59`).toISOString()
+      : null;
 
-      const deadline = form.deadline
-        ? new Date(`${form.deadline}T23:59:59`).toISOString()
-        : null;
-
-      await api.post("/companies/jobs", {
+    const result = await dispatch(
+      createMyJob({
         title: form.title.trim(),
         description: form.description.trim(),
         category: form.category,
@@ -96,8 +67,10 @@ export default function CompanyDashboard() {
         salary: form.salary ? Number(form.salary) : null,
         skills: form.skills.trim() || null,
         deadline,
-      });
+      }),
+    );
 
+    if (createMyJob.fulfilled.match(result)) {
       setForm({
         title: "",
         description: "",
@@ -109,13 +82,7 @@ export default function CompanyDashboard() {
         skills: "",
         deadline: "",
       });
-
       setShowForm(false);
-      await loadJobs();
-    } catch (err) {
-      setError(err);
-    } finally {
-      setPosting(false);
     }
   };
 

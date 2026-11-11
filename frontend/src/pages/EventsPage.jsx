@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
-import { fetchEvents } from '../api'
+import { searchEvents, selectEventList } from '../store/eventsSlice'
 import { formatEventDateTime } from '../eventDateTime'
 
 
@@ -21,52 +22,18 @@ function getEventDateParts(value) {
 
 function EventsPage() {
   const [keyword, setKeyword] = useState('')
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const dispatch = useDispatch()
+  const { items: events, status, error: requestError } = useSelector(selectEventList)
+  const loading = status === 'idle' || status === 'loading'
+  const error = requestError ? requestError.message || 'Unable to load events.' : ''
 
   useEffect(() => {
-    let cancelled = false
+    dispatch(searchEvents())
+  }, [dispatch])
 
-    async function loadEvents() {
-      try {
-        const eventData = await fetchEvents()
-
-        if (!cancelled) {
-          setEvents(eventData)
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setError(requestError.message || 'Unable to load events.')
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    loadEvents()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  async function handleSearch(event) {
+  function handleSearch(event) {
     event.preventDefault()
-    setLoading(true)
-    setError('')
-
-    try {
-      const eventData = await fetchEvents(keyword)
-      setEvents(eventData)
-    } catch (requestError) {
-      setEvents([])
-      setError(requestError.message || 'Unable to search events.')
-    } finally {
-      setLoading(false)
-    }
+    dispatch(searchEvents(keyword))
   }
 
   return (

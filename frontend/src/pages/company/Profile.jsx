@@ -1,79 +1,46 @@
 import { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
 
-import api from "../../services/api";
+import {
+  clearSaveState,
+  loadCompanyProfile,
+  saveCompanyProfile,
+  selectCompanyProfile,
+  selectCompanySave,
+} from "../../store/companiesSlice";
 import Loading from "../../components/Loading";
 import ErrorMessage from "../../components/ErrorMessage";
 
 export default function CompanyProfile() {
-  const [profile, setProfile] = useState({
-    name: "",
-    city: "San Jose",
-    description: "",
-    contact_info: "",
-  });
-
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const dispatch = useDispatch();
+  const profileState = useSelector(selectCompanyProfile);
+  const saveState = useSelector(selectCompanySave);
+  const [edits, setEdits] = useState({});
   const [success, setSuccess] = useState("");
 
-  const loadProfile = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await api.get("/companies/me");
-
-      setProfile({
-        name: response.data.name || "",
-        city: response.data.city || "San Jose",
-        description: response.data.description || "",
-        contact_info: response.data.contact_info || "",
-      });
-    } catch (err) {
-      setError(err);
-    } finally {
-      setLoading(false);
-    }
+  const saved = profileState.data || {};
+  const profile = {
+    name: saved.name || "",
+    city: saved.city || "San Jose",
+    description: saved.description || "",
+    contact_info: saved.contact_info || "",
+    ...edits,
   };
 
+  const loading =
+    profileState.status === "idle" || profileState.status === "loading";
+  const saving = saveState.status === "loading";
+  const error = saveState.error || profileState.error;
+
   useEffect(() => {
-    let active = true;
-
-    async function loadInitialProfile() {
-      try {
-        const response = await api.get("/companies/me");
-
-        if (active) {
-          setProfile({
-            name: response.data.name || "",
-            city: response.data.city || "San Jose",
-            description: response.data.description || "",
-            contact_info: response.data.contact_info || "",
-          });
-        }
-      } catch (err) {
-        if (active) {
-          setError(err);
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadInitialProfile();
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    dispatch(clearSaveState());
+    dispatch(loadCompanyProfile());
+  }, [dispatch]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    setProfile((prev) => ({
+    setEdits((prev) => ({
       ...prev,
       [name]: value,
     }));
@@ -81,26 +48,21 @@ export default function CompanyProfile() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    setSuccess("");
 
-    try {
-      setSaving(true);
-      setError(null);
-      setSuccess("");
-
-      await api.put("/companies/me", {
+    const result = await dispatch(
+      saveCompanyProfile({
         name: profile.name.trim(),
         city: profile.city,
         description: profile.description.trim() || null,
         contact_info: profile.contact_info.trim() || null,
-      });
+      }),
+    );
 
+    if (saveCompanyProfile.fulfilled.match(result)) {
+      setEdits({});
       setSuccess("Profile updated successfully.");
-
-      await loadProfile();
-    } catch (err) {
-      setError(err);
-    } finally {
-      setSaving(false);
+      dispatch(loadCompanyProfile());
     }
   };
 
