@@ -176,11 +176,8 @@ services:
     environment: *service-env
     networks: [p03-net]
 
-  # Xuanhua's service. It lives on feature/lab2-student-services, so it is
-  # only started with:  docker compose --env-file .env.compose --profile full up -d --build
-  # after that branch is merged into integration/lab2.
+  # Student-side services (Xuanhua's code, from feature/lab2-student-services).
   p03-student-service:
-    profiles: ["full"]
     build:
       context: ./backend
       dockerfile: services/student/Dockerfile
@@ -194,8 +191,48 @@ services:
       p03-kafka-init:
         condition: service_completed_successfully
     environment: *service-env
+    networks: [p03-net]
+
+  # Students submit resumes here and the Company service reads them, so both
+  # services share the p03-uploads volume.
+  p03-application-service:
+    build:
+      context: ./backend
+      dockerfile: services/application/Dockerfile
+    image: p03-application-service:dev
+    container_name: p03-application-service
+    ports:
+      - "9033:9033"
+    depends_on:
+      p03-db-init:
+        condition: service_completed_successfully
+      p03-kafka-init:
+        condition: service_completed_successfully
+    environment: *service-env
     volumes:
       - p03-uploads:/app/backend/uploads
+    networks: [p03-net]
+
+  # Needs Ollama (qwen3:8b) running on the host; the container reaches it
+  # through host.docker.internal.
+  p03-assistant-service:
+    build:
+      context: ./backend
+      dockerfile: services/assistant/Dockerfile
+    image: p03-assistant-service:dev
+    container_name: p03-assistant-service
+    ports:
+      - "9035:9035"
+    depends_on:
+      p03-db-init:
+        condition: service_completed_successfully
+      p03-kafka-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *service-env
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [p03-net]
 
   # ------------------------------------------------------------- workers

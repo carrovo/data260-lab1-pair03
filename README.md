@@ -181,12 +181,13 @@ docker compose --env-file .env.compose --profile seed run --rm p03-seed   # make
 ### 4. Check that it works
 
 ```bash
-python scripts/smoke.py --skip student        # make smoke SMOKE_ARGS="--skip student"
+make smoke      # python scripts/smoke.py
 ```
 
-Until `feature/lab2-student-services` is merged into `integration/lab2`, the
-Student service is not part of the default stack. After the merge, start the
-full stack with `--profile full` and run `make smoke` without `--skip`.
+The stack includes all six services (Company 9030, Student 9031, Job 9032,
+Application 9033, Event 9034, Assistant 9035). The Assistant needs Ollama
+(`qwen3:8b`) running on the host; set `OLLAMA_BASE_URL` in `.env.compose` to
+override `http://host.docker.internal:11434`.
 
 End-to-end check of a Kafka flow (company posts a job, the Job service publishes
 `job.created`, the worker indexes it in MongoDB). The token from the Company
@@ -280,10 +281,10 @@ make k8s-down                            # deletes the namespace and all data
 
 ### Known limits
 
-- Uploaded resumes use an `emptyDir` in the Company service, so they are not
-  shared with the Student service. A shared volume (or object storage) is needed
-  before the two sides run together in the cluster.
+- Uploaded resumes live on one `ReadWriteOnce` volume shared by the Company and
+  Application services. That works on a single node (Docker Desktop); a
+  multi-node cluster needs `ReadWriteMany` storage or object storage.
+- The Assistant reaches Ollama on the host (`host.docker.internal`), so it works
+  on Docker Desktop but not on a cloud cluster without a hosted model.
 - One replica of everything, no autoscaling. Kafka and the databases are
   single-node, not highly available.
-- The student-side services (Student, Application, Assistant) are added when
-  their branch is merged.

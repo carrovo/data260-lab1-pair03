@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.common.tracing import TraceMiddleware
 from backend.app.routers.assistant import router as assistant_router
 
 
@@ -19,6 +20,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(TraceMiddleware, service="assistant")
 
 app.include_router(assistant_router)
 

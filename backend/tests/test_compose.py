@@ -29,7 +29,9 @@ def test_host_ports_stay_in_the_pair_block_and_match_the_contract():
         for mapping in service.get("ports", []):
             host, container = str(mapping).split(":")
             assert 9030 <= int(host) <= 9039, (name, mapping)
-    for short in ("company", "job", "event", "student"):
+    for short in (
+        "company", "student", "job", "application", "event", "assistant"
+    ):
         service = COMPOSE["services"][f"p03-{short}-service"]
         assert service["ports"] == [
             f"{contract_ports[short]}:{contract_ports[short]}"
@@ -66,14 +68,12 @@ def test_every_worker_in_the_code_has_a_service():
     assert names == set(WORKERS)
 
 
-def test_every_service_build_points_at_an_existing_dockerfile_or_profile():
+def test_every_service_build_points_at_an_existing_dockerfile():
     for name, service in COMPOSE["services"].items():
         build = service.get("build")
         if not build:
             continue
         dockerfile = ROOT / "backend" / build["dockerfile"]
-        if "full" in service.get("profiles", []):
-            continue  # student Dockerfile arrives with the merge
         assert dockerfile.exists(), (name, dockerfile)
 
 
@@ -95,3 +95,15 @@ def test_env_example_contains_only_placeholders():
             f"{key} in .env.compose.example is not a placeholder; "
             "put real values in .env.compose (which Git ignores)"
         )
+
+
+def test_application_and_company_share_the_uploads_volume():
+    for name in ("p03-company-service", "p03-application-service"):
+        volumes = COMPOSE["services"][name]["volumes"]
+        assert "p03-uploads:/app/backend/uploads" in volumes
+
+
+def test_assistant_can_reach_ollama_on_the_host():
+    env = COMPOSE["services"]["p03-assistant-service"]["environment"]
+    assert "OLLAMA_BASE_URL" in env
+    assert "host.docker.internal" in env["OLLAMA_BASE_URL"]

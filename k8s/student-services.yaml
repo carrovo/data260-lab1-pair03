@@ -1,0 +1,216 @@
+# Student-side services (Xuanhua's code). Application shares the uploads
+# volume with Company so company users can open submitted resumes.
+apiVersion: v1
+kind: Service
+metadata:
+  name: p03-student-service
+  labels:
+    app.kubernetes.io/name: p03-student-service
+    app.kubernetes.io/part-of: p03
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: p03-student-service
+  ports:
+    - name: http
+      port: 9031
+      targetPort: 9031
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: p03-student-service
+  labels:
+    app.kubernetes.io/name: p03-student-service
+    app.kubernetes.io/part-of: p03
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: p03-student-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: p03-student-service
+        app.kubernetes.io/part-of: p03
+    spec:
+      containers:
+        - name: student
+          image: p03-student-service:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9031
+          envFrom:
+            - configMapRef:
+                name: p03-config
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: p03-secrets, key: MYSQL_PASSWORD}
+            - name: DATABASE_URL
+              value: mysql+pymysql://p03_app:$(MYSQL_PASSWORD)@p03-mysql:3306/p03
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: p03-secrets, key: JWT_SECRET_KEY}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: p03-application-service
+  labels:
+    app.kubernetes.io/name: p03-application-service
+    app.kubernetes.io/part-of: p03
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: p03-application-service
+  ports:
+    - name: http
+      port: 9033
+      targetPort: 9033
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: p03-application-service
+  labels:
+    app.kubernetes.io/name: p03-application-service
+    app.kubernetes.io/part-of: p03
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: p03-application-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: p03-application-service
+        app.kubernetes.io/part-of: p03
+    spec:
+      containers:
+        - name: application
+          image: p03-application-service:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9033
+          envFrom:
+            - configMapRef:
+                name: p03-config
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: p03-secrets, key: MYSQL_PASSWORD}
+            - name: DATABASE_URL
+              value: mysql+pymysql://p03_app:$(MYSQL_PASSWORD)@p03-mysql:3306/p03
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: p03-secrets, key: JWT_SECRET_KEY}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts:
+            - {name: uploads, mountPath: /app/backend/uploads}
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: p03-uploads
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: p03-assistant-service
+  labels:
+    app.kubernetes.io/name: p03-assistant-service
+    app.kubernetes.io/part-of: p03
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: p03-assistant-service
+  ports:
+    - name: http
+      port: 9035
+      targetPort: 9035
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: p03-assistant-service
+  labels:
+    app.kubernetes.io/name: p03-assistant-service
+    app.kubernetes.io/part-of: p03
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: p03-assistant-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: p03-assistant-service
+        app.kubernetes.io/part-of: p03
+    spec:
+      containers:
+        - name: assistant
+          image: p03-assistant-service:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9035
+          envFrom:
+            - configMapRef:
+                name: p03-config
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: p03-secrets, key: MYSQL_PASSWORD}
+            - name: DATABASE_URL
+              value: mysql+pymysql://p03_app:$(MYSQL_PASSWORD)@p03-mysql:3306/p03
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: p03-secrets, key: JWT_SECRET_KEY}
+            - name: OLLAMA_BASE_URL
+              value: http://host.docker.internal:11434
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}

@@ -8,5 +8,7 @@ resources:
   - mongo.yaml
   - kafka.yaml
   - init-jobs.yaml
+  - uploads.yaml
   - services.yaml
+  - student-services.yaml
   - workers.yaml

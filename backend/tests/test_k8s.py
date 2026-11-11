@@ -81,7 +81,8 @@ def test_services_match_the_contract():
     contract = {
         f"{s['image']}": s["port"]
         for s in CONTRACT["services"]
-        if s["name"] in {"company", "job", "event"}
+        if s["name"]
+        in {"company", "student", "job", "application", "event", "assistant"}
     }
     deployments = {
         d["metadata"]["name"]: d
@@ -193,3 +194,24 @@ def test_optional_seed_job_is_valid_and_not_in_the_default_deploy():
         if any(w in env["name"] for w in ("PASSWORD", "SECRET", "KEY")):
             assert "valueFrom" in env
     assert "optional" not in " ".join(KUSTOMIZATION["resources"])
+
+
+def test_company_and_application_share_the_uploads_claim():
+    claim = next(
+        d for d in of_kind("PersistentVolumeClaim")
+        if d["metadata"]["name"] == "p03-uploads"
+    )
+    assert claim["spec"]["accessModes"] == ["ReadWriteOnce"]
+    deployments = {d["metadata"]["name"]: d for d in of_kind("Deployment")}
+    for name in ("p03-company-service", "p03-application-service"):
+        volumes = pod_spec(deployments[name])["volumes"]
+        assert {"name": "uploads", "persistentVolumeClaim": {"claimName": "p03-uploads"}} in volumes
+
+
+def test_assistant_points_at_ollama_on_the_host():
+    deployment = next(
+        d for d in of_kind("Deployment")
+        if d["metadata"]["name"] == "p03-assistant-service"
+    )
+    env = {e["name"]: e.get("value") for e in pod_spec(deployment)["containers"][0]["env"]}
+    assert "host.docker.internal" in env["OLLAMA_BASE_URL"]

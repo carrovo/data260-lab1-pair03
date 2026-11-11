@@ -18,7 +18,6 @@ ps:
 seed:
 	$(COMPOSE) --profile seed run --rm p03-seed
 
-# Until Xuanhua's branch is merged: make smoke SMOKE_ARGS="--skip student"
 smoke:
 	python scripts/smoke.py $(SMOKE_ARGS)
 

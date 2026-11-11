@@ -1,5 +1,5 @@
-# The three Pair 03 company-side services. Student, Application and Assistant
-# belong to the student-side branch and are added when that branch is merged.
+# The Pair 03 company-side services (Company, Job, Event). The student-side
+# services are in student-services.yaml.
 apiVersion: v1
 kind: Service
 metadata:
@@ -72,7 +72,8 @@ spec:
             - {name: uploads, mountPath: /app/backend/uploads}
       volumes:
         - name: uploads
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: p03-uploads
 ---
 apiVersion: v1
 kind: Service
