@@ -117,3 +117,71 @@ The automated verification above used the repository's isolated test setup and
 deterministic model client. Live MySQL, Ollama, browser workflow, confirmation-
 gate, and prompt-injection demonstrations are documented separately in the
 report and pair verification recording.
+
+
+=====================================================================
+DATA 260 Lab 2 - Pair 03
+Run and Verification Log (Docker Compose, Kubernetes, load test)
+Verification date: 2026-11-11 (PST)
+Branch: feature/lab2-company-services
+=====================================================================
+
+Environment: Docker Desktop (Compose and its Kubernetes), JMeter 5.6, one laptop.
+Commands that need Docker, JMeter or kubectl were run by Trapti on her machine;
+their output was collected in the verify_*_output.txt files (git-ignored) and in
+JMeter's HTML reports (loadtest/report_*, git-ignored).
+
+[L2-1] Automated tests
+Command:  pytest backend/tests
+Result:   PASS - 396 passed, 1 skipped.
+
+[L2-2] Docker Compose, MySQL mode (PERSISTENCE=sql)
+Command:  docker compose --env-file .env.compose up -d --build ; make smoke
+Result:   PASS - company 9030, student 9031, job 9032, application 9033,
+          event 9034, assistant 9035 all report OK.
+
+[L2-3] Docker Compose, MongoDB mode (PERSISTENCE=mongo)
+Command:  sh scripts/verify_stack.sh
+Result:   PASS
+  - Mongo holds 50 companies, 300 jobs, 100 events; applications and
+    registrations stay in MySQL.
+  - 5-user JMeter trial: 110 requests, 0 errors. Duplicate apply/register
+    attempts return 409 by design and count as passes.
+  - 5 successful event registrations produced 5 new Mongo registration
+    documents; Kafka topic event.registration_created and the event worker agree.
+  - No publisher errors in the Application or Event service logs.
+
+[L2-4] Load test, JMeter, 0 errors at every level (see METRICS.md)
+  100 users:  6,850 requests, 105 req/s
+  300 users: 20,550 requests, 272 req/s
+  500 users: 34,250 requests, 404 req/s, mean 264 ms, p95 968 ms, p99 1,552 ms,
+             max 3,164 ms (re-run after the Kafka producers were merged).
+  Two bottlenecks were found and fixed: SQLAlchemy pool exhaustion at 300 users
+  (pool 5+10 raised to 20+20) and, at 500 users, the 40-thread worker pool
+  (raised to 120). The thread-pool explanation fits the logs but was not
+  isolated with a separate experiment.
+
+[L2-5] Kubernetes (namespace p03, Docker Desktop)
+Command:  sh scripts/verify_k8s.sh
+Result:   PASS - db-init and kafka-init completed, every deployment rolled out,
+          pymongo and confluent-kafka import inside the event, application and
+          job pods, smoke test OK on all six services, 5-user trial 110
+          requests with 0 errors, Kafka offsets and event-worker log agree.
+  Notes: the first run of the script failed because it checked the pods while
+  MySQL was restarting and the Job db-init was immutable; the script was fixed
+  to wait for every rollout. Kubernetes runs in SQL mode only; it was not load
+  tested.
+
+[L2-6] Frontend and gateway (port 9036)
+Command:  sh scripts/verify_frontend.sh
+Result:   PASS - the gateway reports healthy; the app's own pages return 200;
+          10 student and 5 company API routes reach the correct service
+          (200, or 401 where a token is required); smoke test OK. Browser check
+          of student login, jobs, events and the company dashboard: working.
+
+[L2-7] Not verified
+  - Student Assistant: the container reports "[model backend unreachable:
+    Errno 101]" because Ollama is not running on the host (curl to
+    localhost:11434 returned nothing). The code path itself is covered by the
+    automated tests only.
+  - Mongo mode on Kubernetes; Kubernetes under load; a cloud deployment.

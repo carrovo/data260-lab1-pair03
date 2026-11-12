@@ -124,16 +124,21 @@ They must not be reused outside this lab:
 | Student with no preference row | `seed3.student.004@demo.p03.example.com` | `Pair03Demo!2026` |
 | Company owning multiple jobs and events | `seed3.company.001@demo.p03.example.com` | `Pair03Demo!2026` |
 
-The complete-preferences student predictably matches `Pair03 Seed3 Job 001 -
-Data Analyst Intern` and `Pair03 Seed3 Event 001 - Data Science Career Night`,
-and has both a saved job and saved event. `Pair03 Seed3 Job 002 - Untrusted
-Content Test` contains harmless prompt-injection demonstration text; `Pair03
-Seed3 Job 003 - Clean Content Control` is its clean comparison. Searches for a
-title such as `Quantum Botanist` or an event named `Underwater Basket Weaving`
-provide reliable no-match demonstrations.
+The complete-preferences student predictably matches `Data Analyst Intern (REQ-001)`
+and `Data Science Career Night - San Jose #001`, and has both a saved job and
+saved event. `Untrusted Content Test (REQ-002)` contains harmless prompt-injection
+demonstration text; `Clean Content Control (REQ-003)` is its clean comparison.
+Searches for a title such as `Quantum Botanist` or an event named
+`Underwater Basket Weaving` provide reliable no-match demonstrations.
+
+The demo companies (for example Northwind Analytics, Bayview Health Data) and
+students are fictional. Job titles end in `(REQ-nnn)` and event titles in
+`- <city> #nnn`; that number keeps each title unique, because the seeder finds
+its own records by title.
 
 Seed ownership is limited to the reserved `seed3.*@demo.p03.example.com`
-accounts and `Pair03 Seed3` job/event natural keys. Reruns update those records
+accounts and the demo job/event titles. A database seeded by the first version
+(titles starting `Pair03 Seed3`) is renamed in place by the next run. Reruns update those records
 in one transaction without duplicating applications, registrations,
 preferences, or saved items. The script never drops or truncates tables and
 does not delete unrelated user data. It refuses a legacy generic
@@ -234,8 +239,8 @@ The `grep` shows the access-log line from `p03-job-service` and the
 
 Manifests live in `k8s/` and use the namespace `p03` and `p03-` names. They run
 the same pieces as Docker Compose: MySQL, MongoDB, Kafka (single node, KRaft),
-the Company, Job and Event services, and the three Kafka workers. Two Jobs
-prepare the data first: `p03-db-init` (MySQL tables and migrations) and
+the six services (Company, Student, Job, Application, Event, Assistant), the
+frontend gateway and the three Kafka workers. Two Jobs prepare the data first: `p03-db-init` (MySQL tables and migrations) and
 `p03-kafka-init` (topics and their `.dlq` topics).
 
 ### Local cluster (Docker Desktop)
@@ -261,6 +266,23 @@ the JWT key are never written into a manifest or committed.
 ```bash
 make k8s-seed
 ```
+
+### Roll the cluster onto freshly built images
+
+Docker Desktop shares its image store with Compose, so rebuilding is enough; no
+registry push. A Job cannot be edited, so `p03-db-init` is deleted and recreated:
+
+```bash
+docker compose --env-file .env.compose build
+kubectl -n p03 delete job p03-db-init --ignore-not-found
+kubectl apply -k k8s
+kubectl -n p03 wait --for=condition=complete job/p03-db-init job/p03-kafka-init --timeout=300s
+kubectl -n p03 rollout restart deployment
+```
+
+`scripts/verify_k8s.sh` does all of this, waits for every rollout, then checks
+the client libraries inside the pods, runs the smoke test and a small JMeter
+trial through port-forwards, and writes `verify_k8s_output.txt`.
 
 ### Reach a service from your laptop
 
@@ -294,6 +316,51 @@ make k8s-down                            # deletes the namespace and all data
 Companies, jobs and events can live in MySQL (default) or MongoDB. Set
 `PERSISTENCE=mongo` in `.env.compose` (Compose) or in `k8s/config.yaml` (Kubernetes);
 the database is `p03_handshake`. In Mongo mode `p03-db-init` drops the MySQL foreign keys
-that point at those three tables, and the seed loads them into MongoDB. Keep it on `sql`
-until the application, registration and assistant code reads jobs/companies/events through
-the repositories (`backend/app/repos.py`); those parts still use SQL joins.
+that point at those three tables, and the seed loads them into MongoDB. Students,
+applications, saved items and event registrations always stay in MySQL.
+
+All code that reads companies, jobs or events goes through the repositories in
+`backend/app/repos.py`: the Company, Job and Event routes, the student application
+and registration routes, and the Assistant tools. With `PERSISTENCE=sql` the original
+SQL code paths run unchanged.
+
+Status: Mongo mode is verified on Docker Compose (seed 50 companies, 300 jobs,
+100 events in MongoDB; smoke test and a JMeter trial with 0 errors). It is not
+verified on Kubernetes, where `k8s/config.yaml` stays on `sql`. To switch back to
+MySQL, remove the `PERSISTENCE=mongo` line, rebuild, and reseed.
+
+## Frontend and gateway (port 9036)
+
+`frontend/` is the React app. Its image (`frontend/Dockerfile`) builds the site and
+serves it with nginx on port 9036. nginx is also the single entry point for the
+browser, so there is one origin and no CORS: it forwards API calls to the six
+services by path (`frontend/nginx.conf`). Student requests use the prefix `/gw`
+(removed before forwarding) because the app has its own `/jobs`, `/events` and
+`/applications` pages.
+
+| Browser path | Service |
+|---|---|
+| `/gw/auth/*` | Student 9031 |
+| `/gw/jobs`, `/gw/jobs/{id}` | Job 9032 |
+| `/gw/jobs/{id}/applications`, `/gw/applications/*` | Application 9033 |
+| `/gw/events*`, `/gw/registrations/*` | Event 9034 |
+| `/gw/assistant/*` | Assistant 9035 |
+| `/api/companies/auth`, `/me`, `/students`, `/applications`, `/jobs/{id}/applicants` | Company 9030 |
+| `/api/companies/jobs*` | Job 9032 |
+| `/api/companies/events*` | Event 9034 |
+
+`backend/tests/test_frontend_gateway.py` replays nginx's matching rule against 27
+real paths. Open http://localhost:9036 after `up -d --build`; demo logins are in
+the table above. In Compose the gateway starts with the rest of the stack; in
+Kubernetes it is `k8s/frontend.yaml`.
+
+## Load testing and verification
+
+- `loadtest/` holds the JMeter plan (4 scenarios, 100 / 300 / 500 concurrent users);
+  see `loadtest/README.md` for the commands and `METRICS.md` for the results and
+  the two bottlenecks found and fixed (database pool, worker thread pool).
+- `scripts/verify_stack.sh` checks a running Compose stack (smoke test, 5-user trial,
+  Mongo counts, Kafka offsets, worker log) and writes `verify_output.txt`.
+- `scripts/verify_k8s.sh` does the same for Kubernetes (`verify_k8s_output.txt`).
+- `scripts/verify_frontend.sh` starts the stack and checks every gateway route
+  (`verify_frontend_output.txt`).

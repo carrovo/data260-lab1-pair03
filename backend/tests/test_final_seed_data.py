@@ -33,6 +33,8 @@ from backend.seed_final_data import (
     APPLICATION_COUNT,
     CITIES,
     CLEAN_CONTROL_JOB_TITLE,
+    COMPANY_NAMES,
+    event_title,
     COMPANY_COUNT,
     DEFAULT_BASE_DATE,
     DEMO_COMPANY_EMAIL,
@@ -304,7 +306,7 @@ def test_demo_preferences_match_known_job_event_and_saved_items(
         job_results = search_jobs(
             session,
             title="Data Analyst",
-            company="Pair03 Demo Company 001",
+            company=COMPANY_NAMES[0],
             category="internship",
             city="San Jose",
             min_salary=60000,
@@ -374,10 +376,10 @@ def test_remote_data_science_fixture_and_november_event_query(
     assert job.is_remote is True
     assert job.skills == "Data Science, Python, SQL, Tableau"
     assert f"id={job.id}" in matching_jobs
-    assert "Pair03 Seed3 Event 002 - Interview Workshop" in (
+    assert event_title(2, "Interview Workshop", "Santa Clara") in (
         placeholder_city_events
     )
-    assert "Pair03 Seed3 Event 002 - Interview Workshop" in real_city_events
+    assert event_title(2, "Interview Workshop", "Santa Clara") in real_city_events
 
 
 def test_prompt_injection_and_clean_control_records_exist(seeded_database):
@@ -586,3 +588,48 @@ def test_missing_canonical_schema_is_refused_without_creating_tables():
 
 def inspect_table_names(engine):
     return set(inspect(engine).get_table_names())
+
+
+def test_demo_names_look_real_and_titles_stay_unique():
+    plan = generate_seed_plan(DEFAULT_BASE_DATE)
+    for kind in ("students", "companies", "jobs", "events"):
+        for record in plan[kind]:
+            text = " ".join(
+                str(v) for k, v in record.items() if k != "legacy_title"
+            )
+            assert "Pair03" not in text and "Seed3" not in text, record
+    assert len({r["full_name"] for r in plan["students"]}) == STUDENT_COUNT
+    assert len({r["name"] for r in plan["companies"]}) == COMPANY_COUNT
+    assert len({r["title"] for r in plan["jobs"]}) == JOB_COUNT
+    assert len({r["title"] for r in plan["events"]}) == EVENT_COUNT
+
+
+def test_rerun_renames_old_pair03_titles_in_place_instead_of_duplicating():
+    """A database seeded by the first version has 'Pair03 Seed3 ...' titles.
+    Seeding again must rename those rows, not add a second copy."""
+    engine = _memory_engine()
+    with Session(engine) as session:
+        seed_final_data(session, output=StringIO())
+        plan = generate_seed_plan(DEFAULT_BASE_DATE)
+        for job, record in zip(
+            session.scalars(select(Job).order_by(Job.id)), plan["jobs"]
+        ):
+            job.title = record["legacy_title"]
+        for event, record in zip(
+            session.scalars(select(Event).order_by(Event.id)), plan["events"]
+        ):
+            event.title = record["legacy_title"]
+        session.commit()
+        assert session.scalars(select(Job.title)).first().startswith("Pair03 Seed3")
+
+    with Session(engine) as session:
+        seed_final_data(session, output=StringIO())
+        assert session.scalar(select(func.count(Job.id))) == JOB_COUNT
+        assert session.scalar(select(func.count(Event.id))) == EVENT_COUNT
+        assert session.scalar(
+            select(func.count(Job.id)).where(Job.title.like("Pair03%"))
+        ) == 0
+        assert session.scalar(
+            select(Job.id).where(Job.title == DEMO_MATCH_JOB_TITLE)
+        ) == 1
+    engine.dispose()

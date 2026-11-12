@@ -681,3 +681,49 @@ def test_assistant_tools_read_jobs_and_events_from_mongo(student_side):
         assert saved.startswith("Saved job")
         missing = save_job_or_event(db, student_id=student_id, item_type="event", item_id=99)
         assert "No event was found with id 99" in missing
+
+
+def test_mongo_seed_renames_old_pair03_titles_in_place(monkeypatch):
+    from io import StringIO
+
+    from backend.seed_final_data import (
+        DEFAULT_BASE_DATE,
+        EVENT_COUNT,
+        JOB_COUNT,
+        generate_seed_plan,
+        seed_final_data,
+    )
+
+    database = mongomock.MongoClient()["p03_seed_legacy"]
+    monkeypatch.setattr(settings, "persistence", "mongo")
+    monkeypatch.setattr(repos, "get_mongo_database", lambda: database)
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+
+    def run():
+        with Session(engine) as session:
+            seed_final_data(
+                session, base_date=DEFAULT_BASE_DATE, output=StringIO()
+            )
+
+    run()
+    plan = generate_seed_plan(DEFAULT_BASE_DATE)
+    for record in plan["jobs"]:
+        database["jobs"].update_one(
+            {"title": record["title"]}, {"$set": {"title": record["legacy_title"]}}
+        )
+    for record in plan["events"]:
+        database["events"].update_one(
+            {"title": record["title"]}, {"$set": {"title": record["legacy_title"]}}
+        )
+    assert database["jobs"].count_documents({"title": {"$regex": "^Pair03"}}) == JOB_COUNT
+
+    run()
+    assert database["jobs"].count_documents({}) == JOB_COUNT
+    assert database["events"].count_documents({}) == EVENT_COUNT
+    assert database["jobs"].count_documents({"title": {"$regex": "^Pair03"}}) == 0
+    assert database["events"].count_documents({"title": {"$regex": "^Pair03"}}) == 0
