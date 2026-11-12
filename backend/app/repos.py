@@ -98,6 +98,16 @@ class SqlJobRepo:
             select(Job).where(Job.id == int(job_id)).options(selectinload(Job.company))
         )
 
+    def get_many(self, job_ids: list[int]) -> dict[int, Job]:
+        if not job_ids:
+            return {}
+        rows = self._db.scalars(
+            select(Job)
+            .where(Job.id.in_([int(i) for i in job_ids]))
+            .options(selectinload(Job.company))
+        ).all()
+        return {row.id: row for row in rows}
+
     def get_for_company(self, job_id: int, company_id: int) -> Job | None:
         return self._db.scalar(
             select(Job)
@@ -280,6 +290,26 @@ class MongoJobRepo:
         )
         return self._with_companies(jobs)
 
+    def get_many(self, job_ids: list[int]) -> dict[int, SimpleNamespace]:
+        jobs = self._jobs.get_many(job_ids)
+        by_id = self._companies.get_many(list({j.company_id for j in jobs.values()}))
+        for job in jobs.values():
+            job.company = by_id.get(job.company_id)
+        return {k: v for k, v in jobs.items() if v.company is not None}
+
+    def search_advanced(
+        self, *, company: str | None = None, **filters: Any
+    ) -> list[SimpleNamespace]:
+        """Assistant search: (job, company) rows, company name filter included."""
+        company_ids = None
+        if company:
+            company_ids = self._companies.ids_with_name_containing(company)
+            if not company_ids:
+                return []
+        return self._with_companies(
+            self._jobs.search_advanced(company_ids=company_ids, **filters)
+        )
+
     def update(self, job: SimpleNamespace, data: dict[str, Any]) -> SimpleNamespace:
         return self._with_company(self._jobs.update(job.id, data))
 
@@ -327,6 +357,9 @@ class MongoEventRepo:
 
     def list_upcoming(self, keyword: str = "") -> list[SimpleNamespace]:
         return self._with_companies(self._events.list_upcoming(keyword))
+
+    def search_advanced(self, **filters: Any) -> list[SimpleNamespace]:
+        return self._with_companies(self._events.search_advanced(**filters))
 
     def update(self, event: SimpleNamespace, data: dict[str, Any]) -> SimpleNamespace:
         return self._with_company(self._events.update(event.id, data))

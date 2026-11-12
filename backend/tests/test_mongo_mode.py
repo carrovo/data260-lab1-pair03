@@ -517,3 +517,115 @@ def test_event_ownership_and_registration_guard_in_mongo(mongo_context):
     registrants = client.get(f"/api/companies/events/{event['id']}/registrants", headers=owner)
     assert registrants.status_code == 200
     assert [r["email"] for r in registrants.json()] == ["s@example.com"]
+
+
+# ------------------------------------------- student side with jobs/events in Mongo
+def _pdf_bytes():
+    import io
+
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
+@pytest.fixture
+def student_side(mongo_context, tmp_path, monkeypatch):
+    from backend.app.routers.applications import router as applications_router
+    from backend.app.routers.registration_routes import router as registration_router
+    from backend.app.security import create_access_token
+
+    client, engine, database = mongo_context
+    client.app.include_router(applications_router)
+    client.app.include_router(registration_router)
+    monkeypatch.setattr(settings, "resume_upload_dir", tmp_path)
+
+    with Session(engine) as db:
+        student = Student(
+            email="s@example.com", password_hash="x", full_name="Sam Student", city="San Jose"
+        )
+        db.add(student)
+        db.commit()
+        token = create_access_token(student.id, "student")
+    return client, engine, database, {"Authorization": f"Bearer {token}"}
+
+
+def test_student_applies_and_lists_applications_with_jobs_in_mongo(student_side):
+    client, engine, database, student = student_side
+    company = headers(client)
+    job = client.post("/api/companies/jobs", json=JOB, headers=company).json()
+
+    pdf = {"resume": ("cv.pdf", _pdf_bytes(), "application/pdf")}
+    created = client.post(f"/jobs/{job['id']}/applications", files=pdf, headers=student)
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["job"]["title"] == "Data Intern"
+    assert body["job"]["company"]["name"] == COMPANY["name"]
+
+    again = client.post(f"/jobs/{job['id']}/applications", files=pdf, headers=student)
+    assert again.status_code == 409
+    missing = client.post("/jobs/999/applications", files=pdf, headers=student)
+    assert missing.status_code == 404
+
+    listed = client.get("/applications/me", headers=student)
+    assert listed.status_code == 200
+    assert [a["job"]["company"]["name"] for a in listed.json()] == [COMPANY["name"]]
+    assert client.get("/applications/me", params={"status": "Reviewed"}, headers=student).json() == []
+
+
+def test_student_registers_for_events_in_mongo(student_side):
+    client, engine, database, student = student_side
+    company = headers(client)
+    event = client.post("/api/companies/events", json=_event_payload(), headers=company).json()
+
+    created = client.post(f"/events/{event['id']}/registrations", headers=student)
+    assert created.status_code == 201, created.text
+    assert created.json()["event"]["company"]["name"] == COMPANY["name"]
+    assert client.post(f"/events/{event['id']}/registrations", headers=student).status_code == 409
+    assert client.post("/events/999/registrations", headers=student).status_code == 404
+
+    mine = client.get("/registrations/me", headers=student)
+    assert [r["event"]["title"] for r in mine.json()] == ["Data Career Fair"]
+
+
+def test_assistant_tools_read_jobs_and_events_from_mongo(student_side):
+    from backend.app.ai.tools import (
+        get_job_details,
+        save_job_or_event,
+        search_events,
+        search_jobs,
+    )
+
+    client, engine, database, student = student_side
+    company = headers(client)
+    client.post("/api/companies/jobs", json={**JOB, "skills": "SQL, Python"}, headers=company)
+    client.post(
+        "/api/companies/jobs",
+        json={**JOB, "title": "Remote Analyst", "is_remote": True, "salary": "90.00"},
+        headers=company,
+    )
+    client.post("/api/companies/events", json=_event_payload(major="Data Science"), headers=company)
+
+    with Session(engine) as db:
+        student_id = db.query(Student).one().id
+        assert "Data Intern" in search_jobs(db, title="intern")
+        assert "Remote Analyst" not in search_jobs(db, title="intern")
+        assert "Remote Analyst" in search_jobs(db, is_remote=True, min_salary="80")
+        assert "Data Intern" in search_jobs(db, skills="sql, python", company="example")
+        assert search_jobs(db, company="nobody") == "No jobs matched those filters."
+        assert "Data Intern" in search_jobs(db, title="Data Intern jobs")  # title fallback
+
+        details = get_job_details(db, job_id=1)
+        assert "Company: Example Analytics" in details
+        assert get_job_details(db, job_id=99) == "No job was found with id 99."
+
+        assert "Data Career Fair" in search_events(db, name="career", major="data")
+        assert search_events(db, city="Nowhere") == "No events matched those filters."
+
+        saved = save_job_or_event(db, student_id=student_id, item_type="job", item_id=1)
+        assert saved.startswith("Saved job")
+        missing = save_job_or_event(db, student_id=student_id, item_type="event", item_id=99)
+        assert "No event was found with id 99" in missing

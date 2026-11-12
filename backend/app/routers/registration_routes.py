@@ -10,6 +10,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.models import Event, Registration, Student
+from backend.app.persistence_views import mongo_mode, registration_views
+from backend.app.repos import make_repos
 from backend.app.routers.student_auth import get_current_student, get_db
 from backend.app.schemas.event import RegistrationResponse
 
@@ -35,7 +37,11 @@ def register_for_event(
     current_student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    event = db.get(Event, event_id)
+    event = (
+        make_repos(db).events.get(event_id)
+        if mongo_mode()
+        else db.get(Event, event_id)
+    )
     if event is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -69,6 +75,9 @@ def register_for_event(
             detail=DUPLICATE_REGISTRATION_DETAIL,
         ) from exc
 
+    if mongo_mode():
+        return registration_views(db, [registration])[0]
+
     statement = (
         select(Registration)
         .where(Registration.id == registration.id)
@@ -86,6 +95,17 @@ def list_current_student_registrations(
     current_student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
+    if mongo_mode():
+        rows = list(
+            db.scalars(
+                select(Registration).where(
+                    Registration.student_id == current_student.id
+                )
+            ).all()
+        )
+        views = registration_views(db, rows)
+        return sorted(views, key=lambda v: (v.event.starts_at, v.id))
+
     statement = (
         select(Registration)
         .join(Registration.event)

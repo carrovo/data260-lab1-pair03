@@ -16,6 +16,8 @@ from sqlalchemy.orm import Session, selectinload
 from backend.app.application_status import ApplicationStatus
 from backend.app.config import settings
 from backend.app.models import Application, Job, Student
+from backend.app.persistence_views import application_views, mongo_mode
+from backend.app.repos import make_repos
 from backend.app.routers.student_auth import get_current_student, get_db
 from backend.app.schemas.application import ApplicationResponse
 
@@ -175,7 +177,11 @@ async def apply_to_job(
     current_student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    job = db.get(Job, job_id)
+    job = (
+        make_repos(db).jobs.get(job_id)
+        if mongo_mode()
+        else db.get(Job, job_id)
+    )
 
     if job is None:
         raise HTTPException(
@@ -220,6 +226,9 @@ async def apply_to_job(
         remove_file(stored_resume.path)
         raise
 
+    if mongo_mode():
+        return application_views(db, [application])[0]
+
     statement = (
         select(Application)
         .where(Application.id == application.id)
@@ -248,6 +257,12 @@ def list_current_student_applications(
         statement = statement.where(
             Application.status == status_filter.value
         )
+
+    if mongo_mode():
+        statement = statement.order_by(
+            Application.applied_at.desc(), Application.id.desc()
+        )
+        return application_views(db, list(db.scalars(statement).all()))
 
     statement = statement.options(
         application_with_job_and_company()

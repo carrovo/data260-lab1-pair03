@@ -174,6 +174,49 @@ class JobStore:
     def get(self, job_id: int) -> SimpleNamespace | None:
         return _clean(self._collection.find_one({"_id": int(job_id)}))
 
+    def get_many(self, job_ids: list[int]) -> dict[int, SimpleNamespace]:
+        cursor = self._collection.find({"_id": {"$in": [int(i) for i in job_ids]}})
+        return {row["_id"]: _clean(row) for row in cursor}
+
+    def search_advanced(
+        self,
+        *,
+        title: str | None = None,
+        company_ids: list[int] | None = None,
+        category: str | None = None,
+        city: str | None = None,
+        is_remote: bool | None = None,
+        min_salary: Any = None,
+        skills: list[str] | None = None,
+        deadline_before: datetime | None = None,
+        limit: int = 10,
+    ) -> list[SimpleNamespace]:
+        """The assistant's job search: every given filter must match."""
+        conditions: list[dict[str, Any]] = []
+        if title:
+            conditions.append({"title": _contains(title)})
+        if company_ids is not None:
+            conditions.append({"company_id": {"$in": list(company_ids)}})
+        if category:
+            conditions.append({"category": category})
+        if city:
+            conditions.append({"city": _contains(city)})
+        if is_remote is not None:
+            conditions.append({"is_remote": bool(is_remote)})
+        if min_salary is not None:
+            conditions.append({"salary": {"$gte": float(min_salary)}})
+        for skill in skills or []:
+            conditions.append({"skills": _contains(skill)})
+        if deadline_before is not None:
+            conditions.append({"deadline": {"$lte": _aware(deadline_before)}})
+        query = {"$and": conditions} if conditions else {}
+        cursor = (
+            self._collection.find(query)
+            .sort([("created_at", -1), ("_id", -1)])
+            .limit(limit)
+        )
+        return [_clean(row) for row in cursor]
+
     def get_for_company(self, job_id: int, company_id: int) -> SimpleNamespace | None:
         """Ownership check: a company only sees its own job."""
         return _clean(
@@ -293,6 +336,39 @@ class EventStore:
     def list_for_company(self, company_id: int) -> list[SimpleNamespace]:
         cursor = self._collection.find({"company_id": int(company_id)}).sort(
             [("starts_at", 1), ("_id", 1)]
+        )
+        return [_clean(row) for row in cursor]
+
+    def search_advanced(
+        self,
+        *,
+        name: str | None = None,
+        city: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        major: str | None = None,
+        eligibility: str | None = None,
+        limit: int = 10,
+    ) -> list[SimpleNamespace]:
+        """The assistant's event search: every given filter must match."""
+        conditions: list[dict[str, Any]] = []
+        if name:
+            conditions.append({"title": _contains(name)})
+        if city:
+            conditions.append({"city": _contains(city)})
+        if start is not None:
+            conditions.append({"starts_at": {"$gte": _aware(start)}})
+        if end is not None:
+            conditions.append({"starts_at": {"$lte": _aware(end)}})
+        if major:
+            conditions.append({"major": _contains(major)})
+        if eligibility:
+            conditions.append({"eligibility": _contains(eligibility)})
+        query = {"$and": conditions} if conditions else {}
+        cursor = (
+            self._collection.find(query)
+            .sort([("starts_at", 1), ("_id", 1)])
+            .limit(limit)
         )
         return [_clean(row) for row in cursor]
 
