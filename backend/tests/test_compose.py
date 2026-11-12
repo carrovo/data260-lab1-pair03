@@ -114,3 +114,21 @@ def test_persistence_defaults_to_sql_and_mongo_uses_the_plan_database():
     assert env["PERSISTENCE"] == "${PERSISTENCE:-sql}"
     assert env["MONGO_DB"] == COMPOSE["x-worker-env"]["MONGO_DB"] == "p03_handshake"
     assert "backend.migrate_mongo_persistence" in COMPOSE["services"]["p03-db-init"]["command"]
+
+
+def test_service_images_have_the_client_libraries_their_code_imports():
+    """The unit tests use fakes, so a missing library only shows when the container runs."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "services"
+
+    def packages(service):
+        lines = (root / service / "requirements.txt").read_text().splitlines()
+        return {line.split(">")[0].split("[")[0].strip().lower() for line in lines if line.strip()}
+
+    # these services call publish_safely (Kafka producer)
+    for service in ("company", "job", "application", "event"):
+        assert "confluent-kafka" in packages(service), service
+    # these read companies/jobs/events through the repositories (PERSISTENCE=mongo)
+    for service in ("company", "job", "application", "event", "assistant"):
+        assert "pymongo" in packages(service), service
