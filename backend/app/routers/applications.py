@@ -20,6 +20,7 @@ from backend.app.persistence_views import application_views, mongo_mode
 from backend.app.repos import make_repos
 from backend.app.routers.student_auth import get_current_student, get_db
 from backend.app.schemas.application import ApplicationResponse
+from backend.common.outgoing import publish_safely
 
 
 router = APIRouter(tags=["student applications"])
@@ -225,6 +226,16 @@ async def apply_to_job(
         db.rollback()
         remove_file(stored_resume.path)
         raise
+
+    publish_safely(
+        "application.created",
+        {
+            "application_id": str(application.id),
+            "student_id": str(application.student_id),
+            "job_id": str(application.job_id),
+        },
+        key=str(application.id),
+    )
 
     if mongo_mode():
         return application_views(db, [application])[0]

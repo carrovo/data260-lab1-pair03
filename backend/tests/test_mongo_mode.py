@@ -553,8 +553,19 @@ def student_side(mongo_context, tmp_path, monkeypatch):
     return client, engine, database, {"Authorization": f"Bearer {token}"}
 
 
-def test_student_applies_and_lists_applications_with_jobs_in_mongo(student_side):
+def test_student_applies_and_lists_applications_with_jobs_in_mongo(
+    student_side,
+    monkeypatch,
+):
+    from backend.app.routers import applications
+
     client, engine, database, student = student_side
+    published = []
+    monkeypatch.setattr(
+        applications,
+        "publish_safely",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
     company = headers(client)
     job = client.post("/api/companies/jobs", json=JOB, headers=company).json()
 
@@ -564,11 +575,27 @@ def test_student_applies_and_lists_applications_with_jobs_in_mongo(student_side)
     body = created.json()
     assert body["job"]["title"] == "Data Intern"
     assert body["job"]["company"]["name"] == COMPANY["name"]
+    assert published == [
+        (
+            (
+                "application.created",
+                {
+                    "application_id": str(body["id"]),
+                    "student_id": str(body["student_id"]),
+                    "job_id": str(job["id"]),
+                },
+            ),
+            {"key": str(body["id"])},
+        )
+    ]
 
+    published.clear()
     again = client.post(f"/jobs/{job['id']}/applications", files=pdf, headers=student)
     assert again.status_code == 409
+    assert published == []
     missing = client.post("/jobs/999/applications", files=pdf, headers=student)
     assert missing.status_code == 404
+    assert published == []
 
     listed = client.get("/applications/me", headers=student)
     assert listed.status_code == 200
@@ -576,16 +603,41 @@ def test_student_applies_and_lists_applications_with_jobs_in_mongo(student_side)
     assert client.get("/applications/me", params={"status": "Reviewed"}, headers=student).json() == []
 
 
-def test_student_registers_for_events_in_mongo(student_side):
+def test_student_registers_for_events_in_mongo(student_side, monkeypatch):
+    from backend.app.routers import registration_routes
+
     client, engine, database, student = student_side
+    published = []
+    monkeypatch.setattr(
+        registration_routes,
+        "publish_safely",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
     company = headers(client)
     event = client.post("/api/companies/events", json=_event_payload(), headers=company).json()
 
     created = client.post(f"/events/{event['id']}/registrations", headers=student)
     assert created.status_code == 201, created.text
-    assert created.json()["event"]["company"]["name"] == COMPANY["name"]
+    body = created.json()
+    assert body["event"]["company"]["name"] == COMPANY["name"]
+    assert published == [
+        (
+            (
+                "event.registration_created",
+                {
+                    "registration_id": str(body["id"]),
+                    "student_id": str(body["student_id"]),
+                    "event_id": str(event["id"]),
+                },
+            ),
+            {"key": str(body["id"])},
+        )
+    ]
+    published.clear()
     assert client.post(f"/events/{event['id']}/registrations", headers=student).status_code == 409
+    assert published == []
     assert client.post("/events/999/registrations", headers=student).status_code == 404
+    assert published == []
 
     mine = client.get("/registrations/me", headers=student)
     assert [r["event"]["title"] for r in mine.json()] == ["Data Career Fair"]

@@ -14,6 +14,7 @@ from backend.app.persistence_views import mongo_mode, registration_views
 from backend.app.repos import make_repos
 from backend.app.routers.student_auth import get_current_student, get_db
 from backend.app.schemas.event import RegistrationResponse
+from backend.common.outgoing import publish_safely
 
 
 router = APIRouter(tags=["student event registrations"])
@@ -74,6 +75,16 @@ def register_for_event(
             status_code=status.HTTP_409_CONFLICT,
             detail=DUPLICATE_REGISTRATION_DETAIL,
         ) from exc
+
+    publish_safely(
+        "event.registration_created",
+        {
+            "registration_id": str(registration.id),
+            "student_id": str(registration.student_id),
+            "event_id": str(registration.event_id),
+        },
+        key=str(registration.id),
+    )
 
     if mongo_mode():
         return registration_views(db, [registration])[0]
