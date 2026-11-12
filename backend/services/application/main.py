@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+
+from backend.common.runtime import configure_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.common.tracing import TraceMiddleware
@@ -10,6 +12,7 @@ app = FastAPI(
     version="0.2.0",
 )
 
+configure_threadpool(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
