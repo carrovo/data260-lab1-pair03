@@ -32,3 +32,5 @@ loadtest/*.jtl
 loadtest/report_*/
 loadtest/old_runs/
 loadtest/jmeter.log
+verify_output.txt
+loadtest/trial_*.jtl
