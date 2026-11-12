@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.models import Company, Event, Registration, Student
+from backend.app.routers import registration_routes as registration_router
 from backend.app.routers.registration_routes import register_for_event
 
 
@@ -172,10 +173,26 @@ def test_missing_event_detail_returns_404(auth_test_context):
     assert invalid_id_response.status_code == 422
 
 
-def test_authenticated_student_can_register_for_event(auth_test_context):
+def test_authenticated_student_can_register_for_event(
+    auth_test_context,
+    monkeypatch,
+):
     client, engine = auth_test_context
     event_id = create_event(engine)
     auth_response = signup_student(client)
+    student_id = auth_response["student"]["id"]
+    published = []
+
+    def capture(event_type, payload, **kwargs):
+        with Session(engine) as db:
+            persisted = db.get(Registration, int(payload["registration_id"]))
+            assert persisted is not None
+            assert persisted.student_id == student_id
+            assert persisted.event_id == event_id
+        published.append((event_type, payload, kwargs))
+        return True
+
+    monkeypatch.setattr(registration_router, "publish_safely", capture)
 
     response = client.post(
         f"/events/{event_id}/registrations",
@@ -191,6 +208,42 @@ def test_authenticated_student_can_register_for_event(auth_test_context):
     assert registration["event"]["company"]["name"] == "Event Company"
     assert "student" not in registration
     assert "password_hash" not in str(registration)
+    registration_id = str(registration["id"])
+    assert published == [
+        (
+            "event.registration_created",
+            {
+                "registration_id": registration_id,
+                "student_id": str(student_id),
+                "event_id": str(event_id),
+            },
+            {"key": registration_id},
+        )
+    ]
+
+
+def test_registration_succeeds_when_publish_safely_returns_false(
+    auth_test_context,
+    monkeypatch,
+):
+    client, engine = auth_test_context
+    event_id = create_event(engine)
+    auth_response = signup_student(client)
+    monkeypatch.setattr(
+        registration_router,
+        "publish_safely",
+        lambda *args, **kwargs: False,
+    )
+
+    response = client.post(
+        f"/events/{event_id}/registrations",
+        headers=authorization_headers(auth_response),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["event_id"] == event_id
+    with Session(engine) as db:
+        assert db.get(Registration, response.json()["id"]) is not None
 
 
 def test_registration_is_linked_only_to_authenticated_student(
@@ -230,9 +283,18 @@ def test_registration_endpoints_require_authentication(auth_test_context):
     assert history_response.status_code == 401
 
 
-def test_registering_for_missing_event_returns_404(auth_test_context):
+def test_registering_for_missing_event_returns_404(
+    auth_test_context,
+    monkeypatch,
+):
     client, _ = auth_test_context
     auth_response = signup_student(client)
+    published = []
+    monkeypatch.setattr(
+        registration_router,
+        "publish_safely",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
 
     response = client.post(
         "/events/999999/registrations",
@@ -241,18 +303,30 @@ def test_registering_for_missing_event_returns_404(auth_test_context):
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Event not found."}
+    assert published == []
 
 
-def test_duplicate_registration_returns_409(auth_test_context):
+def test_duplicate_registration_returns_409(
+    auth_test_context,
+    monkeypatch,
+):
     client, engine = auth_test_context
     event_id = create_event(engine)
     auth_response = signup_student(client)
     headers = authorization_headers(auth_response)
+    published = []
+    monkeypatch.setattr(
+        registration_router,
+        "publish_safely",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
 
     first_response = client.post(
         f"/events/{event_id}/registrations",
         headers=headers,
     )
+    assert len(published) == 1
+    published.clear()
     duplicate_response = client.post(
         f"/events/{event_id}/registrations",
         headers=headers,
@@ -270,6 +344,7 @@ def test_duplicate_registration_returns_409(auth_test_context):
         )
 
     assert registration_count == 1
+    assert published == []
 
 
 def test_registration_history_is_ordered_and_private(auth_test_context):
@@ -349,6 +424,12 @@ def test_integrity_error_rolls_back_and_returns_registration_conflict(
     event_id = create_event(engine)
     auth_response = signup_student(client)
     student_id = auth_response["student"]["id"]
+    published = []
+    monkeypatch.setattr(
+        registration_router,
+        "publish_safely",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
 
     with Session(engine) as db:
         student = db.get(Student, student_id)
@@ -382,3 +463,4 @@ def test_integrity_error_rolls_back_and_returns_registration_conflict(
     assert exc_info.value.detail == (
         "You are already registered for this event."
     )
+    assert published == []

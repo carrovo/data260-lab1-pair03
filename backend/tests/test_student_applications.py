@@ -12,6 +12,7 @@ from starlette.datastructures import Headers
 from backend.app.application_status import ApplicationStatus
 from backend.app.config import settings
 from backend.app.models import Application, Company, Job, Student
+from backend.app.routers import applications as applications_router
 from backend.app.routers.applications import (
     MAX_RESUME_SIZE_BYTES,
     apply_to_job,
@@ -136,6 +137,73 @@ def test_authenticated_student_can_apply_with_valid_pdf(auth_test_context):
     assert application is not None
     assert application.resume_storage_key
     assert (settings.resume_upload_dir / application.resume_storage_key).is_file()
+
+
+def test_successful_application_publishes_once_after_commit(
+    auth_test_context,
+    monkeypatch,
+):
+    client, engine = auth_test_context
+    job_id = create_job(engine)
+    auth_response = signup_student(client)
+    student_id = auth_response["student"]["id"]
+    published = []
+
+    def capture(event_type, payload, **kwargs):
+        with Session(engine) as db:
+            persisted = db.get(Application, int(payload["application_id"]))
+            assert persisted is not None
+            assert persisted.student_id == student_id
+            assert persisted.job_id == job_id
+        published.append((event_type, payload, kwargs))
+        return True
+
+    monkeypatch.setattr(applications_router, "publish_safely", capture)
+
+    response = client.post(
+        f"/jobs/{job_id}/applications",
+        headers=authorization_headers(auth_response),
+        files=resume_file(),
+    )
+
+    assert response.status_code == 201
+    application_id = str(response.json()["id"])
+    assert published == [
+        (
+            "application.created",
+            {
+                "application_id": application_id,
+                "student_id": str(student_id),
+                "job_id": str(job_id),
+            },
+            {"key": application_id},
+        )
+    ]
+
+
+def test_application_succeeds_when_publish_safely_returns_false(
+    auth_test_context,
+    monkeypatch,
+):
+    client, engine = auth_test_context
+    job_id = create_job(engine)
+    auth_response = signup_student(client)
+    monkeypatch.setattr(
+        applications_router,
+        "publish_safely",
+        lambda *args, **kwargs: False,
+    )
+
+    response = client.post(
+        f"/jobs/{job_id}/applications",
+        headers=authorization_headers(auth_response),
+        files=resume_file(),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["job_id"] == job_id
+    with Session(engine) as db:
+        assert db.get(Application, response.json()["id"]) is not None
 
 
 def test_application_uses_authenticated_student_and_default_status(
@@ -263,10 +331,16 @@ def test_resume_rejects_wrong_extension_or_mime_type(
     assert response.json() == {"detail": expected_detail}
 
 
-def test_resume_rejects_invalid_pdf_content(auth_test_context):
+def test_resume_rejects_invalid_pdf_content(auth_test_context, monkeypatch):
     client, engine = auth_test_context
     job_id = create_job(engine)
     auth_response = signup_student(client)
+    published = []
+    monkeypatch.setattr(
+        applications_router,
+        "publish_safely",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
 
     response = client.post(
         f"/jobs/{job_id}/applications",
@@ -279,6 +353,7 @@ def test_resume_rejects_invalid_pdf_content(auth_test_context):
         "detail": "Resume must be a valid, readable PDF."
     }
     assert list(settings.resume_upload_dir.glob("*")) == []
+    assert published == []
 
 
 def test_resume_rejects_encrypted_pdf(auth_test_context):
@@ -320,11 +395,18 @@ def test_resume_rejects_oversized_file(auth_test_context):
 
 def test_duplicate_application_returns_409_without_orphaned_file(
     auth_test_context,
+    monkeypatch,
 ):
     client, engine = auth_test_context
     job_id = create_job(engine)
     auth_response = signup_student(client)
     headers = authorization_headers(auth_response)
+    published = []
+    monkeypatch.setattr(
+        applications_router,
+        "publish_safely",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
 
     first_response = client.post(
         f"/jobs/{job_id}/applications",
@@ -334,6 +416,8 @@ def test_duplicate_application_returns_409_without_orphaned_file(
     files_after_first_application = list(
         settings.resume_upload_dir.glob("*.pdf")
     )
+    assert len(published) == 1
+    published.clear()
     duplicate_response = client.post(
         f"/jobs/{job_id}/applications",
         headers=headers,
@@ -355,6 +439,7 @@ def test_duplicate_application_returns_409_without_orphaned_file(
         )
 
     assert application_count == 1
+    assert published == []
 
 
 def test_application_history_contains_job_company_date_status_and_resume(
@@ -538,6 +623,12 @@ def test_integrity_error_rolls_back_and_removes_saved_resume(
     job_id = create_job(engine)
     auth_response = signup_student(client)
     student_id = auth_response["student"]["id"]
+    published = []
+    monkeypatch.setattr(
+        applications_router,
+        "publish_safely",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
 
     with Session(engine) as db:
         student = db.get(Student, student_id)
@@ -578,3 +669,4 @@ def test_integrity_error_rolls_back_and_removes_saved_resume(
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == "You have already applied to this job."
     assert list(settings.resume_upload_dir.glob("*")) == []
+    assert published == []
