@@ -103,17 +103,17 @@ Applying twice and registering twice are expected 409 answers and count as passe
 |---:|---:|---:|---:|---:|---:|---:|---:|
 | 100 | 6,850 | 105 req/s | 10 ms | 14 ms | 260 ms | 626 ms | 0.00% |
 | 300 | 20,550 | 272 req/s | 21 ms | 82 ms | 261 ms | 571 ms | 0.00% |
-| 500 | 34,250 | 432 req/s | 180 ms | 586 ms | 845 ms | 2,165 ms | 0.00% |
+| 500 | 34,250 | 404 req/s | 264 ms | 968 ms | 1,552 ms | 3,164 ms | 0.00% |
 
 Per request, selected rows (mean / p95 in ms):
 
 | Request | 100 users | 300 users | 500 users |
 |---|---:|---:|---:|
-| Student login (bcrypt, once per user) | 274 / 340 | 267 / 314 | 308 / 367 |
-| Search jobs by keyword | 4 / 7 | 6 / 19 | 64 / 223 |
-| Apply with resume (upload) | 8 / 16 | 35 / 138 | 272 / 688 |
-| Search events | 6 / 9 | 14 / 43 | 177 / 524 |
-| Register for event | 5 / 10 | 17 / 63 | 230 / 631 |
+| Student login (bcrypt, once per user) | 274 / 340 | 267 / 314 | 308 / 366 |
+| Search jobs by keyword | 4 / 7 | 6 / 19 | 118 / 383 |
+| Apply with resume (upload) | 8 / 16 | 35 / 138 | 402 / 1,034 |
+| Search events | 6 / 9 | 14 / 43 | 250 / 722 |
+| Register for event | 5 / 10 | 17 / 63 | 307 / 877 |
 
 ### Bottlenecks found and fixed
 
@@ -121,7 +121,7 @@ Per request, selected rows (mean / p95 in ms):
 |---|---|---|---|
 | 1 | 300 users: 3% errors, slowest request 31 s | Each service kept the SQLAlchemy default pool (5 + 10 connections); the logs show `QueuePool limit of size 5 overflow 10 reached` | Pool of 20 + 20, 10 s wait, MySQL `max_connections` 500 (commit `19c72b6`) |
 | 2 | 500 users: 11.6% errors, 34,250 requests took 10 min 27 s, mean 3.7 s, slowest 89 s | All failures in the Event service (`QueuePool limit of size 20 overflow 20 reached`, 2,132 errors); MySQL was not the limit (132 of 500 connections used at peak) | Thread pool raised from 40 to 120 per service so finished requests can return their connection (commit `3d15d3a`) |
-| 3 | 500 users, same plan | None | 34,250 requests in 1 min 20 s, 0 errors |
+| 3 | 500 users, same plan | None | 34,250 requests in 1 min 25 s, 0 errors (re-run after the Kafka producers were merged; slightly slower than the first clean run, which had 432 req/s and a 180 ms mean) |
 
 Step 2 is explained as FastAPI running plain endpoints and the clean-up of the `get_db`
 dependency on one shared 40-thread pool: when all threads wait for a connection, finished
