@@ -36,3 +36,4 @@ verify_output.txt
 loadtest/trial_*.jtl
 verify_k8s_output.txt
 loadtest/trial_k8s.jtl
+verify_frontend_output.txt

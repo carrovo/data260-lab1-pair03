@@ -242,6 +242,24 @@ services:
       - "host.docker.internal:host-gateway"
     networks: [p03-net]
 
+  # React app + gateway: one origin for the browser, routes API calls to the
+  # six services (see frontend/nginx.conf).
+  p03-frontend:
+    build:
+      context: ./frontend
+    image: p03-frontend:dev
+    container_name: p03-frontend
+    ports:
+      - "9036:9036"
+    depends_on:
+      - p03-company-service
+      - p03-student-service
+      - p03-job-service
+      - p03-application-service
+      - p03-event-service
+      - p03-assistant-service
+    networks: [p03-net]
+
   # ------------------------------------------------------------- workers
   p03-job-index-worker:
     build:

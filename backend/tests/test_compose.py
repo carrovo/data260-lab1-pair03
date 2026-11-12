@@ -73,7 +73,8 @@ def test_every_service_build_points_at_an_existing_dockerfile():
         build = service.get("build")
         if not build:
             continue
-        dockerfile = ROOT / "backend" / build["dockerfile"]
+        context = ROOT / build.get("context", ".")
+        dockerfile = context / build.get("dockerfile", "Dockerfile")
         assert dockerfile.exists(), (name, dockerfile)
 
 
@@ -132,3 +133,16 @@ def test_service_images_have_the_client_libraries_their_code_imports():
     # these read companies/jobs/events through the repositories (PERSISTENCE=mongo)
     for service in ("company", "job", "application", "event", "assistant"):
         assert "pymongo" in packages(service), service
+
+
+def test_frontend_gateway_is_wired_into_compose_and_kubernetes():
+    frontend = COMPOSE["services"]["p03-frontend"]
+    assert frontend["ports"] == ["9036:9036"]
+    assert frontend["image"] == "p03-frontend:dev"
+    for short in (
+        "company", "student", "job", "application", "event", "assistant"
+    ):
+        assert f"p03-{short}-service" in frontend["depends_on"]
+    kustomization = (ROOT / "k8s" / "kustomization.yaml").read_text()
+    assert "frontend.yaml" in kustomization
+    assert "p03-frontend:dev" in (ROOT / "k8s" / "frontend.yaml").read_text()

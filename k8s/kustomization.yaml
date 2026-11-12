@@ -12,3 +12,4 @@ resources:
   - services.yaml
   - student-services.yaml
   - workers.yaml
+  - frontend.yaml
