@@ -128,6 +128,35 @@ dependency on one shared 40-thread pool: when all threads wait for a connection,
 requests cannot get a thread to release theirs. The fix removed the symptom; the explanation
 was not isolated with a separate experiment.
 
+### Kubernetes (Docker Desktop, `PERSISTENCE=sql`, same plan and data)
+
+Services were published on localhost with LoadBalancer services (`scripts/k8s_expose.sh`);
+`kubectl port-forward` cannot carry this load. One replica of each service.
+
+| Concurrent users | Requests | Throughput | Mean | p95 | p99 | Max | Errors |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 6,850 | 105 req/s | 11 ms | 15 ms | 349 ms | 718 ms | 0.00% |
+| 300 | 20,550 | 272 req/s | 18 ms | 55 ms | 261 ms | 1,159 ms | 0.00% |
+| 500 | 34,250 | 372 req/s | 196 ms | 338 ms | 617 ms | 26,567 ms | 0.00% |
+
+No pod restarted and no connection-pool error appeared in any service log. At 500 users the
+slow tail is the login burst: all 375 student users log in within the first 30 seconds, and
+296 logins took over 5 s (mean 12 s, p95 24 s). Every other request stayed fast (500 users:
+keyword search 30 ms mean, apply 102 ms, register 73 ms). On Compose the same login averaged
+about 300 ms, because the containers there are not CPU limited.
+
+Problems found on Kubernetes that Docker Compose did not show, and how they were fixed:
+
+| Step | Symptom | Evidence | Fix |
+|---|---|---|---|
+| 4 | First run: 100 users already slow (mean 176 ms, worst 27 s); 300 users 10.25% errors, 500 users 21.78%; the student pod restarted twice, the company pod failed a probe | Student logs: logins took 18 to 24 s; events: `Liveness probe failed ... context deadline exceeded`, `Container student failed liveness probe, will be restarted` | Pods were capped at 0.5 CPU and `/health` was a plain function that waited for a free worker thread behind the bcrypt logins. `/health` is now `async def` (answers on the event loop), liveness timeout 3 s to 10 s with 6 failures allowed, readiness timeout 5 s, CPU limit 2 per service |
+| 5 | After step 4: 100 and 300 users clean, 500 users 2.91% errors (37 student logins returned 500, the other 960 errors are the 401s of users without a token) | Student log: `QueuePool limit of size 20 overflow 20 reached` exactly 37 times; no pod restarted; MySQL peak 163 of 500 connections | A login holds a database connection while bcrypt runs, so the Student service now has a pool of 60 + 60, matching its 120 worker threads (other services keep 20 + 20) |
+| 6 | Re-run after step 5 | none | 100, 300 and 500 users: 0 errors, MySQL peak 239 of 500 connections |
+
+Limits of the Kubernetes test: one replica per service, no autoscaling; a slow login burst at
+500 users (see above), which more Student replicas or a cheaper password hash would reduce but
+which was not tried. All of the above is MySQL mode; MongoDB mode on Kubernetes has not been run yet.
+
 Limits of this test: one machine runs the load generator, Docker and the databases together;
-the Kubernetes deployment was not load tested; the assistant (Ollama) is not
-part of the load test.
+the assistant (Ollama) is not part of the load test. The Compose table above is the
+baseline; Kubernetes results are in their own section.

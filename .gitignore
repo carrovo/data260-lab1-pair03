@@ -37,3 +37,11 @@ loadtest/trial_*.jtl
 verify_k8s_output.txt
 loadtest/trial_k8s.jtl
 verify_frontend_output.txt
+verify_assistant_output.txt
+k8s_loadtest_output.txt
+k8s_mongo_output.txt
+loadtest/trial_k8s_*.jtl
+loadtest/k8s_*.jtl
+k8s_loadtest_before*.txt
+k8s_diag_output.txt
+loadtest/temp/

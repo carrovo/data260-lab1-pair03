@@ -53,21 +53,27 @@ spec:
             - name: JWT_SECRET_KEY
               valueFrom:
                 secretKeyRef: {name: p03-secrets, key: JWT_SECRET_KEY}
+            # Login hashes a password while holding a connection: size the pool
+            # like the worker thread limit (120) so a login burst cannot exhaust it.
+            - name: DB_POOL_SIZE
+              value: "60"
+            - name: DB_MAX_OVERFLOW
+              value: "60"
           readinessProbe:
             httpGet: {path: /health, port: http}
             initialDelaySeconds: 5
             periodSeconds: 10
-            timeoutSeconds: 3
+            timeoutSeconds: 5
             failureThreshold: 6
           livenessProbe:
             httpGet: {path: /health, port: http}
             initialDelaySeconds: 20
             periodSeconds: 20
-            timeoutSeconds: 3
-            failureThreshold: 3
+            timeoutSeconds: 10
+            failureThreshold: 6
           resources:
             requests: {cpu: 100m, memory: 128Mi}
-            limits: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: "2", memory: 512Mi}
 ---
 apiVersion: v1
 kind: Service
@@ -126,17 +132,17 @@ spec:
             httpGet: {path: /health, port: http}
             initialDelaySeconds: 5
             periodSeconds: 10
-            timeoutSeconds: 3
+            timeoutSeconds: 5
             failureThreshold: 6
           livenessProbe:
             httpGet: {path: /health, port: http}
             initialDelaySeconds: 20
             periodSeconds: 20
-            timeoutSeconds: 3
-            failureThreshold: 3
+            timeoutSeconds: 10
+            failureThreshold: 6
           resources:
             requests: {cpu: 100m, memory: 128Mi}
-            limits: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: "2", memory: 512Mi}
           volumeMounts:
             - {name: uploads, mountPath: /app/backend/uploads}
       volumes:
@@ -203,14 +209,14 @@ spec:
             httpGet: {path: /health, port: http}
             initialDelaySeconds: 5
             periodSeconds: 10
-            timeoutSeconds: 3
+            timeoutSeconds: 5
             failureThreshold: 6
           livenessProbe:
             httpGet: {path: /health, port: http}
             initialDelaySeconds: 20
             periodSeconds: 20
-            timeoutSeconds: 3
-            failureThreshold: 3
+            timeoutSeconds: 10
+            failureThreshold: 6
           resources:
             requests: {cpu: 100m, memory: 128Mi}
-            limits: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: "2", memory: 512Mi}

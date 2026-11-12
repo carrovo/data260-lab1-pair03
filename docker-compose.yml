@@ -197,7 +197,12 @@ services:
         condition: service_completed_successfully
       p03-kafka-init:
         condition: service_completed_successfully
-    environment: *service-env
+    # Login hashes a password (bcrypt) while holding a database connection, so
+    # a login burst needs a pool as large as the worker thread limit (120).
+    environment:
+      <<: *service-env
+      DB_POOL_SIZE: "60"
+      DB_MAX_OVERFLOW: "60"
     networks: [p03-net]
 
   # Students submit resumes here and the Company service reads them, so both

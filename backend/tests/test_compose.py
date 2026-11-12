@@ -146,3 +146,14 @@ def test_frontend_gateway_is_wired_into_compose_and_kubernetes():
     kustomization = (ROOT / "k8s" / "kustomization.yaml").read_text()
     assert "frontend.yaml" in kustomization
     assert "p03-frontend:dev" in (ROOT / "k8s" / "frontend.yaml").read_text()
+
+
+def test_student_pool_covers_the_worker_thread_limit():
+    """A login burst holds one connection per worker thread while bcrypt runs;
+    a smaller pool made 37 logins fail with QueuePool timeouts at 500 users."""
+    env = COMPOSE["services"]["p03-student-service"]["environment"]
+    assert int(env["DB_POOL_SIZE"]) + int(env["DB_MAX_OVERFLOW"]) >= 120
+    text = (ROOT / "k8s" / "student-services.yaml").read_text()
+    student = text[: text.index("p03-application-service:dev")]
+    assert 'name: DB_POOL_SIZE\n              value: "60"' in student
+    assert 'name: DB_MAX_OVERFLOW\n              value: "60"' in student
