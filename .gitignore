@@ -30,3 +30,5 @@ build/
 /backend/uploads/
 loadtest/*.jtl
 loadtest/report_*/
+loadtest/old_runs/
+loadtest/jmeter.log

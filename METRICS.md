@@ -85,3 +85,49 @@ These are controlled reliability-test results produced with scripted model respo
 | Main CSS bundle | 54.15 kB | 9.16 kB |
 | Main JavaScript bundle | 389.45 kB | 117.41 kB |
 
+
+## Lab 2 Load Test (JMeter)
+
+Apache JMeter 5.6 (non-GUI), plan `loadtest/handshake.jmx`, run against the Docker Compose stack
+on one MacBook Pro (Docker Desktop, 7.7 GiB for containers; JMeter on the same machine, so the
+numbers include that contention). Code under test: commit `3d15d3a` on
+`feature/lab2-company-services`, `PERSISTENCE=sql`, seed 3 data loaded.
+
+Four scenarios run at the same time: student login + job search, student login + application
+upload (PDF), student login + event search + registration, company login + dashboard.
+Each virtual user logs in once, then repeats its scenario 30 times with a 500 ms think time.
+Users are per scenario, so 25 users per scenario is 100 concurrent users in total.
+Applying twice and registering twice are expected 409 answers and count as passes.
+
+| Concurrent users | Requests | Throughput | Mean | p95 | p99 | Max | Errors |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 6,850 | 105 req/s | 10 ms | 14 ms | 260 ms | 626 ms | 0.00% |
+| 300 | 20,550 | 272 req/s | 21 ms | 82 ms | 261 ms | 571 ms | 0.00% |
+| 500 | 34,250 | 432 req/s | 180 ms | 586 ms | 845 ms | 2,165 ms | 0.00% |
+
+Per request, selected rows (mean / p95 in ms):
+
+| Request | 100 users | 300 users | 500 users |
+|---|---:|---:|---:|
+| Student login (bcrypt, once per user) | 274 / 340 | 267 / 314 | 308 / 367 |
+| Search jobs by keyword | 4 / 7 | 6 / 19 | 64 / 223 |
+| Apply with resume (upload) | 8 / 16 | 35 / 138 | 272 / 688 |
+| Search events | 6 / 9 | 14 / 43 | 177 / 524 |
+| Register for event | 5 / 10 | 17 / 63 | 230 / 631 |
+
+### Bottlenecks found and fixed
+
+| Step | Symptom | Cause | Fix |
+|---|---|---|---|
+| 1 | 300 users: 3% errors, slowest request 31 s | Each service kept the SQLAlchemy default pool (5 + 10 connections); the logs show `QueuePool limit of size 5 overflow 10 reached` | Pool of 20 + 20, 10 s wait, MySQL `max_connections` 500 (commit `19c72b6`) |
+| 2 | 500 users: 11.6% errors, 34,250 requests took 10 min 27 s, mean 3.7 s, slowest 89 s | All failures in the Event service (`QueuePool limit of size 20 overflow 20 reached`, 2,132 errors); MySQL was not the limit (132 of 500 connections used at peak) | Thread pool raised from 40 to 120 per service so finished requests can return their connection (commit `3d15d3a`) |
+| 3 | 500 users, same plan | None | 34,250 requests in 1 min 20 s, 0 errors |
+
+Step 2 is explained as FastAPI running plain endpoints and the clean-up of the `get_db`
+dependency on one shared 40-thread pool: when all threads wait for a connection, finished
+requests cannot get a thread to release theirs. The fix removed the symptom; the explanation
+was not isolated with a separate experiment.
+
+Limits of this test: one machine runs the load generator, Docker and the databases together;
+the Kubernetes deployment was not load tested; the assistant (Ollama) is not
+part of the load test.
