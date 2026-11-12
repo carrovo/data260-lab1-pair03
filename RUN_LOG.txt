@@ -169,8 +169,8 @@ Result:   PASS - db-init and kafka-init completed, every deployment rolled out,
           requests with 0 errors, Kafka offsets and event-worker log agree.
   Notes: the first run of the script failed because it checked the pods while
   MySQL was restarting and the Job db-init was immutable; the script was fixed
-  to wait for every rollout. Kubernetes runs in SQL mode only; it was not load
-  tested.
+  to wait for every rollout. This run was in SQL mode and not load
+  tested at this point (see L2-8).
 
 [L2-6] Frontend and gateway (port 9036)
 Command:  sh scripts/verify_frontend.sh
@@ -179,9 +179,23 @@ Result:   PASS - the gateway reports healthy; the app's own pages return 200;
           (200, or 401 where a token is required); smoke test OK. Browser check
           of student login, jobs, events and the company dashboard: working.
 
+[L2-8] Kubernetes load test and fixes (scripts/k8s_loadtest.sh, k8s_mongo.sh)
+Result:   PASS after three fixes; details and evidence in METRICS.md.
+  - First run (SQL): 300 users 10.25% errors, 500 users 21.78% errors. Cause:
+    0.5 CPU limit plus a synchronous /health queued behind bcrypt logins; the
+    kubelet restarted the Student pod. Fixed: async /health, probe timeouts,
+    CPU limit 2.
+  - Second run: 500 users 2.91% errors, all from 37 student logins
+    (QueuePool 20+20 exhausted). Fixed: Student pool 60+60.
+  - Third run, MySQL mode: 100 / 300 / 500 users, 0 errors, no pod restarts.
+  - MongoDB mode on Kubernetes: 50 companies, 300 jobs, 100 events in Mongo;
+    100 / 300 / 500 users, 0 errors, no pod restarts.
+  - Known: at 500 users the student login burst is slow (mean about 10 to 12 s,
+    max 24 to 27 s) because the Student service has one replica.
+
 [L2-7] Not verified
   - Student Assistant: the container reports "[model backend unreachable:
     Errno 101]" because Ollama is not running on the host (curl to
     localhost:11434 returned nothing). The code path itself is covered by the
     automated tests only.
-  - Mongo mode on Kubernetes; Kubernetes under load; a cloud deployment.
+  - A cloud deployment (AWS).

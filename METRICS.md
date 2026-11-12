@@ -155,7 +155,26 @@ Problems found on Kubernetes that Docker Compose did not show, and how they were
 
 Limits of the Kubernetes test: one replica per service, no autoscaling; a slow login burst at
 500 users (see above), which more Student replicas or a cheaper password hash would reduce but
-which was not tried. All of the above is MySQL mode; MongoDB mode on Kubernetes has not been run yet.
+which was not tried.
+
+#### Kubernetes with MongoDB (`PERSISTENCE=mongo`)
+
+`scripts/k8s_mongo.sh on` switched the cluster (the ConfigMap value is changed while applying;
+`k8s/config.yaml` stays on `sql`), reran db-init (drops the MySQL foreign keys into the three
+Mongo-owned tables), reseeded and restarted the services. MongoDB then held 50 companies,
+300 jobs and 100 events; applications and registrations stayed in MySQL. A 5-user trial
+passed (110 requests, 0 errors), and the Kafka offsets matched the event worker's output.
+
+| Concurrent users | Requests | Throughput | Mean | p95 | p99 | Max | Errors |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 6,850 | 105 req/s | 9 ms | 11 ms | 354 ms | 713 ms | 0.00% |
+| 300 | 20,550 | 272 req/s | 13 ms | 32 ms | 260 ms | 1,080 ms | 0.00% |
+| 500 | 34,250 | 391 req/s | 134 ms | 174 ms | 493 ms | 24,204 ms | 0.00% |
+
+No pod restarted and no pool error appeared. Reads that moved to MongoDB were faster than in
+MySQL mode at 500 users (keyword search 8 ms vs 30 ms mean, event search 7 ms vs 55 ms,
+register 14 ms vs 73 ms). The slow tail is the same student login burst (292 logins over 5 s,
+mean 9.8 s) because the Student service still uses MySQL in both modes.
 
 Limits of this test: one machine runs the load generator, Docker and the databases together;
 the assistant (Ollama) is not part of the load test. The Compose table above is the

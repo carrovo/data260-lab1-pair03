@@ -324,10 +324,11 @@ All code that reads companies, jobs or events goes through the repositories in
 and registration routes, and the Assistant tools. With `PERSISTENCE=sql` the original
 SQL code paths run unchanged.
 
-Status: Mongo mode is verified on Docker Compose (seed 50 companies, 300 jobs,
-100 events in MongoDB; smoke test and a JMeter trial with 0 errors). It is not
-verified on Kubernetes, where `k8s/config.yaml` stays on `sql`. To switch back to
-MySQL, remove the `PERSISTENCE=mongo` line, rebuild, and reseed.
+Status: Mongo mode is verified on Docker Compose and on Kubernetes (50 companies,
+300 jobs, 100 events in MongoDB; smoke test, and JMeter at 100, 300 and 500 users
+with 0 errors; see `METRICS.md`). `k8s/config.yaml` stays on `sql`;
+`sh scripts/k8s_mongo.sh on` (or `off`) switches a running cluster without editing
+files. On Compose, remove the `PERSISTENCE=mongo` line, rebuild, and reseed to go back.
 
 ## Frontend and gateway (port 9036)
 
