@@ -1,7 +1,8 @@
 #!/bin/sh
-# JMeter load test against the Kubernetes deployment (100 / 300 / 500 users).
+# JMeter load test against the Kubernetes deployment (100 / 200 / 300 / 400 / 500 users).
 #   sh scripts/k8s_loadtest.sh sql      (label only names the result files)
 #   sh scripts/k8s_loadtest.sh mongo
+#   LEVELS="75:300:30" sh scripts/k8s_loadtest.sh sql   (only some levels; users-per-scenario:total:rampup)
 # Results: k8s_loadtest_output.txt, loadtest/k8s_<label>_<n>.jtl, loadtest/report_k8s_<label>_<n>/
 LABEL=${1:-sql}
 OUT=k8s_loadtest_output.txt
@@ -15,7 +16,7 @@ OUT=k8s_loadtest_output.txt
   echo "== pods before"
   kubectl -n p03 get pods --no-headers | awk '{print $1, $2, $3, $4}'
   cd loadtest
-  for n in 25:100:20 75:300:30 125:500:30; do
+  for n in ${LEVELS:-25:100:20 50:200:25 75:300:30 100:400:30 125:500:30}; do
     u=${n%%:*}; rest=${n#*:}; total=${rest%%:*}; ramp=${rest##*:}
     echo "== $total users ($LABEL)"
     rm -rf report_k8s_${LABEL}_$total k8s_${LABEL}_$total.jtl

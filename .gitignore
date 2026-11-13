@@ -49,3 +49,5 @@ kafka_flow_output.txt
 kafka_failures_output.txt
 kafka_failures_output_run1.txt
 kafka_failures_output_run2.txt
+assistant_loadtest_output.txt
+loadtest/assistant_*.jtl

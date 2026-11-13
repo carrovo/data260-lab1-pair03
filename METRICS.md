@@ -157,6 +157,78 @@ Limits of the Kubernetes test: one replica per service, no autoscaling; a slow l
 500 users (see above), which more Student replicas or a cheaper password hash would reduce but
 which was not tried.
 
+### Part 5: all five concurrency levels (Kubernetes, `PERSISTENCE=sql`, 2026-11-12)
+
+Run with `sh scripts/k8s_loadtest.sh final`; the tables come from `python loadtest/summarize.py crud final`
+and the graph is `loadtest/avg_response_final.png`. The plan runs the four scenarios (login + job
+search, application submission, event search/registration, company dashboard) at the same time, so
+"users" is the total concurrent users across scenarios. Application submission publishes
+`application.created` to Kafka and event registration publishes `event.registration_created`.
+One replica of every service, 0 pod restarts, no pool error in any log, MySQL peak 239 of 500 connections.
+
+| Concurrent users | Requests | Throughput | Mean | Max | Errors |
+|---:|---:|---:|---:|---:|---:|
+| 100 | 6,850 | 104 req/s | 10 ms | 773 ms | 0.00% |
+| 200 | 13,700 | 193 req/s | 12 ms | 823 ms | 0.00% |
+| 300 | 20,550 | 270 req/s | 17 ms | 1,017 ms | 0.00% |
+| 400 | 27,400 | 336 req/s | 81 ms | 12,478 ms | 0.00% |
+| 500 | 34,250 | 372 req/s | 179 ms | 23,806 ms | 0.00% |
+
+Per endpoint (login is one request per virtual user, so it has the fewest samples):
+
+#### Login
+
+| Users | Requests | Avg (ms) | Throughput (req/s) | Error rate |
+|---:|---:|---:|---:|---:|
+| 100 | 75 | 378 | 3.8 | 0.00% |
+| 200 | 150 | 373 | 6.0 | 0.00% |
+| 300 | 225 | 400 | 7.5 | 0.00% |
+| 400 | 300 | 3754 | 8.6 | 0.00% |
+| 500 | 375 | 11375 | 8.4 | 0.00% |
+
+#### Job search
+
+| Users | Requests | Avg (ms) | Throughput (req/s) | Error rate |
+|---:|---:|---:|---:|---:|
+| 100 | 1500 | 4 | 23.7 | 0.00% |
+| 200 | 3000 | 6 | 43.6 | 0.00% |
+| 300 | 4500 | 5 | 61.2 | 0.00% |
+| 400 | 6000 | 11 | 76.2 | 0.00% |
+| 500 | 7500 | 22 | 84.3 | 0.00% |
+
+#### Application submission
+
+| Users | Requests | Avg (ms) | Throughput (req/s) | Error rate |
+|---:|---:|---:|---:|---:|
+| 100 | 750 | 7 | 15.5 | 0.00% |
+| 200 | 1500 | 14 | 27.8 | 0.00% |
+| 300 | 2250 | 30 | 37.8 | 0.00% |
+| 400 | 3000 | 117 | 43.8 | 0.00% |
+| 500 | 3750 | 150 | 46.5 | 0.00% |
+
+#### Event search / registration
+
+| Users | Requests | Avg (ms) | Throughput (req/s) | Error rate |
+|---:|---:|---:|---:|---:|
+| 100 | 1500 | 3 | 30.8 | 0.00% |
+| 200 | 3000 | 5 | 55.6 | 0.00% |
+| 300 | 4500 | 4 | 76.5 | 0.00% |
+| 400 | 6000 | 8 | 93.7 | 0.00% |
+| 500 | 7500 | 10 | 102.1 | 0.00% |
+
+![Average response time vs concurrency](loadtest/avg_response_final.png)
+
+First bottleneck: the student login. Its mean stays near 375 ms up to 300 users, then rises to
+3.8 s at 400 and 11.4 s at 500 while its throughput stays at about 8.5 logins/s. Every login
+runs a bcrypt hash on one Student replica, and the 120 worker threads queue behind the CPU, so
+the extra users only wait longer (queueing, not errors). Application submission is second: its
+mean grows from 7 ms to 150 ms and its throughput flattens at about 44 to 46 req/s from 400
+users on; each request uploads a PDF, writes to MySQL and publishes to Kafka (this cause was
+not profiled separately). Job search and event search/registration stay at 22 ms or less because
+they are indexed reads served by one replica each. The assistant endpoint is measured
+separately (5, 10, 20, 50 users, `scripts/assistant_loadtest.sh`) because each request waits for
+model inference.
+
 #### Kubernetes with MongoDB (`PERSISTENCE=mongo`)
 
 `scripts/k8s_mongo.sh on` switched the cluster (the ConfigMap value is changed while applying;

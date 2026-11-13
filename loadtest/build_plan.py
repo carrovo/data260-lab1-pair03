@@ -150,11 +150,27 @@ groups = [
     ]),
 ]
 
-plan = ('<?xml version="1.0" encoding="UTF-8"?><jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3"><hashTree>'
-        '<TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Pair 03 Handshake load test" enabled="true">'
-        '<boolProp name="TestPlan.functional_mode">false</boolProp><boolProp name="TestPlan.serialize_threadgroups">false</boolProp>'
-        f'<elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="Variables" enabled="true"><collectionProp name="Arguments.arguments">{user_vars}</collectionProp></elementProp>'
-        '</TestPlan><hashTree>' + "".join(groups) + '</hashTree></hashTree></jmeterTestPlan>')
+def make_plan(title, groups):
+    return ('<?xml version="1.0" encoding="UTF-8"?><jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3"><hashTree>'
+            f'<TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="{title}" enabled="true">'
+            '<boolProp name="TestPlan.functional_mode">false</boolProp><boolProp name="TestPlan.serialize_threadgroups">false</boolProp>'
+            f'<elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="Variables" enabled="true"><collectionProp name="Arguments.arguments">{user_vars}</collectionProp></elementProp>'
+            '</TestPlan><hashTree>' + "".join(groups) + '</hashTree></hashTree></jmeterTestPlan>')
 
-Path(__file__).with_name("handshake.jmx").write_text(plan)
+
+Path(__file__).with_name("handshake.jmx").write_text(make_plan("Pair 03 Handshake load test", groups))
 print("wrote handshake.jmx")
+
+# Assistant endpoint only (Part 5: 5, 10, 20, 50 concurrent users). It needs a running model
+# (Ollama), so it is a separate plan:  jmeter -n -t assistant.jmx -Jusers=10 -Jassistant_port=9035
+assistant_groups = [
+    thread_group("5 Assistant chat", [
+        student_login(),
+        step("Assistant chat", "POST", HOST, "${assistant_port}", "/assistant/chat", ["200"], token="token", headers=JSON,
+             body='{"message":"Find data analyst jobs in San Jose and tell me the requirements","conversation":[]}'),
+    ], loops_prop="loops"),
+]
+Path(__file__).with_name("assistant.jmx").write_text(
+    make_plan("Pair 03 Assistant load test", assistant_groups).replace(
+        'name="Arguments.arguments">', 'name="Arguments.arguments">' + var("assistant_port", prop("assistant_port", 9035)), 1))
+print("wrote assistant.jmx")
