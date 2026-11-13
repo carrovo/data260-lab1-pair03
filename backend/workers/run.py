@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 
 from backend.common.messaging import (
     ConfluentConsumerClient,
@@ -20,6 +21,31 @@ from backend.common.messaging import (
     run_consumer,
 )
 from backend.workers.handlers import WORKERS
+
+
+logger = logging.getLogger("p03.worker")
+
+
+def _with_demo_hooks(handler):
+    """Failure-demo hooks, OFF unless DEMO_FAILURE_HOOKS=1 (scripts/kafka_failure_demo.sh).
+
+    A job titled "DEMO-SLOW ..." sleeps DEMO_SLOW_SECONDS before its database write
+    (a window to kill the pod in); "DEMO-FAIL ..." always raises (to show retries).
+    """
+    if os.environ.get("DEMO_FAILURE_HOOKS") != "1":
+        return handler
+    seconds = float(os.environ.get("DEMO_SLOW_SECONDS", "25"))
+
+    def wrapped(envelope):
+        title = str(envelope.payload.get("title", ""))
+        if title.startswith("DEMO-FAIL"):
+            raise RuntimeError("demo: simulated handler failure")
+        if title.startswith("DEMO-SLOW"):
+            logger.warning("demo: slow handler started event_id=%s", envelope.event_id)
+            time.sleep(seconds)
+        handler(envelope)
+
+    return wrapped
 
 
 def main() -> None:
@@ -45,7 +71,7 @@ def main() -> None:
         ConfluentConsumerClient(bootstrap, group_id=name, topic=topic),
         topic=topic,
         consumer=name,
-        handler=lambda envelope: handler(envelope, db),
+        handler=_with_demo_hooks(lambda envelope: handler(envelope, db)),
         store=MongoProcessedEventStore(db["processed_events"]),
         publisher=ConfluentPublisher(bootstrap),
     )

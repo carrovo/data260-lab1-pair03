@@ -208,9 +208,34 @@ Result:   PASS
     returned 409 (no message is published on a 409). check_kafka_flow.sh uses a
     new student each run for that reason.
 
+[L2-10] Kafka failure cases (Kubernetes, scripts/kafka_failure_demo.sh, 2026-11-12)
+  Run on the job-index-worker (topic p03.job.created). Full output: kafka_failures_output.txt
+  (not committed; rerun the script to regenerate). Demo hooks in backend/workers/run.py are
+  off unless DEMO_FAILURE_HOOKS=1; the script switches them on and off again.
+  Case 1 - same event twice, same key:
+    - One event (same event_id) was published twice with key = job id.
+    - Result: 1 job_index document and 1 processed_events record. The log shows
+      "processed" once and "duplicate skipped" once.
+    - Why: the worker records "<consumer>:<event_id>" in processed_events (unique _id)
+      and skips an event it has seen; the database write is also an upsert.
+  Case 2 - worker killed during processing:
+    - A slow event paused for 25 s before its database write; the pod was force-deleted
+      during the pause (kubectl delete pod --grace-period=0 --force).
+    - Right after the kill: 0 job_index documents, 0 processed_events records.
+    - The replacement pod received the same event again and processed it
+      (processed attempts=1). Afterwards: 1 document, 1 record, consumer lag 0.
+    - The event was not lost and was processed again (at-least-once delivery). This is safe
+      because the offset is committed only after the database write (enable.auto.commit
+      is false) and the write is idempotent.
+  Case 3 - poison message, bounded retries, dead-letter topic:
+    - (a) invalid JSON -> dead-lettered at once (attempts=0).
+    - (b) a valid event whose handler always fails -> attempts 1/3, 2/3, 3/3, then
+      dead-lettered (attempts=3).
+    - Both messages are in p03.job.created.dlq. A good event published right after them was
+      processed normally (1 document, 1 record), so the pipeline kept running.
+
 [L2-7] Not verified
-  - Student Assistant: the container reports "[model backend unreachable:
-    Errno 101]" because Ollama is not running on the host (curl to
-    localhost:11434 returned nothing). The code path itself is covered by the
-    automated tests only.
+  - Student Assistant: verified working by Xuanhua on her laptop (Ollama,
+    qwen3:8b). Not re-run on the Company-side machine, where Ollama is not
+    installed.
   - A cloud deployment (AWS).

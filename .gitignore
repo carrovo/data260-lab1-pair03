@@ -46,3 +46,6 @@ k8s_loadtest_before*.txt
 k8s_diag_output.txt
 loadtest/temp/
 kafka_flow_output.txt
+kafka_failures_output.txt
+kafka_failures_output_run1.txt
+kafka_failures_output_run2.txt
