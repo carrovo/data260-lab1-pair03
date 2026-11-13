@@ -1,7 +1,7 @@
 """Run one worker: WORKER_NAME=job-index-worker python -m backend.workers.run
 
 Settings come from the environment (never from the image):
-  WORKER_NAME        job-index-worker | notification-worker | event-worker
+  WORKER_NAME        application-worker | job-index-worker | notification-worker | event-worker
   KAFKA_BOOTSTRAP    for example p03-kafka:9092
   MONGO_URL          for example mongodb://p03-mongo:27017
   MONGO_DB           defaults to p03_handshake
@@ -60,7 +60,8 @@ def main() -> None:
         raise SystemExit(
             f"WORKER_NAME must be one of: {', '.join(sorted(WORKERS))}"
         )
-    topic, handler = WORKERS[name]
+    handlers = WORKERS[name]
+    topics = tuple(handlers)
 
     from pymongo import MongoClient
 
@@ -68,10 +69,11 @@ def main() -> None:
     db = MongoClient(os.environ["MONGO_URL"])[os.environ.get("MONGO_DB", "p03_handshake")]
 
     run_consumer(
-        ConfluentConsumerClient(bootstrap, group_id=name, topic=topic),
-        topic=topic,
+        ConfluentConsumerClient(bootstrap, group_id=name, topic=topics),
         consumer=name,
-        handler=_with_demo_hooks(lambda envelope: handler(envelope, db)),
+        handler=_with_demo_hooks(
+            lambda envelope: handlers[envelope.event_type](envelope, db)
+        ),
         store=MongoProcessedEventStore(db["processed_events"]),
         publisher=ConfluentPublisher(bootstrap),
     )

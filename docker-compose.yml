@@ -283,6 +283,23 @@ services:
       WORKER_NAME: job-index-worker
     networks: [p03-net]
 
+  p03-application-worker:
+    build:
+      context: ./backend
+      dockerfile: workers/Dockerfile
+    image: p03-worker:dev
+    container_name: p03-application-worker
+    restart: unless-stopped
+    depends_on:
+      p03-kafka-init:
+        condition: service_completed_successfully
+      p03-mongo:
+        condition: service_healthy
+    environment:
+      <<: *worker-env
+      WORKER_NAME: application-worker
+    networks: [p03-net]
+
   p03-notification-worker:
     build:
       context: ./backend

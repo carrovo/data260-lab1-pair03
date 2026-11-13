@@ -35,6 +35,38 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: p03-application-worker
+  labels:
+    app.kubernetes.io/name: p03-application-worker
+    app.kubernetes.io/part-of: p03
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: p03-application-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: p03-application-worker
+        app.kubernetes.io/part-of: p03
+    spec:
+      containers:
+        - name: worker
+          image: p03-worker:dev
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: p03-config
+          env:
+            - name: WORKER_NAME
+              value: application-worker
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 300m, memory: 256Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: p03-notification-worker
   labels:
     app.kubernetes.io/name: p03-notification-worker

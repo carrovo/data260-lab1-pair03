@@ -590,6 +590,38 @@ def test_student_applies_and_lists_applications_with_jobs_in_mongo(
     ]
 
     published.clear()
+    with Session(engine) as db:
+        old_storage_key = db.get(Application, body["id"]).resume_storage_key
+    replaced = client.put(
+        f"/applications/{body['id']}/resume",
+        files={
+            "resume": (
+                "replacement.pdf",
+                _pdf_bytes(),
+                "application/pdf",
+            )
+        },
+        headers=student,
+    )
+    assert replaced.status_code == 200, replaced.text
+    assert replaced.json()["resume_original_name"] == "replacement.pdf"
+    assert replaced.json()["job"]["title"] == "Data Intern"
+    assert published == [
+        (
+            (
+                "application.updated",
+                {
+                    "application_id": str(body["id"]),
+                    "student_id": str(body["student_id"]),
+                    "job_id": str(job["id"]),
+                },
+            ),
+            {"key": str(body["id"])},
+        )
+    ]
+    assert not (settings.resume_upload_dir / old_storage_key).exists()
+
+    published.clear()
     again = client.post(f"/jobs/{job['id']}/applications", files=pdf, headers=student)
     assert again.status_code == 409
     assert published == []

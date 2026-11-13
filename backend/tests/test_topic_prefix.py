@@ -68,3 +68,19 @@ def test_consumer_subscribes_to_the_prefixed_topic(fake_confluent):
         "kafka:9092", group_id="job-index-worker", topic="job.created"
     )
     assert fake_confluent["subscribe"] == [["p03.job.created"]]
+
+
+def test_consumer_subscribes_to_multiple_prefixed_topics(fake_confluent):
+    client = messaging.ConfluentConsumerClient(
+        "kafka:9092",
+        group_id="application-worker",
+        topic=("application.created", "application.updated"),
+    )
+
+    assert fake_confluent["subscribe"] == [[
+        "p03.application.created",
+        "p03.application.updated",
+    ]]
+
+    message = types.SimpleNamespace(topic=lambda: "p03.application.updated")
+    assert client.topic(message) == "application.updated"

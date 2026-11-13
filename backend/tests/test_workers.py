@@ -13,7 +13,11 @@ class FakeCollection:
         key = filter["_id"]
         if key not in self.docs and not upsert:
             return
-        self.docs.setdefault(key, {"_id": key}).update(update["$set"])
+        inserted = key not in self.docs
+        document = self.docs.setdefault(key, {"_id": key})
+        if inserted:
+            document.update(update.get("$setOnInsert", {}))
+        document.update(update["$set"])
 
 
 class FakeDb(dict):
@@ -41,15 +45,15 @@ class FakePublisher:
         self.sent.append((topic, key, value))
 
 
-def deliver(worker, envelope, db, store=None):
-    topic, handler = WORKERS[worker]
+def deliver(worker, envelope, db, store=None, publisher=None):
+    handlers = WORKERS[worker]
     return process_message(
         envelope.to_json(),
-        topic=topic,
+        topic=envelope.event_type,
         consumer=worker,
-        handler=lambda e: handler(e, db),
+        handler=lambda e: handlers[e.event_type](e, db),
         store=store or FakeStore(),
-        publisher=FakePublisher(),
+        publisher=publisher or FakePublisher(),
         sleep=lambda _s: None,
     )
 
@@ -60,8 +64,9 @@ def test_every_worker_listens_to_the_topic_the_contract_assigns_it():
         for spec in TOPICS.values()
         if spec["consumer"] in WORKERS
     }
-    for name, (topic, _handler) in WORKERS.items():
-        assert TOPICS[topic]["consumer"] == name
+    for name, handlers in WORKERS.items():
+        for topic in handlers:
+            assert TOPICS[topic]["consumer"] == name
 
 
 def test_job_index_worker_indexes_the_job():
@@ -125,3 +130,89 @@ def test_the_same_event_delivered_twice_is_skipped_by_the_store():
     second = deliver("job-index-worker", event, db, store)
 
     assert (first, second) == (Outcome.PROCESSED, Outcome.DUPLICATE_SKIPPED)
+
+
+def application_event(event_type, *, trace_id=None):
+    kwargs = {}
+    if trace_id is not None:
+        kwargs["trace_id"] = trace_id
+    return make_event(
+        event_type,
+        {"application_id": 41, "student_id": 9, "job_id": 7},
+        **kwargs,
+    )
+
+
+def test_application_created_writes_one_string_keyed_document():
+    db = FakeDb()
+    event = application_event("application.created", trace_id="trace-created")
+
+    assert deliver("application-worker", event, db) == Outcome.PROCESSED
+
+    assert list(db["applications"].docs) == ["41"]
+    document = db["applications"].docs["41"]
+    assert document == {
+        "_id": "41",
+        "student_id": "9",
+        "job_id": "7",
+        "created_at": event.occurred_at,
+        "updated_at": event.occurred_at,
+        "trace_id": "trace-created",
+        "last_event_id": event.event_id,
+        "last_event_type": "application.created",
+    }
+
+
+def test_application_event_reprocessing_is_idempotent():
+    db, store = FakeDb(), FakeStore()
+    event = application_event("application.created")
+
+    first = deliver("application-worker", event, db, store)
+    second = deliver("application-worker", event, db, store)
+
+    assert (first, second) == (Outcome.PROCESSED, Outcome.DUPLICATE_SKIPPED)
+    assert list(db["applications"].docs) == ["41"]
+    assert store.ids == {f"application-worker:{event.event_id}"}
+
+
+def test_application_updated_refreshes_the_existing_document():
+    db = FakeDb()
+    created = application_event("application.created", trace_id="trace-created")
+    updated = application_event("application.updated", trace_id="trace-updated")
+
+    deliver("application-worker", created, db)
+    deliver("application-worker", updated, db)
+
+    assert list(db["applications"].docs) == ["41"]
+    document = db["applications"].docs["41"]
+    assert document["created_at"] == created.occurred_at
+    assert document["updated_at"] == updated.occurred_at
+    assert document["trace_id"] == "trace-updated"
+    assert document["last_event_id"] == updated.event_id
+    assert document["last_event_type"] == "application.updated"
+
+
+def test_failed_application_write_is_retried_and_not_marked_processed():
+    class FailingCollection:
+        def __init__(self):
+            self.attempts = 0
+
+        def update_one(self, *_args, **_kwargs):
+            self.attempts += 1
+            raise ConnectionError("Mongo is unavailable")
+
+    db, store, publisher = FakeDb(), FakeStore(), FakePublisher()
+    db["applications"] = FailingCollection()
+    event = application_event("application.created")
+
+    outcome = deliver(
+        "application-worker", event, db, store, publisher=publisher
+    )
+
+    assert outcome == Outcome.DEAD_LETTERED
+    assert db["applications"].attempts == 3
+    assert store.ids == set()
+    assert publisher.sent[0][0] == "application.created.dlq"
+    dead_letter = json.loads(publisher.sent[0][2])
+    assert dead_letter["attempts"] == 3
+    assert "Mongo is unavailable" in dead_letter["error"]

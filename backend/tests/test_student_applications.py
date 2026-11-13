@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException, UploadFile
 from pypdf import PdfWriter
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.datastructures import Headers
 
@@ -16,6 +16,7 @@ from backend.app.routers import applications as applications_router
 from backend.app.routers.applications import (
     MAX_RESUME_SIZE_BYTES,
     apply_to_job,
+    update_application_resume,
 )
 
 
@@ -206,6 +207,255 @@ def test_application_succeeds_when_publish_safely_returns_false(
         assert db.get(Application, response.json()["id"]) is not None
 
 
+def test_owner_can_replace_resume_and_publish_after_commit(
+    auth_test_context,
+    monkeypatch,
+):
+    client, engine = auth_test_context
+    job_id = create_job(engine)
+    auth_response = signup_student(client)
+    student_id = auth_response["student"]["id"]
+    headers = authorization_headers(auth_response)
+    created = client.post(
+        f"/jobs/{job_id}/applications",
+        headers=headers,
+        files=resume_file(filename="old.pdf"),
+    )
+    application_id = created.json()["id"]
+    with Session(engine) as db:
+        old_key = db.get(Application, application_id).resume_storage_key
+    old_path = settings.resume_upload_dir / old_key
+    assert old_path.is_file()
+    published = []
+
+    def capture(event_type, payload, **kwargs):
+        with Session(engine) as db:
+            persisted = db.get(Application, application_id)
+            assert persisted.resume_original_name == "replacement.pdf"
+            assert persisted.resume_storage_key != old_key
+            assert (
+                settings.resume_upload_dir / persisted.resume_storage_key
+            ).is_file()
+        assert not old_path.exists()
+        published.append((event_type, payload, kwargs))
+        return True
+
+    monkeypatch.setattr(applications_router, "publish_safely", capture)
+    replacement = pdf_bytes()
+    response = client.put(
+        f"/applications/{application_id}/resume",
+        headers=headers,
+        files=resume_file(filename="replacement.pdf", content=replacement),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == application_id
+    assert body["student_id"] == student_id
+    assert body["job_id"] == job_id
+    assert body["resume_original_name"] == "replacement.pdf"
+    assert body["resume_size_bytes"] == len(replacement)
+    assert body["job"]["id"] == job_id
+    application_key = str(application_id)
+    assert published == [
+        (
+            "application.updated",
+            {
+                "application_id": application_key,
+                "student_id": str(student_id),
+                "job_id": str(job_id),
+            },
+            {"key": application_key},
+        )
+    ]
+
+
+def test_invalid_replacement_pdf_publishes_nothing_and_preserves_old_resume(
+    auth_test_context,
+    monkeypatch,
+):
+    client, engine = auth_test_context
+    job_id = create_job(engine)
+    auth_response = signup_student(client)
+    headers = authorization_headers(auth_response)
+    created = client.post(
+        f"/jobs/{job_id}/applications",
+        headers=headers,
+        files=resume_file(filename="old.pdf"),
+    )
+    application_id = created.json()["id"]
+    with Session(engine) as db:
+        old_key = db.get(Application, application_id).resume_storage_key
+    old_path = settings.resume_upload_dir / old_key
+    published = []
+    monkeypatch.setattr(
+        applications_router,
+        "publish_safely",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
+
+    response = client.put(
+        f"/applications/{application_id}/resume",
+        headers=headers,
+        files=resume_file(content=b"%PDF-not-valid"),
+    )
+
+    assert response.status_code == 422
+    assert old_path.is_file()
+    assert list(settings.resume_upload_dir.glob("*.pdf")) == [old_path]
+    with Session(engine) as db:
+        assert db.get(Application, application_id).resume_storage_key == old_key
+    assert published == []
+
+
+def test_missing_or_other_students_application_cannot_replace_resume(
+    auth_test_context,
+    monkeypatch,
+):
+    client, engine = auth_test_context
+    job_id = create_job(engine)
+    owner = signup_student(client)
+    other = signup_student(
+        client,
+        email="resume-other@example.com",
+        full_name="Resume Other",
+    )
+    created = client.post(
+        f"/jobs/{job_id}/applications",
+        headers=authorization_headers(owner),
+        files=resume_file(filename="old.pdf"),
+    )
+    application_id = created.json()["id"]
+    original_files = list(settings.resume_upload_dir.glob("*.pdf"))
+    published = []
+    monkeypatch.setattr(
+        applications_router,
+        "publish_safely",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
+
+    unauthorized = client.put(
+        f"/applications/{application_id}/resume",
+        headers=authorization_headers(other),
+        files=resume_file(filename="stolen.pdf"),
+    )
+    missing = client.put(
+        "/applications/999999/resume",
+        headers=authorization_headers(owner),
+        files=resume_file(filename="missing.pdf"),
+    )
+
+    assert unauthorized.status_code == 404
+    assert unauthorized.json() == {"detail": "Application not found."}
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "Application not found."}
+    assert list(settings.resume_upload_dir.glob("*.pdf")) == original_files
+    assert published == []
+
+
+def test_resume_commit_failure_removes_new_file_and_preserves_old_file(
+    auth_test_context,
+    monkeypatch,
+):
+    client, engine = auth_test_context
+    job_id = create_job(engine)
+    auth_response = signup_student(client)
+    student_id = auth_response["student"]["id"]
+    created = client.post(
+        f"/jobs/{job_id}/applications",
+        headers=authorization_headers(auth_response),
+        files=resume_file(filename="old.pdf"),
+    )
+    application_id = created.json()["id"]
+    published = []
+    monkeypatch.setattr(
+        applications_router,
+        "publish_safely",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
+
+    with Session(engine) as db:
+        application = db.get(Application, application_id)
+        student = db.get(Student, student_id)
+        old_key = application.resume_storage_key
+        old_path = settings.resume_upload_dir / old_key
+        before = set(settings.resume_upload_dir.iterdir())
+        original_rollback = db.rollback
+        rollback_called = False
+
+        def fail_commit():
+            raise SQLAlchemyError("database unavailable")
+
+        def track_rollback():
+            nonlocal rollback_called
+            rollback_called = True
+            original_rollback()
+
+        monkeypatch.setattr(db, "commit", fail_commit)
+        monkeypatch.setattr(db, "rollback", track_rollback)
+        upload = UploadFile(
+            file=BytesIO(pdf_bytes()),
+            filename="replacement.pdf",
+            headers=Headers({"content-type": "application/pdf"}),
+        )
+
+        with pytest.raises(SQLAlchemyError, match="database unavailable"):
+            asyncio.run(
+                update_application_resume(
+                    application_id=application_id,
+                    resume=upload,
+                    current_student=student,
+                    db=db,
+                )
+            )
+
+    assert rollback_called
+    assert old_path.is_file()
+    assert set(settings.resume_upload_dir.iterdir()) == before
+    with Session(engine) as db:
+        persisted = db.get(Application, application_id)
+        assert persisted.resume_storage_key == old_key
+        assert persisted.resume_original_name == "old.pdf"
+    assert published == []
+
+
+def test_resume_update_succeeds_when_publish_safely_returns_false(
+    auth_test_context,
+    monkeypatch,
+):
+    client, engine = auth_test_context
+    job_id = create_job(engine)
+    auth_response = signup_student(client)
+    headers = authorization_headers(auth_response)
+    created = client.post(
+        f"/jobs/{job_id}/applications",
+        headers=headers,
+        files=resume_file(filename="old.pdf"),
+    )
+    application_id = created.json()["id"]
+    with Session(engine) as db:
+        old_key = db.get(Application, application_id).resume_storage_key
+    monkeypatch.setattr(
+        applications_router,
+        "publish_safely",
+        lambda *args, **kwargs: False,
+    )
+
+    response = client.put(
+        f"/applications/{application_id}/resume",
+        headers=headers,
+        files=resume_file(filename="replacement.pdf"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["resume_original_name"] == "replacement.pdf"
+    assert not (settings.resume_upload_dir / old_key).exists()
+    with Session(engine) as db:
+        updated = db.get(Application, application_id)
+        assert updated.resume_original_name == "replacement.pdf"
+        assert (settings.resume_upload_dir / updated.resume_storage_key).is_file()
+
+
 def test_application_uses_authenticated_student_and_default_status(
     auth_test_context,
 ):
@@ -262,10 +512,15 @@ def test_application_endpoints_require_authentication(auth_test_context):
     )
     history_response = client.get("/applications/me")
     resume_response = client.get("/applications/1/resume")
+    replace_response = client.put(
+        "/applications/1/resume",
+        files=resume_file(),
+    )
 
     assert apply_response.status_code == 401
     assert history_response.status_code == 401
     assert resume_response.status_code == 401
+    assert replace_response.status_code == 401
 
 
 def test_applying_to_missing_job_returns_404(auth_test_context):

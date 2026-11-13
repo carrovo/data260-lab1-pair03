@@ -1,12 +1,12 @@
 #!/bin/sh
 # Proves the Kafka flow end to end with a brand-new student, so no 409 can hide a
-# missing message: sign up, register for an event, apply to a job with a PDF, then
-# compare topic offsets before and after. Works for Compose and Kubernetes (both
+# missing message: sign up, register for an event, apply to a job, replace its
+# resume, then compare topic offsets before and after. Works for Compose and Kubernetes (both
 # publish the gateway on localhost:9036). Results: kafka_flow_output.txt
 #   sh scripts/check_kafka_flow.sh
 OUT=kafka_flow_output.txt
 G=http://localhost:9036
-TOPICS="p03.application.created p03.event.registration_created application.created event.registration_created"
+TOPICS="p03.application.created p03.application.updated p03.event.registration_created application.created application.updated event.registration_created"
 offsets() {
   for t in $TOPICS; do
     if command -v kubectl >/dev/null 2>&1 && kubectl -n p03 get pod p03-kafka-0 >/dev/null 2>&1; then
@@ -30,7 +30,11 @@ field() { python3 -c "import sys,json;print(json.load(sys.stdin)['$1'])"; }
   echo "== register for event 1 (expect 201)"
   curl -s -o /dev/null -w "  %{http_code}\n" -X POST $G/gw/events/1/registrations -H "Authorization: Bearer $TOKEN"
   echo "== apply to job 1 with a PDF (expect 201)"
-  curl -s -o /dev/null -w "  %{http_code}\n" -X POST $G/gw/jobs/1/applications -H "Authorization: Bearer $TOKEN" -F "resume=@loadtest/resume.pdf;type=application/pdf"
+  APPLICATION=$(curl -s -X POST $G/gw/jobs/1/applications -H "Authorization: Bearer $TOKEN" -F "resume=@loadtest/resume.pdf;type=application/pdf")
+  APPLICATION_ID=$(echo "$APPLICATION" | field id 2>/dev/null)
+  [ -n "$APPLICATION_ID" ] && echo "  application $APPLICATION_ID created" || { echo "  application failed: $APPLICATION" | cut -c1-300; }
+  echo "== replace the application resume (expect 200)"
+  curl -s -o /dev/null -w "  %{http_code}\n" -X PUT $G/gw/applications/$APPLICATION_ID/resume -H "Authorization: Bearer $TOKEN" -F "resume=@loadtest/resume.pdf;type=application/pdf"
   sleep 8
   echo "== offsets after (the p03.* topics must each be +1; the old ones must not move)"; offsets
   echo "== event worker log"
@@ -38,6 +42,12 @@ field() { python3 -c "import sys,json;print(json.load(sys.stdin)['$1'])"; }
     kubectl -n p03 logs deploy/p03-event-worker --tail=3 2>&1 | cut -c1-200
   else
     docker logs --tail 3 p03-event-worker 2>&1 | cut -c1-200
+  fi
+  echo "== application worker log"
+  if command -v kubectl >/dev/null 2>&1 && kubectl -n p03 get pod p03-kafka-0 >/dev/null 2>&1; then
+    kubectl -n p03 logs deploy/p03-application-worker --tail=5 2>&1 | cut -c1-200
+  else
+    docker logs --tail 5 p03-application-worker 2>&1 | cut -c1-200
   fi
 } > "$OUT" 2>&1
 echo "done: results are in $OUT"
