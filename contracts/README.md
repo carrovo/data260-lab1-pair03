@@ -64,6 +64,12 @@ Topics, producers and consumers (code: `backend/common/events.py`):
 | event.registration_created | event | event-worker | registration_id, student_id, event_id |
 | job.created | job | job-index-worker | job_id, company_id, title |
 
+The table lists event types. The real Kafka topics are `p03.<event type>` (for example
+`p03.job.created`, dead letters `p03.job.created.dlq`). Code, envelopes and workers use
+the plain event type; the prefix is added in one place (`kafka_topic()` in
+`backend/common/events.py`, used by the Kafka adapters) and in the topic-creation jobs.
+`KAFKA_TOPIC_PREFIX` overrides it.
+
 Every message is one envelope: `event_id`, `event_type`, `trace_id`,
 `occurred_at`, `producer`, `payload`. Ids inside payloads are strings.
 

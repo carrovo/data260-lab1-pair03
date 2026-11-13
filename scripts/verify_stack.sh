@@ -20,7 +20,7 @@ COMPOSE="docker compose --env-file .env.compose"
   echo "== mongo registrations (sample)"
   docker exec p03-mongo mongosh p03_handshake --quiet --eval 'printjson(db.registrations.find().limit(5).toArray())'
   echo "== kafka: messages per topic (end offsets)"
-  for t in application.created event.registration_created job.created; do
+  for t in p03.application.created p03.event.registration_created p03.job.created; do
     printf "%s " "$t"
     docker exec p03-kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server p03-kafka:9092 --topic "$t" 2>&1 | tail -1
   done

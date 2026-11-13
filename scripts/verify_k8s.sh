@@ -9,7 +9,7 @@ OUT=verify_k8s_output.txt
   echo "== stop compose (frees ports 9030-9035)"
   docker compose --env-file .env.compose down 2>&1 | tail -3
   echo "== apply manifests (the db-init Job is immutable, so it is deleted and recreated)"
-  kubectl -n p03 delete job p03-db-init --ignore-not-found 2>&1
+  kubectl -n p03 delete job p03-db-init p03-kafka-init --ignore-not-found 2>&1
   kubectl apply -k k8s 2>&1 | grep -v unchanged
   echo "== wait for databases and Kafka to be ready again"
   for sts in mysql mongo kafka; do kubectl -n p03 rollout status statefulset/p03-$sts --timeout=240s 2>&1 | tail -1; done
@@ -34,7 +34,7 @@ OUT=verify_k8s_output.txt
   awk -F, 'NR>1 && $8=="false" {print "FAILED:", $3, $4}' loadtest/trial_k8s.jtl
   sleep 6
   echo "== kafka offsets in the cluster"
-  for t in application.created event.registration_created; do
+  for t in p03.application.created p03.event.registration_created; do
     printf "%s " "$t"; kubectl -n p03 exec p03-kafka-0 -- /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic "$t" 2>&1 | tail -1
   done
   echo "== event-worker log"

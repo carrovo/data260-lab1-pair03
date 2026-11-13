@@ -157,11 +157,16 @@ that prefix. Host ports stay inside 9030 to 9039 (see `contracts/README.md`).
 ### 1. One-time setup
 
 ```bash
-cp .env.compose.example .env.compose
-# edit .env.compose: set MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD and JWT_SECRET_KEY
+sh scripts/make_env.sh       # or: make env
 ```
 
-`.env.compose` is ignored by Git. Never commit real values.
+This creates `.env.compose` with fresh random secrets (it never overwrites an existing
+file and never prints the values). To choose them yourself instead, run
+`cp .env.compose.example .env.compose` and replace the three `change-me` values
+(`MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`, `JWT_SECRET_KEY`).
+
+`.env.compose` is ignored by Git. Never commit real values. Every Compose and `make`
+command in this README needs this file.
 
 ### 2. Build, start, inspect, stop
 
@@ -174,7 +179,7 @@ docker compose --env-file .env.compose down -v           # stop and delete the d
 ```
 
 `p03-db-init` creates the MySQL tables and runs the two Lab 1 migrations, and
-`p03-kafka-init` creates the five topics and their `.dlq` topics, before the
+`p03-kafka-init` creates the five topics (named `p03.<event type>`, for example `p03.job.created`) and their `.dlq` topics, before the
 services start.
 
 ### 3. Load the demo data (SEED=3), once

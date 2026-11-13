@@ -27,6 +27,9 @@ kafka-demos:
 
 # ---- Kubernetes (namespace p03). Needs kubectl pointing at a cluster, and the
 # images built locally (docker compose build) for Docker Desktop Kubernetes.
+env:
+	sh scripts/make_env.sh
+
 k8s-secret:
 	kubectl apply -f k8s/namespace.yaml
 	kubectl -n p03 create secret generic p03-secrets --from-env-file=.env.compose --dry-run=client -o yaml | kubectl apply -f -

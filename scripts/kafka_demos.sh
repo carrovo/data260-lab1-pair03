@@ -3,7 +3,7 @@
 #
 #   bash scripts/kafka_demos.sh duplicate   same event twice  -> processed once
 #   bash scripts/kafka_demos.sh restart     worker down, then back, then replay
-#   bash scripts/kafka_demos.sh poison      bad messages      -> job.created.dlq
+#   bash scripts/kafka_demos.sh poison      bad messages      -> p03.job.created.dlq
 #   bash scripts/kafka_demos.sh all         the three, in a safe order
 #
 # Needs: docker compose stack up (p03-kafka, p03-mongo, p03-job-index-worker).
@@ -14,7 +14,7 @@ KAFKA=p03-kafka
 MONGO=p03-mongo
 WORKER=p03-job-index-worker
 BOOT=p03-kafka:9092
-TOPIC=job.created
+TOPIC=p03.job.created   # physical topic; envelopes keep event_type job.created
 KBIN=/opt/kafka/bin
 
 say() { printf '\n=== %s\n' "$*"; }

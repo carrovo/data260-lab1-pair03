@@ -45,3 +45,4 @@ loadtest/k8s_*.jtl
 k8s_loadtest_before*.txt
 k8s_diag_output.txt
 loadtest/temp/
+kafka_flow_output.txt

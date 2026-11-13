@@ -22,8 +22,8 @@ spec:
                 echo "waiting for kafka"; sleep 3
               done
               for topic in application.created application.updated application.status_changed event.registration_created job.created; do
-                /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic $topic --partitions 1 --replication-factor 1
-                /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic $topic.dlq --partitions 1 --replication-factor 1
+                /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic p03.$topic --partitions 1 --replication-factor 1
+                /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic p03.$topic.dlq --partitions 1 --replication-factor 1
               done
               /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --list
           resources:

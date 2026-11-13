@@ -24,6 +24,7 @@ from .events import (
     EventEnvelope,
     build_dlq_message,
     dlq_topic,
+    kafka_topic,
     processed_event_key,
     processed_event_record,
 )
@@ -242,7 +243,7 @@ class ConfluentPublisher:
 
     def send(self, topic: str, key: str | None, value: str) -> None:
         self._producer.produce(
-            topic, key=key, value=value, on_delivery=self._delivered
+            kafka_topic(topic), key=key, value=value, on_delivery=self._delivered
         )
         if self._flush_timeout > 0:
             self._producer.flush(self._flush_timeout)
@@ -264,7 +265,7 @@ class ConfluentConsumerClient:
                 "auto.offset.reset": "earliest",
             }
         )
-        self._consumer.subscribe([topic])
+        self._consumer.subscribe([kafka_topic(topic)])
 
     def poll(self) -> Any | None:
         message = self._consumer.poll(1.0)

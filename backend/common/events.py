@@ -7,6 +7,7 @@ See contracts/README.md for the rules this module enforces.
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -50,6 +51,15 @@ TOPICS: dict[str, dict[str, Any]] = {
         "required": ["job_id", "company_id", "title"],
     },
 }
+
+
+# Physical Kafka topics are "<prefix><event_type>", for example p03.job.created
+# (dead letters: p03.job.created.dlq). Services, producers and workers keep using
+# the plain event_type; only the Kafka adapters and the topic-creation jobs add
+# the prefix. Override with KAFKA_TOPIC_PREFIX (an empty value means no prefix).
+def kafka_topic(event_type: str) -> str:
+    """Name of the real Kafka topic for an event_type (or its .dlq name)."""
+    return os.environ.get("KAFKA_TOPIC_PREFIX", "p03.") + event_type
 
 
 def dlq_topic(topic: str) -> str:

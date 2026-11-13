@@ -193,6 +193,21 @@ Result:   PASS after three fixes; details and evidence in METRICS.md.
   - Known: at 500 users the student login burst is slow (mean about 10 to 12 s,
     max 24 to 27 s) because the Student service has one replica.
 
+[L2-9] Kafka topic prefix p03. (Kubernetes, SQL mode)
+Command:  sh scripts/k8s_mongo.sh off ; sh scripts/check_kafka_flow.sh
+Result:   PASS
+  - kafka-init created p03.<event type> and p03.<event type>.dlq for all five
+    event types; the services publish and the workers subscribe through
+    kafka_topic() only (backend/common/events.py).
+  - With a brand-new student: event registration 201 and job application 201;
+    p03.event.registration_created and p03.application.created each moved
+    from 0 to 1, the old unprefixed topics did not move, and the event worker
+    logged "processed ... attempts=1".
+  - Note: the earlier 5-user JMeter trial could not prove this, because the
+    same five students already had most events and jobs and every attempt
+    returned 409 (no message is published on a 409). check_kafka_flow.sh uses a
+    new student each run for that reason.
+
 [L2-7] Not verified
   - Student Assistant: the container reports "[model backend unreachable:
     Errno 101]" because Ollama is not running on the host (curl to

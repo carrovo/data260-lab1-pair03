@@ -10,9 +10,10 @@ MODE=${1:-on}
 OUT=k8s_mongo_output.txt
 {
   echo "== date / target"; date; echo "PERSISTENCE=$V"
-  kubectl -n p03 delete job p03-db-init --ignore-not-found 2>&1
+  kubectl -n p03 delete job p03-db-init p03-kafka-init --ignore-not-found 2>&1
   kubectl kustomize k8s | sed "s/^  PERSISTENCE: .*/  PERSISTENCE: $V/" | kubectl apply -f - 2>&1 | grep -v unchanged
-  kubectl -n p03 wait --for=condition=complete job/p03-db-init --timeout=300s 2>&1
+  kubectl -n p03 wait --for=condition=complete job/p03-db-init job/p03-kafka-init --timeout=300s 2>&1
+  kubectl -n p03 logs job/p03-kafka-init 2>&1 | grep "^p03\." | sort | tr "\n" " "; echo
   echo "== reseed (SEED=3)"
   kubectl -n p03 delete job p03-seed --ignore-not-found 2>&1
   kubectl apply -f k8s/optional/seed-job.yaml 2>&1
@@ -34,7 +35,7 @@ OUT=k8s_mongo_output.txt
   echo "== Mongo contents"
   kubectl -n p03 exec p03-mongo-0 -- mongosh p03_handshake --quiet --eval 'printjson({companies: db.companies.countDocuments({}), jobs: db.jobs.countDocuments({}), events: db.events.countDocuments({}), registrations: db.registrations.countDocuments({})})' 2>&1
   echo "== Kafka offsets"
-  for t in application.created event.registration_created; do
+  for t in p03.application.created p03.event.registration_created; do
     printf "%s " $t; kubectl -n p03 exec p03-kafka-0 -- /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic $t 2>&1 | tail -1
   done
   echo "== errors in event-service / application-service logs (expect 0)"
