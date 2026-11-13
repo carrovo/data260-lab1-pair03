@@ -18,6 +18,7 @@ import enum
 import json
 import logging
 import time
+from collections.abc import Iterable
 from typing import Any, Callable, Protocol
 
 from .events import (
@@ -54,6 +55,8 @@ class ConsumerClient(Protocol):
     def poll(self) -> Any | None: ...
 
     def value(self, message: Any) -> str | bytes: ...
+
+    def topic(self, message: Any) -> str: ...
 
     def commit(self, message: Any) -> None: ...
 
@@ -159,11 +162,11 @@ def _dead_letter(
 def run_consumer(
     client: ConsumerClient,
     *,
-    topic: str,
     consumer: str,
     handler: Callable[[EventEnvelope], None],
     store: ProcessedEventStore,
     publisher: Publisher,
+    topic: str | None = None,
     max_messages: int | None = None,
     max_attempts: int = MAX_ATTEMPTS,
     sleep: Callable[[float], None] = time.sleep,
@@ -182,9 +185,10 @@ def run_consumer(
             if max_messages is not None:
                 break
             continue
+        message_topic = topic or client.topic(message)
         process_message(
             client.value(message),
-            topic=topic,
+            topic=message_topic,
             consumer=consumer,
             handler=handler,
             store=store,
@@ -253,7 +257,10 @@ class ConfluentPublisher:
 
 class ConfluentConsumerClient:
     def __init__(
-        self, bootstrap_servers: str, group_id: str, topic: str
+        self,
+        bootstrap_servers: str,
+        group_id: str,
+        topic: str | Iterable[str],
     ) -> None:
         from confluent_kafka import Consumer
 
@@ -265,7 +272,9 @@ class ConfluentConsumerClient:
                 "auto.offset.reset": "earliest",
             }
         )
-        self._consumer.subscribe([kafka_topic(topic)])
+        topics = (topic,) if isinstance(topic, str) else tuple(topic)
+        self._logical_topics = {kafka_topic(name): name for name in topics}
+        self._consumer.subscribe(list(self._logical_topics))
 
     def poll(self) -> Any | None:
         message = self._consumer.poll(1.0)
@@ -275,6 +284,10 @@ class ConfluentConsumerClient:
 
     def value(self, message: Any) -> str | bytes:
         return message.value()
+
+    def topic(self, message: Any) -> str:
+        physical_topic = message.topic()
+        return self._logical_topics[physical_topic]
 
     def commit(self, message: Any) -> None:
         self._consumer.commit(message=message, asynchronous=False)

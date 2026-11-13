@@ -80,17 +80,63 @@ def handle_event_registration_created(
     )
 
 
-# worker name -> (topic, handler)
-WORKERS: dict[str, tuple[str, Callable[[EventEnvelope, Any], None]]] = {
-    "job-index-worker": ("job.created", handle_job_created),
-    "notification-worker": (
-        "application.status_changed",
-        handle_application_status_changed,
-    ),
-    "event-worker": (
-        "event.registration_created",
-        handle_event_registration_created,
-    ),
+def _application_document(envelope: EventEnvelope) -> dict[str, str]:
+    payload = envelope.payload
+    return {
+        "student_id": str(payload["student_id"]),
+        "job_id": str(payload["job_id"]),
+        "updated_at": envelope.occurred_at,
+        "trace_id": envelope.trace_id,
+        "last_event_id": envelope.event_id,
+        "last_event_type": envelope.event_type,
+    }
+
+
+def handle_application_created(envelope: EventEnvelope, db: Any) -> None:
+    """application.created -> applications: create the application projection."""
+    application_id = str(envelope.payload["application_id"])
+    db["applications"].update_one(
+        {"_id": application_id},
+        {
+            "$set": _application_document(envelope),
+            "$setOnInsert": {"created_at": envelope.occurred_at},
+        },
+        upsert=True,
+    )
+
+
+def handle_application_updated(envelope: EventEnvelope, db: Any) -> None:
+    """application.updated -> applications: refresh the same projection."""
+    application_id = str(envelope.payload["application_id"])
+    db["applications"].update_one(
+        {"_id": application_id},
+        {
+            "$set": _application_document(envelope),
+            "$setOnInsert": {"created_at": envelope.occurred_at},
+        },
+        upsert=True,
+    )
+
+
+# worker name -> event type -> handler
+WORKERS: dict[
+    str, dict[str, Callable[[EventEnvelope, Any], None]]
+] = {
+    "application-worker": {
+        "application.created": handle_application_created,
+        "application.updated": handle_application_updated,
+    },
+    "job-index-worker": {"job.created": handle_job_created},
+    "notification-worker": {
+        "application.status_changed": handle_application_status_changed,
+    },
+    "event-worker": {
+        "event.registration_created": handle_event_registration_created,
+    },
 }
 
-assert all(TOPICS[topic]["consumer"] == name for name, (topic, _) in WORKERS.items())
+assert all(
+    TOPICS[topic]["consumer"] == name
+    for name, handlers in WORKERS.items()
+    for topic in handlers
+)
