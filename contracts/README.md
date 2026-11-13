@@ -75,9 +75,9 @@ Every message is one envelope: `event_id`, `event_type`, `trace_id`,
 
 Consumer rules:
 
-1. Idempotent. Before writing, record `event_id` in `processed_events`
-   (document `_id` = `event_id`). A duplicate fails the unique key and is
-   skipped.
+1. Idempotent. Before writing, record the event in `processed_events`
+   (document `_id` = `<consumer>:<event_id>`, so each worker keeps its own
+   record). A duplicate is skipped.
 2. Commit the Kafka offset only after the database write succeeds.
 3. Retry a failing message at most 3 times, then publish it to
    `<topic>.dlq` and carry on with the next message. The dead-letter message
@@ -102,13 +102,15 @@ Consumer rules:
 One service writes each collection. Others read it through that service's API
 or learn about changes from Kafka. Document `_id` is a string.
 
-Workers (one image, `p03-worker`, chosen with `WORKER_NAME`): `job-index-worker`, `notification-worker`, `event-worker`. Each reads `KAFKA_BOOTSTRAP` and `MONGO_URL` from the environment. Students read their notifications through the Student service API.
+Workers (one image, `p03-worker`, chosen with `WORKER_NAME`): `application-worker` (reads `application.created` and `application.updated`), `job-index-worker`, `notification-worker`, `event-worker`. Each reads `KAFKA_BOOTSTRAP` and `MONGO_URL` from the environment. Students read their notifications through the Student service API.
 
 ## 6. Open points for Xuanhua
 
-1. Port table as above - approve or change.
-2. Payload keys per topic - add anything the Application Worker needs.
-3. `application.updated`: what counts as an update, and what does it carry?
+1. Port table as above: agreed.
+2. Payload keys per topic: `application_id`, `student_id`, `job_id` are enough for the
+   Application Worker (agreed).
+3. `application.updated`: sent when a student replaces the resume
+   (`PUT /applications/{id}/resume`); it carries the same three ids (agreed).
 4. Who owns `saved_items` - assistant or student service?
 5. Split of the student registration route between `events.py` and
    `registration_routes.py`.
