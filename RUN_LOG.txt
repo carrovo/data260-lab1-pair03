@@ -234,6 +234,17 @@ Result:   PASS
     - Both messages are in p03.job.created.dlq. A good event published right after them was
       processed normally (1 document, 1 record), so the pipeline kept running.
 
+[L2-11] Application Worker and application.updated (Kubernetes, merged tree 4ffdfbc, 2026-11-13)
+  Built by Xuanhua (branch feature/lab2-application-worker), merged and redeployed here.
+  - Full backend suite on the merged tree: 415 passed, 1 skipped.
+  - scripts/verify_k8s.sh: every pod Running, including p03-application-worker; 5-user
+    JMeter trial 0 errors.
+  - scripts/check_kafka_flow.sh with a brand-new student: event registration 201, application
+    created, resume replaced (PUT /applications/{id}/resume) 200. Offsets: p03.application.created
+    4407 -> 4408, p03.application.updated 0 -> 1, p03.event.registration_created 1192 -> 1193;
+    the old unprefixed topics did not move. The application worker logged "processed ... attempts=1"
+    for both application events and the event worker for the registration.
+
 [L2-7] Not verified
   - Student Assistant: verified working by Xuanhua on her laptop (Ollama,
     qwen3:8b). Not re-run on the Company-side machine, where Ollama is not
