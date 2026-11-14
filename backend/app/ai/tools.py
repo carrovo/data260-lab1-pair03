@@ -18,6 +18,9 @@ from sqlalchemy import Select, and_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from backend.app.config import settings
+from backend.app.repos import make_repos
+
 from backend.app.models import (
     Company,
     Event,
@@ -413,6 +416,65 @@ def _job_search_statement(arguments: _JobSearchArguments) -> Select:
     )
 
 
+def _job_rows(db: Session, arguments: _JobSearchArguments) -> list[tuple[Any, Any]]:
+    """(job, company) rows. With PERSISTENCE=mongo the jobs come from MongoDB."""
+    if settings.persistence != "mongo":
+        return db.execute(_job_search_statement(arguments)).all()
+
+    skills = [
+        skill.strip()
+        for skill in (arguments.skills or "").split(",")
+        if skill.strip()
+    ]
+    jobs = make_repos(db).jobs.search_advanced(
+        title=arguments.title,
+        company=arguments.company,
+        category=arguments.category.value if arguments.category else None,
+        city=arguments.city,
+        is_remote=arguments.is_remote,
+        min_salary=arguments.min_salary,
+        skills=skills,
+        deadline_before=_end_boundary(arguments.deadline_before),
+        limit=MAX_TOOL_RESULTS,
+    )
+    return [(job, job.company) for job in jobs]
+
+
+def _job_row(db: Session, job_id: int) -> tuple[Any, Any] | None:
+    if settings.persistence != "mongo":
+        return db.execute(
+            select(Job, Company)
+            .join(Company, Job.company_id == Company.id)
+            .where(Job.id == job_id)
+        ).one_or_none()
+    job = make_repos(db).jobs.get(job_id)
+    return None if job is None else (job, job.company)
+
+
+def _event_rows(db: Session, arguments: _EventSearchArguments) -> list[tuple[Any, Any]]:
+    if settings.persistence != "mongo":
+        return db.execute(_event_search_statement(arguments)).all()
+
+    events = make_repos(db).events.search_advanced(
+        name=arguments.name,
+        city=arguments.city,
+        start=_start_boundary(arguments.start_date),
+        end=_end_boundary(arguments.end_date),
+        major=arguments.major,
+        eligibility=arguments.eligibility,
+        limit=MAX_TOOL_RESULTS,
+    )
+    return [(event, event.company) for event in events]
+
+
+def _target_exists(db: Session, model: Any, item_id: int) -> bool:
+    if settings.persistence != "mongo":
+        return db.get(model, item_id) is not None
+    repos = make_repos(db)
+    target = repos.jobs if model is Job else repos.events
+    return target.get(item_id) is not None
+
+
 def search_jobs(db: Session, **arguments: Any) -> str:
     """Search canonical jobs and return a bounded non-sensitive summary."""
 
@@ -420,16 +482,14 @@ def search_jobs(db: Session, **arguments: Any) -> str:
         validated = _JobSearchArguments.model_validate(
             _without_trusted_context(arguments)
         )
-        rows = db.execute(_job_search_statement(validated)).all()
+        rows = _job_rows(db, validated)
         if not rows and validated.title:
             fallback_title = _job_title_fallback(validated.title)
             if fallback_title is not None:
                 fallback_arguments = validated.model_copy(
                     update={"title": fallback_title}
                 )
-                rows = db.execute(
-                    _job_search_statement(fallback_arguments)
-                ).all()
+                rows = _job_rows(db, fallback_arguments)
         if not rows:
             return "No jobs matched those filters."
 
@@ -460,11 +520,7 @@ def get_job_details(db: Session, **arguments: Any) -> str:
         validated = _JobDetailsArguments.model_validate(
             _without_trusted_context(arguments)
         )
-        row = db.execute(
-            select(Job, Company)
-            .join(Company, Job.company_id == Company.id)
-            .where(Job.id == validated.job_id)
-        ).one_or_none()
+        row = _job_row(db, validated.job_id)
         if row is None:
             return f"No job was found with id {validated.job_id}."
 
@@ -535,7 +591,7 @@ def search_events(db: Session, **arguments: Any) -> str:
         validated = _EventSearchArguments.model_validate(
             _without_trusted_context(arguments)
         )
-        rows = db.execute(_event_search_statement(validated)).all()
+        rows = _event_rows(db, validated)
         if not rows:
             return "No events matched those filters."
 
@@ -578,7 +634,7 @@ def save_job_or_event(
             return "No authenticated student record was found."
 
         target_model = Job if validated.item_type == "job" else Event
-        if db.get(target_model, validated.item_id) is None:
+        if not _target_exists(db, target_model, validated.item_id):
             return (
                 f"No {validated.item_type} was found with id "
                 f"{validated.item_id}; nothing was saved."

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
@@ -9,15 +10,15 @@ from sqlalchemy.orm import Session
 from backend.app.application_status import ApplicationStatus
 from backend.app.models import (
     Application,
-    Company,
-    Job,
     Student,
 )
+from backend.app.repos import make_repos
 from backend.app.routers.applications import get_stored_resume_path
 from backend.app.routers.company_auth import (
     get_current_company,
     get_db,
 )
+from backend.common.outgoing import publish_safely
 
 
 router = APIRouter(
@@ -50,8 +51,8 @@ def _owned_job_or_404(
     db: Session,
     job_id: int,
     company_id: int,
-) -> Job:
-    job = db.get(Job, job_id)
+) -> Any:
+    job = make_repos(db).jobs.get(job_id)
 
     if job is None:
         raise HTTPException(
@@ -87,7 +88,7 @@ def _verify_company_owns_application(
     db: Session,
     application: Application,
     company_id: int,
-) -> Job:
+) -> Any:
     return _owned_job_or_404(
         db,
         application.job_id,
@@ -121,7 +122,7 @@ def _applicant_response(
 def list_job_applicants(
     job_id: int,
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     job = _owned_job_or_404(
         db,
@@ -156,7 +157,7 @@ def list_job_applicants(
 def preview_application_resume(
     application_id: int,
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     application = _application_or_404(
         db,
@@ -204,7 +205,7 @@ def update_application_status(
     application_id: int,
     payload: ApplicationStatusUpdate,
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     application = _application_or_404(
         db,
@@ -228,10 +229,24 @@ def update_application_status(
             detail="Student not found.",
         )
 
+    old_status = application.status
     application.status = payload.status.value
 
     db.commit()
     db.refresh(application)
+
+    if old_status != application.status:
+        publish_safely(
+            "application.status_changed",
+            {
+                "application_id": str(application.id),
+                "student_id": str(application.student_id),
+                "job_id": str(application.job_id),
+                "old_status": old_status,
+                "new_status": application.status,
+            },
+            key=str(application.id),
+        )
 
     return _applicant_response(
         application,

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
+import { fetchApplicationResume } from '../api'
 import {
-  fetchApplicationResume,
-  fetchMyApplications,
-} from '../api'
+  loadMyApplications,
+  selectMyApplications,
+} from '../store/applicationsSlice'
 import useAuth from '../auth/useAuth'
 
 
@@ -25,10 +27,19 @@ function formatApplicationDate(appliedAt) {
 
 function ApplicationsPage() {
   const { accessToken, logout } = useAuth()
-  const [applications, setApplications] = useState([])
+  const dispatch = useDispatch()
+  const {
+    items: applications,
+    status: loadStatus,
+    error: requestError,
+  } = useSelector(selectMyApplications)
   const [statusFilter, setStatusFilter] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const loading = loadStatus === 'idle' || loadStatus === 'loading'
+  const unauthorized = requestError?.status === 401
+  const error =
+    requestError && !unauthorized
+      ? requestError.message || 'Unable to load your applications.'
+      : ''
   const [resumeError, setResumeError] = useState('')
   const [resumeLoadingId, setResumeLoadingId] = useState(null)
   const objectUrlsRef = useRef(new Map())
@@ -46,46 +57,14 @@ function ApplicationsPage() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
+    dispatch(loadMyApplications({ token: accessToken, status: statusFilter }))
+  }, [accessToken, dispatch, statusFilter])
 
-    async function loadApplications() {
-      setLoading(true)
-      setError('')
-
-      try {
-        const applicationData = await fetchMyApplications(
-          accessToken,
-          statusFilter,
-        )
-
-        if (!cancelled) {
-          setApplications(applicationData)
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setApplications([])
-
-          if (requestError.status === 401) {
-            logout()
-          } else {
-            setError(
-              requestError.message || 'Unable to load your applications.',
-            )
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
+  useEffect(() => {
+    if (unauthorized) {
+      logout()
     }
-
-    loadApplications()
-
-    return () => {
-      cancelled = true
-    }
-  }, [accessToken, logout, statusFilter])
+  }, [unauthorized, logout])
 
   async function handleViewResume(application) {
     const previewWindow = window.open('', '_blank')

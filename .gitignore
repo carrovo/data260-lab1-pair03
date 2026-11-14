@@ -9,6 +9,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+!.env.compose.example
 
 # Node / React
 node_modules/
@@ -27,3 +28,37 @@ build/
 
 # Runtime uploads
 /backend/uploads/
+loadtest/*.jtl
+loadtest/report_*/
+loadtest/old_runs/
+loadtest/jmeter.log
+verify_output.txt
+loadtest/trial_*.jtl
+verify_k8s_output.txt
+loadtest/trial_k8s.jtl
+verify_frontend_output.txt
+verify_assistant_output.txt
+k8s_loadtest_output.txt
+k8s_mongo_output.txt
+loadtest/trial_k8s_*.jtl
+loadtest/k8s_*.jtl
+k8s_loadtest_before*.txt
+k8s_diag_output.txt
+loadtest/temp/
+kafka_flow_output.txt
+kafka_failures_output.txt
+kafka_failures_output_run1.txt
+kafka_failures_output_run2.txt
+assistant_loadtest_output.txt
+loadtest/assistant_*.jtl
+aws_preflight_output.txt
+aws_ecr_output.txt
+aws_deploy_output.txt
+.aws_build/
+aws_diag_output.txt
+aws_cluster_output.txt
+aws_diag2_output.txt
+aws_ebs_csi_output.txt
+aws_verify_output.txt
+aws_nodes_output.txt
+docs/screenshots/

@@ -16,8 +16,11 @@ from sqlalchemy.orm import Session, selectinload
 from backend.app.application_status import ApplicationStatus
 from backend.app.config import settings
 from backend.app.models import Application, Job, Student
+from backend.app.persistence_views import application_views, mongo_mode
+from backend.app.repos import make_repos
 from backend.app.routers.student_auth import get_current_student, get_db
 from backend.app.schemas.application import ApplicationResponse
+from backend.common.outgoing import publish_safely
 
 
 router = APIRouter(tags=["student applications"])
@@ -175,7 +178,11 @@ async def apply_to_job(
     current_student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    job = db.get(Job, job_id)
+    job = (
+        make_repos(db).jobs.get(job_id)
+        if mongo_mode()
+        else db.get(Job, job_id)
+    )
 
     if job is None:
         raise HTTPException(
@@ -220,6 +227,19 @@ async def apply_to_job(
         remove_file(stored_resume.path)
         raise
 
+    publish_safely(
+        "application.created",
+        {
+            "application_id": str(application.id),
+            "student_id": str(application.student_id),
+            "job_id": str(application.job_id),
+        },
+        key=str(application.id),
+    )
+
+    if mongo_mode():
+        return application_views(db, [application])[0]
+
     statement = (
         select(Application)
         .where(Application.id == application.id)
@@ -249,11 +269,73 @@ def list_current_student_applications(
             Application.status == status_filter.value
         )
 
+    if mongo_mode():
+        statement = statement.order_by(
+            Application.applied_at.desc(), Application.id.desc()
+        )
+        return application_views(db, list(db.scalars(statement).all()))
+
     statement = statement.options(
         application_with_job_and_company()
     ).order_by(Application.applied_at.desc(), Application.id.desc())
 
     return db.scalars(statement).all()
+
+
+@router.put(
+    "/applications/{application_id}/resume",
+    response_model=ApplicationResponse,
+)
+async def update_application_resume(
+    application_id: int,
+    resume: UploadFile = File(...),
+    current_student: Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    application = db.get(Application, application_id)
+    if application is None or application.student_id != current_student.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found.",
+        )
+
+    old_resume_path = (
+        get_stored_resume_path(application.resume_storage_key)
+        if application.resume_storage_key
+        else None
+    )
+    stored_resume = await store_validated_resume(resume)
+    application.resume_storage_key = stored_resume.storage_key
+    application.resume_original_name = stored_resume.original_name
+    application.resume_size_bytes = stored_resume.size_bytes
+
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        remove_file(stored_resume.path)
+        raise
+
+    remove_file(old_resume_path)
+    publish_safely(
+        "application.updated",
+        {
+            "application_id": str(application.id),
+            "student_id": str(application.student_id),
+            "job_id": str(application.job_id),
+        },
+        key=str(application.id),
+    )
+
+    if mongo_mode():
+        return application_views(db, [application])[0]
+
+    statement = (
+        select(Application)
+        .where(Application.id == application.id)
+        .options(application_with_job_and_company())
+    )
+    return db.scalar(statement)
 
 
 @router.get("/applications/{application_id}/resume")

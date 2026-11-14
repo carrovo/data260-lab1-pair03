@@ -1,0 +1,348 @@
+# Pair 03 local stack.   Start:  docker compose --env-file .env.compose up -d --build
+# Values in ${...} come from .env.compose (copy .env.compose.example). No secrets live here.
+
+name: p03
+
+x-service-env: &service-env
+  DATABASE_URL: mysql+pymysql://p03_app:${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env.compose}@p03-mysql:3306/p03
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env.compose}
+  KAFKA_BOOTSTRAP: p03-kafka:9092
+  # sql (default) or mongo: where companies, jobs and events live. See README.
+  PERSISTENCE: ${PERSISTENCE:-sql}
+  MONGO_URL: mongodb://p03-mongo:27017
+  MONGO_DB: p03_handshake
+
+x-worker-env: &worker-env
+  KAFKA_BOOTSTRAP: p03-kafka:9092
+  MONGO_URL: mongodb://p03-mongo:27017
+  MONGO_DB: p03_handshake
+
+services:
+  # ---------------------------------------------------------------- data
+  p03-mysql:
+    image: mysql:8.0
+    container_name: p03-mysql
+    # six services x (20 + 20) pooled connections must fit under this (MySQL default is 151)
+    command: ["--max-connections=500"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env.compose}
+      MYSQL_DATABASE: p03
+      MYSQL_USER: p03_app
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env.compose}
+    volumes:
+      - p03-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks: [p03-net]
+
+  p03-mongo:
+    image: mongo:7
+    container_name: p03-mongo
+    ports:
+      - "9038:27017"
+    volumes:
+      - p03-mongo-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep -q 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks: [p03-net]
+
+  # --------------------------------------------------------------- kafka
+  p03-kafka:
+    image: apache/kafka:3.8.1
+    container_name: p03-kafka
+    ports:
+      - "9037:9037"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9037
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://p03-kafka:9092,EXTERNAL://localhost:9037
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@p03-kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server p03-kafka:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+    networks: [p03-net]
+
+  p03-kafka-init:
+    image: apache/kafka:3.8.1
+    container_name: p03-kafka-init
+    depends_on:
+      p03-kafka:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for topic in application.created application.updated application.status_changed event.registration_created job.created; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic p03.$$topic --partitions 1 --replication-factor 1
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic p03.$$topic.dlq --partitions 1 --replication-factor 1
+        done
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --list
+    networks: [p03-net]
+
+  # ------------------------------------------------ database preparation
+  # Creates the MySQL tables and runs the two Lab 1 migrations. Safe to rerun.
+  p03-db-init:
+    build:
+      context: ./backend
+      dockerfile: services/company/Dockerfile
+    image: p03-company-service:dev
+    container_name: p03-db-init
+    depends_on:
+      p03-mysql:
+        condition: service_healthy
+    restart: "no"
+    environment: *service-env
+    command: >
+      sh -c "python -m backend.create_schema
+      && python -m backend.migrate_application_resumes
+      && python -m backend.migrate_canonical_schema
+      && python -m backend.migrate_mongo_persistence"
+    networks: [p03-net]
+
+  # Loads the SEED=3 demo data. Run once:  docker compose --env-file .env.compose --profile seed run --rm p03-seed
+  p03-seed:
+    build:
+      context: ./backend
+      dockerfile: services/company/Dockerfile
+    image: p03-company-service:dev
+    profiles: ["seed"]
+    depends_on:
+      p03-db-init:
+        condition: service_completed_successfully
+    environment: *service-env
+    command: ["python", "-m", "backend.seed_final_data"]
+    networks: [p03-net]
+
+  # ------------------------------------------------------------ services
+  p03-company-service:
+    build:
+      context: ./backend
+      dockerfile: services/company/Dockerfile
+    image: p03-company-service:dev
+    container_name: p03-company-service
+    ports:
+      - "9030:9030"
+    depends_on:
+      p03-db-init:
+        condition: service_completed_successfully
+      p03-kafka-init:
+        condition: service_completed_successfully
+    environment: *service-env
+    volumes:
+      - p03-uploads:/app/backend/uploads
+    networks: [p03-net]
+
+  p03-job-service:
+    build:
+      context: ./backend
+      dockerfile: services/job/Dockerfile
+    image: p03-job-service:dev
+    container_name: p03-job-service
+    ports:
+      - "9032:9032"
+    depends_on:
+      p03-db-init:
+        condition: service_completed_successfully
+      p03-kafka-init:
+        condition: service_completed_successfully
+    environment: *service-env
+    networks: [p03-net]
+
+  p03-event-service:
+    build:
+      context: ./backend
+      dockerfile: services/event/Dockerfile
+    image: p03-event-service:dev
+    container_name: p03-event-service
+    ports:
+      - "9034:9034"
+    depends_on:
+      p03-db-init:
+        condition: service_completed_successfully
+      p03-kafka-init:
+        condition: service_completed_successfully
+    environment: *service-env
+    networks: [p03-net]
+
+  # Student-side services (Xuanhua's code, from feature/lab2-student-services).
+  p03-student-service:
+    build:
+      context: ./backend
+      dockerfile: services/student/Dockerfile
+    image: p03-student-service:dev
+    container_name: p03-student-service
+    ports:
+      - "9031:9031"
+    depends_on:
+      p03-db-init:
+        condition: service_completed_successfully
+      p03-kafka-init:
+        condition: service_completed_successfully
+    # Login hashes a password (bcrypt) while holding a database connection, so
+    # a login burst needs a pool as large as the worker thread limit (120).
+    environment:
+      <<: *service-env
+      DB_POOL_SIZE: "60"
+      DB_MAX_OVERFLOW: "60"
+    networks: [p03-net]
+
+  # Students submit resumes here and the Company service reads them, so both
+  # services share the p03-uploads volume.
+  p03-application-service:
+    build:
+      context: ./backend
+      dockerfile: services/application/Dockerfile
+    image: p03-application-service:dev
+    container_name: p03-application-service
+    ports:
+      - "9033:9033"
+    depends_on:
+      p03-db-init:
+        condition: service_completed_successfully
+      p03-kafka-init:
+        condition: service_completed_successfully
+    environment: *service-env
+    volumes:
+      - p03-uploads:/app/backend/uploads
+    networks: [p03-net]
+
+  # Needs Ollama (qwen3:8b) running on the host; the container reaches it
+  # through host.docker.internal.
+  p03-assistant-service:
+    build:
+      context: ./backend
+      dockerfile: services/assistant/Dockerfile
+    image: p03-assistant-service:dev
+    container_name: p03-assistant-service
+    ports:
+      - "9035:9035"
+    depends_on:
+      p03-db-init:
+        condition: service_completed_successfully
+      p03-kafka-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *service-env
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [p03-net]
+
+  # React app + gateway: one origin for the browser, routes API calls to the
+  # six services (see frontend/nginx.conf).
+  p03-frontend:
+    build:
+      context: ./frontend
+    image: p03-frontend:dev
+    container_name: p03-frontend
+    ports:
+      - "9036:9036"
+    depends_on:
+      - p03-company-service
+      - p03-student-service
+      - p03-job-service
+      - p03-application-service
+      - p03-event-service
+      - p03-assistant-service
+    networks: [p03-net]
+
+  # ------------------------------------------------------------- workers
+  p03-job-index-worker:
+    build:
+      context: ./backend
+      dockerfile: workers/Dockerfile
+    image: p03-worker:dev
+    container_name: p03-job-index-worker
+    restart: unless-stopped
+    depends_on:
+      p03-kafka-init:
+        condition: service_completed_successfully
+      p03-mongo:
+        condition: service_healthy
+    environment:
+      <<: *worker-env
+      WORKER_NAME: job-index-worker
+    networks: [p03-net]
+
+  p03-application-worker:
+    build:
+      context: ./backend
+      dockerfile: workers/Dockerfile
+    image: p03-worker:dev
+    container_name: p03-application-worker
+    restart: unless-stopped
+    depends_on:
+      p03-kafka-init:
+        condition: service_completed_successfully
+      p03-mongo:
+        condition: service_healthy
+    environment:
+      <<: *worker-env
+      WORKER_NAME: application-worker
+    networks: [p03-net]
+
+  p03-notification-worker:
+    build:
+      context: ./backend
+      dockerfile: workers/Dockerfile
+    image: p03-worker:dev
+    container_name: p03-notification-worker
+    restart: unless-stopped
+    depends_on:
+      p03-job-index-worker:
+        condition: service_started
+      p03-kafka-init:
+        condition: service_completed_successfully
+      p03-mongo:
+        condition: service_healthy
+    environment:
+      <<: *worker-env
+      WORKER_NAME: notification-worker
+    networks: [p03-net]
+
+  p03-event-worker:
+    build:
+      context: ./backend
+      dockerfile: workers/Dockerfile
+    image: p03-worker:dev
+    container_name: p03-event-worker
+    restart: unless-stopped
+    depends_on:
+      p03-job-index-worker:
+        condition: service_started
+      p03-kafka-init:
+        condition: service_completed_successfully
+      p03-mongo:
+        condition: service_healthy
+    environment:
+      <<: *worker-env
+      WORKER_NAME: event-worker
+    networks: [p03-net]
+
+networks:
+  p03-net:
+    name: p03-net
+
+volumes:
+  p03-mysql-data:
+  p03-mongo-data:
+  p03-uploads:

@@ -117,3 +117,136 @@ The automated verification above used the repository's isolated test setup and
 deterministic model client. Live MySQL, Ollama, browser workflow, confirmation-
 gate, and prompt-injection demonstrations are documented separately in the
 report and pair verification recording.
+
+
+=====================================================================
+DATA 260 Lab 2 - Pair 03
+Run and Verification Log (Docker Compose, Kubernetes, load test)
+Verification date: 2026-11-11 (PST)
+Branch: feature/lab2-company-services
+=====================================================================
+
+Environment: Docker Desktop (Compose and its Kubernetes), JMeter 5.6, one laptop.
+Commands that need Docker, JMeter or kubectl were run by Trapti on her machine;
+their output was collected in the verify_*_output.txt files (git-ignored) and in
+JMeter's HTML reports (loadtest/report_*, git-ignored).
+
+[L2-1] Automated tests
+Command:  pytest backend/tests
+Result:   PASS - 396 passed, 1 skipped.
+
+[L2-2] Docker Compose, MySQL mode (PERSISTENCE=sql)
+Command:  docker compose --env-file .env.compose up -d --build ; make smoke
+Result:   PASS - company 9030, student 9031, job 9032, application 9033,
+          event 9034, assistant 9035 all report OK.
+
+[L2-3] Docker Compose, MongoDB mode (PERSISTENCE=mongo)
+Command:  sh scripts/verify_stack.sh
+Result:   PASS
+  - Mongo holds 50 companies, 300 jobs, 100 events; applications and
+    registrations stay in MySQL.
+  - 5-user JMeter trial: 110 requests, 0 errors. Duplicate apply/register
+    attempts return 409 by design and count as passes.
+  - 5 successful event registrations produced 5 new Mongo registration
+    documents; Kafka topic event.registration_created and the event worker agree.
+  - No publisher errors in the Application or Event service logs.
+
+[L2-4] Load test, JMeter, 0 errors at every level (see METRICS.md)
+  100 users:  6,850 requests, 105 req/s
+  300 users: 20,550 requests, 272 req/s
+  500 users: 34,250 requests, 404 req/s, mean 264 ms, p95 968 ms, p99 1,552 ms,
+             max 3,164 ms (re-run after the Kafka producers were merged).
+  Two bottlenecks were found and fixed: SQLAlchemy pool exhaustion at 300 users
+  (pool 5+10 raised to 20+20) and, at 500 users, the 40-thread worker pool
+  (raised to 120). The thread-pool explanation fits the logs but was not
+  isolated with a separate experiment.
+
+[L2-5] Kubernetes (namespace p03, Docker Desktop)
+Command:  sh scripts/verify_k8s.sh
+Result:   PASS - db-init and kafka-init completed, every deployment rolled out,
+          pymongo and confluent-kafka import inside the event, application and
+          job pods, smoke test OK on all six services, 5-user trial 110
+          requests with 0 errors, Kafka offsets and event-worker log agree.
+  Notes: the first run of the script failed because it checked the pods while
+  MySQL was restarting and the Job db-init was immutable; the script was fixed
+  to wait for every rollout. This run was in SQL mode and not load
+  tested at this point (see L2-8).
+
+[L2-6] Frontend and gateway (port 9036)
+Command:  sh scripts/verify_frontend.sh
+Result:   PASS - the gateway reports healthy; the app's own pages return 200;
+          10 student and 5 company API routes reach the correct service
+          (200, or 401 where a token is required); smoke test OK. Browser check
+          of student login, jobs, events and the company dashboard: working.
+
+[L2-8] Kubernetes load test and fixes (scripts/k8s_loadtest.sh, k8s_mongo.sh)
+Result:   PASS after three fixes; details and evidence in METRICS.md.
+  - First run (SQL): 300 users 10.25% errors, 500 users 21.78% errors. Cause:
+    0.5 CPU limit plus a synchronous /health queued behind bcrypt logins; the
+    kubelet restarted the Student pod. Fixed: async /health, probe timeouts,
+    CPU limit 2.
+  - Second run: 500 users 2.91% errors, all from 37 student logins
+    (QueuePool 20+20 exhausted). Fixed: Student pool 60+60.
+  - Third run, MySQL mode: 100 / 300 / 500 users, 0 errors, no pod restarts.
+  - MongoDB mode on Kubernetes: 50 companies, 300 jobs, 100 events in Mongo;
+    100 / 300 / 500 users, 0 errors, no pod restarts.
+  - Known: at 500 users the student login burst is slow (mean about 10 to 12 s,
+    max 24 to 27 s) because the Student service has one replica.
+
+[L2-9] Kafka topic prefix p03. (Kubernetes, SQL mode)
+Command:  sh scripts/k8s_mongo.sh off ; sh scripts/check_kafka_flow.sh
+Result:   PASS
+  - kafka-init created p03.<event type> and p03.<event type>.dlq for all five
+    event types; the services publish and the workers subscribe through
+    kafka_topic() only (backend/common/events.py).
+  - With a brand-new student: event registration 201 and job application 201;
+    p03.event.registration_created and p03.application.created each moved
+    from 0 to 1, the old unprefixed topics did not move, and the event worker
+    logged "processed ... attempts=1".
+  - Note: the earlier 5-user JMeter trial could not prove this, because the
+    same five students already had most events and jobs and every attempt
+    returned 409 (no message is published on a 409). check_kafka_flow.sh uses a
+    new student each run for that reason.
+
+[L2-10] Kafka failure cases (Kubernetes, scripts/kafka_failure_demo.sh, 2026-11-12)
+  Run on the job-index-worker (topic p03.job.created). Full output: kafka_failures_output.txt
+  (not committed; rerun the script to regenerate). Demo hooks in backend/workers/run.py are
+  off unless DEMO_FAILURE_HOOKS=1; the script switches them on and off again.
+  Case 1 - same event twice, same key:
+    - One event (same event_id) was published twice with key = job id.
+    - Result: 1 job_index document and 1 processed_events record. The log shows
+      "processed" once and "duplicate skipped" once.
+    - Why: the worker records "<consumer>:<event_id>" in processed_events (unique _id)
+      and skips an event it has seen; the database write is also an upsert.
+  Case 2 - worker killed during processing:
+    - A slow event paused for 25 s before its database write; the pod was force-deleted
+      during the pause (kubectl delete pod --grace-period=0 --force).
+    - Right after the kill: 0 job_index documents, 0 processed_events records.
+    - The replacement pod received the same event again and processed it
+      (processed attempts=1). Afterwards: 1 document, 1 record, consumer lag 0.
+    - The event was not lost and was processed again (at-least-once delivery). This is safe
+      because the offset is committed only after the database write (enable.auto.commit
+      is false) and the write is idempotent.
+  Case 3 - poison message, bounded retries, dead-letter topic:
+    - (a) invalid JSON -> dead-lettered at once (attempts=0).
+    - (b) a valid event whose handler always fails -> attempts 1/3, 2/3, 3/3, then
+      dead-lettered (attempts=3).
+    - Both messages are in p03.job.created.dlq. A good event published right after them was
+      processed normally (1 document, 1 record), so the pipeline kept running.
+
+[L2-11] Application Worker and application.updated (Kubernetes, merged tree 4ffdfbc, 2026-11-13)
+  Built by Xuanhua (branch feature/lab2-application-worker), merged and redeployed here.
+  - Full backend suite on the merged tree: 415 passed, 1 skipped.
+  - scripts/verify_k8s.sh: every pod Running, including p03-application-worker; 5-user
+    JMeter trial 0 errors.
+  - scripts/check_kafka_flow.sh with a brand-new student: event registration 201, application
+    created, resume replaced (PUT /applications/{id}/resume) 200. Offsets: p03.application.created
+    4407 -> 4408, p03.application.updated 0 -> 1, p03.event.registration_created 1192 -> 1193;
+    the old unprefixed topics did not move. The application worker logged "processed ... attempts=1"
+    for both application events and the event worker for the registration.
+
+[L2-7] Not verified
+  - Student Assistant: verified working by Xuanhua on her laptop (Ollama,
+    qwen3:8b). Not re-run on the Company-side machine, where Ollama is not
+    installed.
+  - A cloud deployment (AWS).

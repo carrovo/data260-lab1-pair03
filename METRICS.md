@@ -85,3 +85,169 @@ These are controlled reliability-test results produced with scripted model respo
 | Main CSS bundle | 54.15 kB | 9.16 kB |
 | Main JavaScript bundle | 389.45 kB | 117.41 kB |
 
+
+## Lab 2 Load Test (JMeter)
+
+Apache JMeter 5.6 (non-GUI), plan `loadtest/handshake.jmx`, run against the Docker Compose stack
+on one MacBook Pro (Docker Desktop, 7.7 GiB for containers; JMeter on the same machine, so the
+numbers include that contention). Code under test: commit `3d15d3a` on
+`feature/lab2-company-services`, `PERSISTENCE=sql`, seed 3 data loaded.
+
+Four scenarios run at the same time: student login + job search, student login + application
+upload (PDF), student login + event search + registration, company login + dashboard.
+Each virtual user logs in once, then repeats its scenario 30 times with a 500 ms think time.
+Users are per scenario, so 25 users per scenario is 100 concurrent users in total.
+Applying twice and registering twice are expected 409 answers and count as passes.
+
+| Concurrent users | Requests | Throughput | Mean | p95 | p99 | Max | Errors |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 6,850 | 105 req/s | 10 ms | 14 ms | 260 ms | 626 ms | 0.00% |
+| 300 | 20,550 | 272 req/s | 21 ms | 82 ms | 261 ms | 571 ms | 0.00% |
+| 500 | 34,250 | 404 req/s | 264 ms | 968 ms | 1,552 ms | 3,164 ms | 0.00% |
+
+Per request, selected rows (mean / p95 in ms):
+
+| Request | 100 users | 300 users | 500 users |
+|---|---:|---:|---:|
+| Student login (bcrypt, once per user) | 274 / 340 | 267 / 314 | 308 / 366 |
+| Search jobs by keyword | 4 / 7 | 6 / 19 | 118 / 383 |
+| Apply with resume (upload) | 8 / 16 | 35 / 138 | 402 / 1,034 |
+| Search events | 6 / 9 | 14 / 43 | 250 / 722 |
+| Register for event | 5 / 10 | 17 / 63 | 307 / 877 |
+
+### Bottlenecks found and fixed
+
+| Step | Symptom | Cause | Fix |
+|---|---|---|---|
+| 1 | 300 users: 3% errors, slowest request 31 s | Each service kept the SQLAlchemy default pool (5 + 10 connections); the logs show `QueuePool limit of size 5 overflow 10 reached` | Pool of 20 + 20, 10 s wait, MySQL `max_connections` 500 (commit `19c72b6`) |
+| 2 | 500 users: 11.6% errors, 34,250 requests took 10 min 27 s, mean 3.7 s, slowest 89 s | All failures in the Event service (`QueuePool limit of size 20 overflow 20 reached`, 2,132 errors); MySQL was not the limit (132 of 500 connections used at peak) | Thread pool raised from 40 to 120 per service so finished requests can return their connection (commit `3d15d3a`) |
+| 3 | 500 users, same plan | None | 34,250 requests in 1 min 25 s, 0 errors (re-run after the Kafka producers were merged; slightly slower than the first clean run, which had 432 req/s and a 180 ms mean) |
+
+Step 2 is explained as FastAPI running plain endpoints and the clean-up of the `get_db`
+dependency on one shared 40-thread pool: when all threads wait for a connection, finished
+requests cannot get a thread to release theirs. The fix removed the symptom; the explanation
+was not isolated with a separate experiment.
+
+### Kubernetes (Docker Desktop, `PERSISTENCE=sql`, same plan and data)
+
+Services were published on localhost with LoadBalancer services (`scripts/k8s_expose.sh`);
+`kubectl port-forward` cannot carry this load. One replica of each service.
+
+| Concurrent users | Requests | Throughput | Mean | p95 | p99 | Max | Errors |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 6,850 | 105 req/s | 11 ms | 15 ms | 349 ms | 718 ms | 0.00% |
+| 300 | 20,550 | 272 req/s | 18 ms | 55 ms | 261 ms | 1,159 ms | 0.00% |
+| 500 | 34,250 | 372 req/s | 196 ms | 338 ms | 617 ms | 26,567 ms | 0.00% |
+
+No pod restarted and no connection-pool error appeared in any service log. At 500 users the
+slow tail is the login burst: all 375 student users log in within the first 30 seconds, and
+296 logins took over 5 s (mean 12 s, p95 24 s). Every other request stayed fast (500 users:
+keyword search 30 ms mean, apply 102 ms, register 73 ms). On Compose the same login averaged
+about 300 ms, because the containers there are not CPU limited.
+
+Problems found on Kubernetes that Docker Compose did not show, and how they were fixed:
+
+| Step | Symptom | Evidence | Fix |
+|---|---|---|---|
+| 4 | First run: 100 users already slow (mean 176 ms, worst 27 s); 300 users 10.25% errors, 500 users 21.78%; the student pod restarted twice, the company pod failed a probe | Student logs: logins took 18 to 24 s; events: `Liveness probe failed ... context deadline exceeded`, `Container student failed liveness probe, will be restarted` | Pods were capped at 0.5 CPU and `/health` was a plain function that waited for a free worker thread behind the bcrypt logins. `/health` is now `async def` (answers on the event loop), liveness timeout 3 s to 10 s with 6 failures allowed, readiness timeout 5 s, CPU limit 2 per service |
+| 5 | After step 4: 100 and 300 users clean, 500 users 2.91% errors (37 student logins returned 500, the other 960 errors are the 401s of users without a token) | Student log: `QueuePool limit of size 20 overflow 20 reached` exactly 37 times; no pod restarted; MySQL peak 163 of 500 connections | A login holds a database connection while bcrypt runs, so the Student service now has a pool of 60 + 60, matching its 120 worker threads (other services keep 20 + 20) |
+| 6 | Re-run after step 5 | none | 100, 300 and 500 users: 0 errors, MySQL peak 239 of 500 connections |
+
+Limits of the Kubernetes test: one replica per service, no autoscaling; a slow login burst at
+500 users (see above), which more Student replicas or a cheaper password hash would reduce but
+which was not tried.
+
+### Part 5: all five concurrency levels (Kubernetes, `PERSISTENCE=sql`, 2026-11-12)
+
+Run with `sh scripts/k8s_loadtest.sh final`; the tables come from `python loadtest/summarize.py crud final`
+and the graph is `loadtest/avg_response_final.png`. The plan runs the four scenarios (login + job
+search, application submission, event search/registration, company dashboard) at the same time, so
+"users" is the total concurrent users across scenarios. Application submission publishes
+`application.created` to Kafka and event registration publishes `event.registration_created`.
+One replica of every service, 0 pod restarts, no pool error in any log, MySQL peak 239 of 500 connections.
+
+| Concurrent users | Requests | Throughput | Mean | Max | Errors |
+|---:|---:|---:|---:|---:|---:|
+| 100 | 6,850 | 104 req/s | 10 ms | 773 ms | 0.00% |
+| 200 | 13,700 | 193 req/s | 12 ms | 823 ms | 0.00% |
+| 300 | 20,550 | 270 req/s | 17 ms | 1,017 ms | 0.00% |
+| 400 | 27,400 | 336 req/s | 81 ms | 12,478 ms | 0.00% |
+| 500 | 34,250 | 372 req/s | 179 ms | 23,806 ms | 0.00% |
+
+Per endpoint (login is one request per virtual user, so it has the fewest samples):
+
+#### Login
+
+| Users | Requests | Avg (ms) | Throughput (req/s) | Error rate |
+|---:|---:|---:|---:|---:|
+| 100 | 75 | 378 | 3.8 | 0.00% |
+| 200 | 150 | 373 | 6.0 | 0.00% |
+| 300 | 225 | 400 | 7.5 | 0.00% |
+| 400 | 300 | 3754 | 8.6 | 0.00% |
+| 500 | 375 | 11375 | 8.4 | 0.00% |
+
+#### Job search
+
+| Users | Requests | Avg (ms) | Throughput (req/s) | Error rate |
+|---:|---:|---:|---:|---:|
+| 100 | 1500 | 4 | 23.7 | 0.00% |
+| 200 | 3000 | 6 | 43.6 | 0.00% |
+| 300 | 4500 | 5 | 61.2 | 0.00% |
+| 400 | 6000 | 11 | 76.2 | 0.00% |
+| 500 | 7500 | 22 | 84.3 | 0.00% |
+
+#### Application submission
+
+| Users | Requests | Avg (ms) | Throughput (req/s) | Error rate |
+|---:|---:|---:|---:|---:|
+| 100 | 750 | 7 | 15.5 | 0.00% |
+| 200 | 1500 | 14 | 27.8 | 0.00% |
+| 300 | 2250 | 30 | 37.8 | 0.00% |
+| 400 | 3000 | 117 | 43.8 | 0.00% |
+| 500 | 3750 | 150 | 46.5 | 0.00% |
+
+#### Event search / registration
+
+| Users | Requests | Avg (ms) | Throughput (req/s) | Error rate |
+|---:|---:|---:|---:|---:|
+| 100 | 1500 | 3 | 30.8 | 0.00% |
+| 200 | 3000 | 5 | 55.6 | 0.00% |
+| 300 | 4500 | 4 | 76.5 | 0.00% |
+| 400 | 6000 | 8 | 93.7 | 0.00% |
+| 500 | 7500 | 10 | 102.1 | 0.00% |
+
+![Average response time vs concurrency](loadtest/avg_response_final.png)
+
+First bottleneck: the student login. Its mean stays near 375 ms up to 300 users, then rises to
+3.8 s at 400 and 11.4 s at 500 while its throughput stays at about 8.5 logins/s. Every login
+runs a bcrypt hash on one Student replica, and the 120 worker threads queue behind the CPU, so
+the extra users only wait longer (queueing, not errors). Application submission is second: its
+mean grows from 7 ms to 150 ms and its throughput flattens at about 44 to 46 req/s from 400
+users on; each request uploads a PDF, writes to MySQL and publishes to Kafka (this cause was
+not profiled separately). Job search and event search/registration stay at 22 ms or less because
+they are indexed reads served by one replica each. The assistant endpoint is measured
+separately (5, 10, 20, 50 users, `scripts/assistant_loadtest.sh`) because each request waits for
+model inference.
+
+#### Kubernetes with MongoDB (`PERSISTENCE=mongo`)
+
+`scripts/k8s_mongo.sh on` switched the cluster (the ConfigMap value is changed while applying;
+`k8s/config.yaml` stays on `sql`), reran db-init (drops the MySQL foreign keys into the three
+Mongo-owned tables), reseeded and restarted the services. MongoDB then held 50 companies,
+300 jobs and 100 events; applications and registrations stayed in MySQL. A 5-user trial
+passed (110 requests, 0 errors), and the Kafka offsets matched the event worker's output.
+
+| Concurrent users | Requests | Throughput | Mean | p95 | p99 | Max | Errors |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 6,850 | 105 req/s | 9 ms | 11 ms | 354 ms | 713 ms | 0.00% |
+| 300 | 20,550 | 272 req/s | 13 ms | 32 ms | 260 ms | 1,080 ms | 0.00% |
+| 500 | 34,250 | 391 req/s | 134 ms | 174 ms | 493 ms | 24,204 ms | 0.00% |
+
+No pod restarted and no pool error appeared. Reads that moved to MongoDB were faster than in
+MySQL mode at 500 users (keyword search 8 ms vs 30 ms mean, event search 7 ms vs 55 ms,
+register 14 ms vs 73 ms). The slow tail is the same student login burst (292 logins over 5 s,
+mean 9.8 s) because the Student service still uses MySQL in both modes.
+
+Limits of this test: one machine runs the load generator, Docker and the databases together;
+the assistant (Ollama) is not part of the load test. The Compose table above is the
+baseline; Kubernetes results are in their own section.

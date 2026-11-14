@@ -1,0 +1,72 @@
+# One-shot preparation jobs. Re-create them on every deploy (make k8s-up does):
+# a Job's pod template cannot be changed in place.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: p03-kafka-init
+  labels: {app.kubernetes.io/name: p03-kafka-init, app.kubernetes.io/part-of: p03}
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: p03-kafka-init, app.kubernetes.io/part-of: p03}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: kafka-init
+          image: apache/kafka:3.8.1
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --list >/dev/null 2>&1; do
+                echo "waiting for kafka"; sleep 3
+              done
+              for topic in application.created application.updated application.status_changed event.registration_created job.created; do
+                /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic p03.$topic --partitions 1 --replication-factor 1
+                /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic p03.$topic.dlq --partitions 1 --replication-factor 1
+              done
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --list
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: p03-db-init
+  labels: {app.kubernetes.io/name: p03-db-init, app.kubernetes.io/part-of: p03}
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: p03-db-init, app.kubernetes.io/part-of: p03}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: db-init
+          image: p03-company-service:dev
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+                python -m backend.create_schema && break
+                echo "mysql not ready, retry $i"; sleep 5
+              done
+              python -m backend.create_schema \
+                && python -m backend.migrate_application_resumes \
+                && python -m backend.migrate_canonical_schema \
+                && python -m backend.migrate_mongo_persistence
+          envFrom:
+            - configMapRef:
+                name: p03-config
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom: {secretKeyRef: {name: p03-secrets, key: MYSQL_PASSWORD}}
+            - name: DATABASE_URL
+              value: mysql+pymysql://p03_app:$(MYSQL_PASSWORD)@p03-mysql:3306/p03
+            - name: JWT_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: p03-secrets, key: JWT_SECRET_KEY}}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}

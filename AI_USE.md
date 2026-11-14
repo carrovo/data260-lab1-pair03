@@ -17,3 +17,14 @@ One incorrect suggestion was related to the company-side AI Assistant. During de
 I also verified AI-generated code suggestions by running backend tests, frontend lint and production builds, and manual browser testing before accepting any changes. When integration issues appeared, such as missing student names or unclear resume errors on the company side, I used the actual API responses and application behavior to confirm the problem before applying fixes.
 
 All AI suggestions were reviewed, tested and adjusted as needed. The final code, integration decisions, debugging, testing, report updates, and verification were completed by us.
+
+## Trapti Kulshrestha - Lab 2 addendum
+
+For Lab 2 I used ChatGpt and Claude as a helping assistant, to know more about the MongoDB persistence switch, the JMeter load tests, the Kubernetes manifests. I ran each code, reviewed each change, ran the services, the load tests and the verification scripts on my own machine, and committed the work myself.
+
+Examples where the AI output was wrong or incomplete, and how it was caught:
+
+- The MongoDB code imported `pymongo`, but the service Docker images did not install it, and the Application and Event images also lacked `confluent-kafka`. The Kafka publisher would have silently done nothing. The Mongo seed failed with "No module named 'pymongo'" when I ran it, and the requirements and a regression test were fixed afterwards.
+- The first version of the Kubernetes verification script checked the pods while they were still being replaced, so it reported pymongo missing and 100% errors. I ran it and sent the output; the script was changed to wait for every rollout, and the second run passed.
+- The load test first failed at 300 users and again at 500 users. The causes (database connection pool, then the worker thread pool) were taken from the service logs and MySQL's connection counters, not guessed. The thread-pool explanation fits the evidence but was not isolated with a separate experiment, and METRICS.md says so.
+

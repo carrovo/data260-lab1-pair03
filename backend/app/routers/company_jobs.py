@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from typing import Any
 
-from backend.app.models import Company, Job
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from backend.app.models import Application
+from backend.app.repos import make_repos
+from backend.common.outgoing import publish_safely
 from backend.app.routers.company_auth import (
     get_current_company,
     get_db,
@@ -25,17 +29,8 @@ def _owned_job_or_404(
     db: Session,
     job_id: int,
     company_id: int,
-) -> Job:
-    statement = (
-        select(Job)
-        .where(
-            Job.id == job_id,
-            Job.company_id == company_id,
-        )
-        .options(selectinload(Job.company))
-    )
-
-    job = db.scalar(statement)
+) -> Any:
+    job = make_repos(db).jobs.get_for_company(job_id, company_id)
 
     if job is None:
         raise HTTPException(
@@ -54,27 +49,26 @@ def _owned_job_or_404(
 def create_job(
     payload: JobCreate,
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     job_data = payload.model_dump()
 
     # Store the enum value as a normal string in the canonical DB column.
     job_data["category"] = payload.category.value
 
-    job = Job(
-        company_id=current_company.id,
-        **job_data,
+    job = make_repos(db).jobs.create(current_company.id, job_data)
+
+    publish_safely(
+        "job.created",
+        {
+            "job_id": str(job.id),
+            "company_id": str(current_company.id),
+            "title": job.title,
+        },
+        key=str(job.id),
     )
 
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-
-    return _owned_job_or_404(
-        db,
-        job.id,
-        current_company.id,
-    )
+    return job
 
 
 @router.get(
@@ -83,16 +77,9 @@ def create_job(
 )
 def list_company_jobs(
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
-    statement = (
-        select(Job)
-        .where(Job.company_id == current_company.id)
-        .options(selectinload(Job.company))
-        .order_by(Job.created_at.desc(), Job.id.desc())
-    )
-
-    return list(db.scalars(statement).all())
+    return make_repos(db).jobs.list_for_company(current_company.id)
 
 
 @router.get(
@@ -102,7 +89,7 @@ def list_company_jobs(
 def get_company_job(
     job_id: int,
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     return _owned_job_or_404(
         db,
@@ -119,7 +106,7 @@ def update_company_job(
     job_id: int,
     payload: JobUpdate,
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     job = _owned_job_or_404(
         db,
@@ -135,17 +122,7 @@ def update_company_job(
     ):
         update_data["category"] = update_data["category"].value
 
-    for field, value in update_data.items():
-        setattr(job, field, value)
-
-    db.commit()
-    db.refresh(job)
-
-    return _owned_job_or_404(
-        db,
-        job.id,
-        current_company.id,
-    )
+    return make_repos(db).jobs.update(job, update_data)
 
 
 @router.delete(
@@ -155,7 +132,7 @@ def update_company_job(
 def delete_company_job(
     job_id: int,
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     job = _owned_job_or_404(
         db,
@@ -164,15 +141,20 @@ def delete_company_job(
     )
 
     # Avoid deleting a job that already has student applications.
-    if job.applications:
+    application_count = db.scalar(
+        select(func.count())
+        .select_from(Application)
+        .where(Application.job_id == job.id)
+    )
+
+    if application_count:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cannot delete a job that already has applications.",
         )
 
     try:
-        db.delete(job)
-        db.commit()
+        make_repos(db).jobs.delete(job)
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
