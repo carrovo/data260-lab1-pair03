@@ -61,3 +61,4 @@ aws_diag2_output.txt
 aws_ebs_csi_output.txt
 aws_verify_output.txt
 aws_nodes_output.txt
+docs/screenshots/
