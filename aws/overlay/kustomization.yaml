@@ -1,0 +1,51 @@
+# AWS overlay. ACCOUNT_ID is replaced by scripts/aws_deploy.sh in a throw-away copy
+# (.aws_build/), so the account number is never committed.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../k8s
+  - storageclass.yaml
+images:
+  - name: p03-application-service
+    newName: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/p03-application-service
+    newTag: lab2
+  - name: p03-assistant-service
+    newName: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/p03-assistant-service
+    newTag: lab2
+  - name: p03-company-service
+    newName: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/p03-company-service
+    newTag: lab2
+  - name: p03-event-service
+    newName: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/p03-event-service
+    newTag: lab2
+  - name: p03-frontend
+    newName: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/p03-frontend
+    newTag: lab2
+  - name: p03-job-service
+    newName: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/p03-job-service
+    newTag: lab2
+  - name: p03-student-service
+    newName: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/p03-student-service
+    newTag: lab2
+  - name: p03-worker
+    newName: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/p03-worker
+    newTag: lab2
+patches:
+  # the public entry point: the frontend gateway gets an AWS load balancer
+  - target: {kind: Service, name: p03-frontend}
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: LoadBalancer
+  # the Company and Application services share one ReadWriteOnce EBS volume (resumes),
+  # so they must run on the same node
+  - target: {kind: Deployment, name: p03-application-service}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/affinity
+        value:
+          podAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: {app.kubernetes.io/name: p03-company-service}

@@ -51,3 +51,13 @@ kafka_failures_output_run1.txt
 kafka_failures_output_run2.txt
 assistant_loadtest_output.txt
 loadtest/assistant_*.jtl
+aws_preflight_output.txt
+aws_ecr_output.txt
+aws_deploy_output.txt
+.aws_build/
+aws_diag_output.txt
+aws_cluster_output.txt
+aws_diag2_output.txt
+aws_ebs_csi_output.txt
+aws_verify_output.txt
+aws_nodes_output.txt

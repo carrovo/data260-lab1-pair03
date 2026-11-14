@@ -53,7 +53,7 @@ $NS logs $(pod) --tail=40 | grep "$EID2" | cut -c1-170
 echo "-- after the restart:"
 $NS exec deploy/p03-event-worker -- $T count "$J2" "$EID2"
 echo "-- consumer group offsets (LAG 0 means the offset was committed after the write):"
-$NS exec p03-kafka-0 -- /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group job-index-worker 2>&1 | grep -E "GROUP|p03.job.created " 
+$NS exec p03-kafka-0 -- /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group job-index-worker 2>&1 | grep -E "GROUP|p03.job.created "
 echo "EXPECT: 0 docs right after the kill, 1 doc after the restart: the event was not lost, it was processed again (at-least-once)"
 
 echo
