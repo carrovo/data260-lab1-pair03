@@ -311,12 +311,62 @@ make k8s-down                            # deletes the namespace and all data
 ### Known limits
 
 - Uploaded resumes live on one `ReadWriteOnce` volume shared by the Company and
-  Application services. That works on a single node (Docker Desktop); a
-  multi-node cluster needs `ReadWriteMany` storage or object storage.
-- The Assistant reaches Ollama on the host (`host.docker.internal`), so it works
-  on Docker Desktop but not on a cloud cluster without a hosted model.
+  Application services. On Docker Desktop (one node) that just works; on EKS the
+  AWS overlay keeps both services on the same node (pod affinity). More nodes
+  would need `ReadWriteMany` storage (for example EFS) or object storage.
+- The Assistant needs an Ollama model server: Docker Desktop uses Ollama on the
+  host (`host.docker.internal`); the AWS overlay runs Ollama inside the cluster
+  (`aws/overlay/ollama.yaml`).
 - One replica of everything, no autoscaling. Kafka and the databases are
   single-node, not highly available.
+
+## Lab 2: AWS deployment (EKS)
+
+The whole platform runs on Amazon EKS (cluster `p03-handshake`, region `us-east-1`, namespace
+`p03`) with the images in Amazon ECR (`p03-<service>`, tag `lab2`). The scripts, the evidence and
+the problems we met are in [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md). No account id, key or
+password is committed; the scripts read the account from the AWS CLI session and hide it in their
+output.
+
+### Reach the deployment
+
+```bash
+aws eks update-kubeconfig --name p03-handshake --region us-east-1
+kubectl -n p03 get pods
+kubectl -n p03 get svc p03-frontend        # EXTERNAL-IP is the public address
+```
+
+Open `http://<EXTERNAL-IP>:9036` (the React app and the `/gw` API gateway share this port) and
+sign in with one of the seeded accounts from the demo-data table above. Quick checks:
+
+```bash
+curl -s http://<EXTERNAL-IP>:9036/healthz                       # 200
+G=http://<EXTERNAL-IP>:9036 sh scripts/check_kafka_flow.sh      # PASS = Kafka flow end to end
+sh scripts/aws_verify.sh                                        # login, job search, kubectl output
+```
+
+### Pause and resume (the cluster is paused between sessions to save credit)
+
+```bash
+sh scripts/aws_pause.sh down     # nodes to 0; cluster, volumes and images stay
+sh scripts/aws_pause.sh up       # about 5 minutes until both nodes are Ready
+kubectl get nodes                # then: kubectl -n p03 get pods
+```
+
+The public address does not change when the cluster resumes. Give the workers a few minutes
+before showing the Kafka flow: the first events after a resume can be applied late.
+
+### Assistant on AWS
+
+Ollama (`qwen3:8b`) runs in the cluster on CPU-only nodes (`aws/overlay/ollama.yaml`). The AWS
+overlay sets `OLLAMA_NUM_PREDICT=256` (the optional answer-length cap; unset everywhere else),
+a 300 s load balancer idle timeout and a 280 s gateway timeout. One answer takes about 2 to 3
+minutes there, so ask one question a few minutes before a demo to load the model.
+
+### Deploy from scratch
+
+The ordered commands (`aws_ecr_push.sh`, `eksctl create cluster -f aws/eks-cluster.yaml`,
+`aws_ebs_csi.sh`, `aws_deploy.sh`, `aws_ollama.sh`) are listed in `docs/AWS_DEPLOYMENT.md`.
 
 ## Persistence switch (MySQL or MongoDB)
 
