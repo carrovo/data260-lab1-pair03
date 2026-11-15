@@ -24,6 +24,8 @@ from backend.app.routers.company_jobs import router as company_jobs_router  # no
 from backend.app.routers.company_profile import router as profile_router  # noqa: E402
 from backend.app.routers.jobs import router as public_jobs_router  # noqa: E402
 from backend.common.mongo_store import (  # noqa: E402
+    ApplicationStore,
+    RegistrationStore,
     CompanyStore,
     EventStore,
     JobStore,
@@ -203,8 +205,7 @@ def test_a_job_with_applications_cannot_be_deleted(mongo_context):
     client.post("/api/companies/jobs", json=JOB, headers=auth)
     with Session(engine) as db:
         student = StudentStore(database).create(email="s@example.com", password_hash="x", full_name="S", city="San Jose")
-        db.add(Application(student_id=student.id, job_id=1))
-        db.commit()
+        ApplicationStore(database).create(student_id=student.id, job_id=1)
 
     response = client.delete("/api/companies/jobs/1", headers=auth)
     assert response.status_code == 409
@@ -413,10 +414,7 @@ def test_company_applicant_flow_with_jobs_in_mongo(mongo_context, monkeypatch):
 
     with Session(engine) as db:
         student = StudentStore(database).create(email="s@example.com", password_hash="x", full_name="Sam Student", city="San Jose", major="Data Science")
-        application = Application(student_id=student.id, job_id=1)
-        db.add(application)
-        db.commit()
-        application_id = application.id
+        application_id = ApplicationStore(database).create(student_id=student.id, job_id=1).id
 
     listed = client.get("/api/companies/jobs/1/applicants", headers=owner)
     assert listed.status_code == 200
@@ -509,8 +507,7 @@ def test_event_ownership_and_registration_guard_in_mongo(mongo_context):
 
     with Session(engine) as db:
         student = StudentStore(database).create(email="s@example.com", password_hash="x", full_name="S", city="San Jose")
-        db.add(Registration(student_id=student.id, event_id=event["id"]))
-        db.commit()
+        RegistrationStore(database).create(student_id=student.id, event_id=event["id"])
 
     assert client.delete(f"/api/companies/events/{event['id']}", headers=owner).status_code == 409
     registrants = client.get(f"/api/companies/events/{event['id']}/registrants", headers=owner)
@@ -589,7 +586,7 @@ def test_student_applies_and_lists_applications_with_jobs_in_mongo(
 
     published.clear()
     with Session(engine) as db:
-        old_storage_key = db.get(Application, body["id"]).resume_storage_key
+        old_storage_key = ApplicationStore(database).get(body["id"]).resume_storage_key
     replaced = client.put(
         f"/applications/{body['id']}/resume",
         files={

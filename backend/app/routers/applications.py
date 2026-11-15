@@ -10,14 +10,13 @@ from fastapi.responses import FileResponse
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.application_status import ApplicationStatus
 from backend.app.config import settings
 from backend.app.models import Application, Job, Student
 from backend.app.persistence_views import application_views, mongo_mode
-from backend.app.repos import make_repos
+from backend.app.repos import DuplicateRecord, make_repos
 from backend.app.routers.student_auth import get_current_student, get_db
 from backend.app.schemas.application import ApplicationResponse
 from backend.common.outgoing import publish_safely
@@ -190,40 +189,29 @@ async def apply_to_job(
             detail="Job not found.",
         )
 
-    existing_application_id = db.scalar(
-        select(Application.id).where(
-            Application.student_id == current_student.id,
-            Application.job_id == job_id,
-        )
-    )
-
-    if existing_application_id is not None:
+    repos = make_repos(db)
+    if repos.applications.exists(current_student.id, job_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=DUPLICATE_APPLICATION_DETAIL,
         )
 
     stored_resume = await store_validated_resume(resume)
-    application = Application(
-        student_id=current_student.id,
-        job_id=job_id,
-        resume_storage_key=stored_resume.storage_key,
-        resume_original_name=stored_resume.original_name,
-        resume_size_bytes=stored_resume.size_bytes,
-    )
-
     try:
-        db.add(application)
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
+        application = repos.applications.create(
+            student_id=current_student.id,
+            job_id=job_id,
+            resume_storage_key=stored_resume.storage_key,
+            resume_original_name=stored_resume.original_name,
+            resume_size_bytes=stored_resume.size_bytes,
+        )
+    except DuplicateRecord as exc:
         remove_file(stored_resume.path)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=DUPLICATE_APPLICATION_DETAIL,
         ) from exc
-    except SQLAlchemyError:
-        db.rollback()
+    except Exception:
         remove_file(stored_resume.path)
         raise
 
@@ -236,7 +224,7 @@ async def apply_to_job(
         },
         key=str(application.id),
     )
-    make_repos(db).activity.record(
+    repos.activity.record(
         current_student.id,
         "apply",
         {"application_id": application.id, "job_id": job_id},
@@ -266,6 +254,13 @@ def list_current_student_applications(
     current_student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
+    if mongo_mode():
+        rows = make_repos(db).applications.list_for_student(
+            current_student.id,
+            status_filter.value if status_filter is not None else None,
+        )
+        return application_views(db, rows)
+
     statement = select(Application).where(
         Application.student_id == current_student.id
     )
@@ -273,13 +268,6 @@ def list_current_student_applications(
         statement = statement.where(
             Application.status == status_filter.value
         )
-
-    if mongo_mode():
-        statement = statement.order_by(
-            Application.applied_at.desc(), Application.id.desc()
-        )
-        return application_views(db, list(db.scalars(statement).all()))
-
     statement = statement.options(
         application_with_job_and_company()
     ).order_by(Application.applied_at.desc(), Application.id.desc())
@@ -297,7 +285,8 @@ async def update_application_resume(
     current_student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    application = db.get(Application, application_id)
+    repos = make_repos(db)
+    application = repos.applications.get(application_id)
     if application is None or application.student_id != current_student.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -310,13 +299,15 @@ async def update_application_resume(
         else None
     )
     stored_resume = await store_validated_resume(resume)
-    application.resume_storage_key = stored_resume.storage_key
-    application.resume_original_name = stored_resume.original_name
-    application.resume_size_bytes = stored_resume.size_bytes
 
     try:
-        db.commit()
-    except SQLAlchemyError:
+        application = repos.applications.update(
+            application,
+            resume_storage_key=stored_resume.storage_key,
+            resume_original_name=stored_resume.original_name,
+            resume_size_bytes=stored_resume.size_bytes,
+        )
+    except Exception:
         db.rollback()
         remove_file(stored_resume.path)
         raise
@@ -349,7 +340,7 @@ def get_current_student_resume(
     current_student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    application = db.get(Application, application_id)
+    application = make_repos(db).applications.get(application_id)
     if application is None or application.student_id != current_student.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

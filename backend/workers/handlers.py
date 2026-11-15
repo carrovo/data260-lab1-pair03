@@ -72,9 +72,10 @@ def handle_event_registration_created(
             "$set": {
                 "student_id": str(payload["student_id"]),
                 "event_id": str(payload["event_id"]),
-                "registered_at": envelope.occurred_at,
                 "trace_id": envelope.trace_id,
-            }
+            },
+            # the API (PERSISTENCE=mongo) already stored the registration time
+            "$setOnInsert": {"registered_at": envelope.occurred_at},
         },
         upsert=True,
     )

@@ -6,12 +6,11 @@ registration routes as two routers.
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.models import Event, Registration, Student
 from backend.app.persistence_views import mongo_mode, registration_views
-from backend.app.repos import make_repos
+from backend.app.repos import DuplicateRecord, make_repos
 from backend.app.routers.student_auth import get_current_student, get_db
 from backend.app.schemas.event import RegistrationResponse
 from backend.common.outgoing import publish_safely
@@ -49,28 +48,16 @@ def register_for_event(
             detail="Event not found.",
         )
 
-    existing_registration_id = db.scalar(
-        select(Registration.id).where(
-            Registration.student_id == current_student.id,
-            Registration.event_id == event_id,
-        )
-    )
-    if existing_registration_id is not None:
+    repos = make_repos(db)
+    if repos.registrations.exists(current_student.id, event_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=DUPLICATE_REGISTRATION_DETAIL,
         )
 
-    registration = Registration(
-        student_id=current_student.id,
-        event_id=event_id,
-    )
-    db.add(registration)
-
     try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
+        registration = repos.registrations.create(current_student.id, event_id)
+    except DuplicateRecord as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=DUPLICATE_REGISTRATION_DETAIL,
@@ -85,7 +72,7 @@ def register_for_event(
         },
         key=str(registration.id),
     )
-    make_repos(db).activity.record(
+    repos.activity.record(
         current_student.id,
         "register",
         {"registration_id": registration.id, "event_id": event_id},
@@ -112,13 +99,7 @@ def list_current_student_registrations(
     db: Session = Depends(get_db),
 ):
     if mongo_mode():
-        rows = list(
-            db.scalars(
-                select(Registration).where(
-                    Registration.student_id == current_student.id
-                )
-            ).all()
-        )
+        rows = make_repos(db).registrations.list_for_student(current_student.id)
         views = registration_views(db, rows)
         return sorted(views, key=lambda v: (v.event.starts_at, v.id))
 

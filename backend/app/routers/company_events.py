@@ -149,11 +149,7 @@ def delete_company_event(
         current_company.id,
     )
 
-    registration_count = db.scalar(
-        select(func.count())
-        .select_from(Registration)
-        .where(Registration.event_id == event.id)
-    )
+    registration_count = make_repos(db).registrations.count_for_event(event.id)
 
     if registration_count:
         raise HTTPException(
@@ -188,16 +184,7 @@ def list_event_registrants(
         current_company.id,
     )
 
-    registrations = list(
-        db.scalars(
-            select(Registration)
-            .where(Registration.event_id == event.id)
-            .order_by(
-                Registration.registered_at.desc(),
-                Registration.id.desc(),
-            )
-        ).all()
-    )
+    registrations = make_repos(db).registrations.list_for_event(event.id)
     students = make_repos(db).students.get_many(
         [registration.student_id for registration in registrations]
     )

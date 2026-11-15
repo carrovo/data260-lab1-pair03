@@ -7,9 +7,9 @@ records directly. settings.persistence picks the backend:
   "mongo" the MongoDB collections in common/mongo_store.py (Compose/Kubernetes)
 
 Both backends return objects with the same attributes (company.name,
-job.company.name ...), so response models work unchanged. Applications,
-registrations and resume metadata stay in MySQL; code that needs a job or company for
-them asks these repositories instead of joining tables.
+job.company.name ...), so response models work unchanged. Applications (with their resume
+metadata) and registrations follow the same switch; code that needs a job, event or
+student for them asks these repositories instead of joining tables.
 """
 
 from __future__ import annotations
@@ -18,10 +18,13 @@ from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.config import settings
 from backend.app.models import (
+    Application,
+    Registration,
     Company,
     Event,
     Job,
@@ -31,6 +34,8 @@ from backend.app.models import (
 )
 from backend.common.mongo_store import (
     ActivityLogStore,
+    ApplicationStore,
+    RegistrationStore,
     CompanyStore,
     EventStore,
     JobStore,
@@ -61,6 +66,8 @@ def get_mongo_database() -> Any:
         SavedItemStore(database).ensure_indexes()
         SessionStore(database).ensure_indexes()
         ActivityLogStore(database).ensure_indexes()
+        ApplicationStore(database).ensure_indexes()
+        RegistrationStore(database).ensure_indexes()
         _database = database
     return _database
 
@@ -537,6 +544,170 @@ class MongoSavedItemRepo:
         self._store.create(student_id, item_type, item_id)
 
 
+class DuplicateRecord(Exception):
+    """The student already has this application or registration."""
+
+
+class SqlApplicationRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def create(self, **fields: Any) -> Application:
+        application = Application(**fields)
+        try:
+            self._db.add(application)
+            self._db.commit()
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise DuplicateRecord from exc
+        self._db.refresh(application)
+        return application
+
+    def get(self, application_id: int) -> Application | None:
+        return self._db.get(Application, int(application_id))
+
+    def exists(self, student_id: int, job_id: int) -> bool:
+        return (
+            self._db.scalar(
+                select(Application.id).where(
+                    Application.student_id == student_id,
+                    Application.job_id == job_id,
+                )
+            )
+            is not None
+        )
+
+    def list_for_student(self, student_id: int, status: str | None = None) -> list[Application]:
+        statement = select(Application).where(Application.student_id == student_id)
+        if status is not None:
+            statement = statement.where(Application.status == status)
+        statement = statement.order_by(Application.applied_at.desc(), Application.id.desc())
+        return list(self._db.scalars(statement).all())
+
+    def list_for_job(self, job_id: int) -> list[Application]:
+        statement = (
+            select(Application)
+            .where(Application.job_id == job_id)
+            .order_by(Application.applied_at.desc(), Application.id.desc())
+        )
+        return list(self._db.scalars(statement).all())
+
+    def count_for_job(self, job_id: int) -> int:
+        return self._db.scalar(
+            select(func.count()).select_from(Application).where(Application.job_id == job_id)
+        ) or 0
+
+    def update(self, application: Any, **fields: Any) -> Application:
+        for key, value in fields.items():
+            setattr(application, key, value)
+        self._db.commit()
+        self._db.refresh(application)
+        return application
+
+
+class SqlRegistrationRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def create(self, student_id: int, event_id: int) -> Registration:
+        registration = Registration(student_id=student_id, event_id=event_id)
+        try:
+            self._db.add(registration)
+            self._db.commit()
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise DuplicateRecord from exc
+        self._db.refresh(registration)
+        return registration
+
+    def exists(self, student_id: int, event_id: int) -> bool:
+        return (
+            self._db.scalar(
+                select(Registration.id).where(
+                    Registration.student_id == student_id,
+                    Registration.event_id == event_id,
+                )
+            )
+            is not None
+        )
+
+    def list_for_student(self, student_id: int) -> list[Registration]:
+        return list(
+            self._db.scalars(
+                select(Registration).where(Registration.student_id == student_id)
+            ).all()
+        )
+
+    def list_for_event(self, event_id: int) -> list[Registration]:
+        statement = (
+            select(Registration)
+            .where(Registration.event_id == event_id)
+            .order_by(Registration.registered_at.desc(), Registration.id.desc())
+        )
+        return list(self._db.scalars(statement).all())
+
+    def count_for_event(self, event_id: int) -> int:
+        return self._db.scalar(
+            select(func.count()).select_from(Registration).where(Registration.event_id == event_id)
+        ) or 0
+
+
+class MongoApplicationRepo:
+    def __init__(self, store: ApplicationStore) -> None:
+        self._store = store
+
+    def create(self, **fields: Any) -> Any:
+        try:
+            return self._store.create(**fields)
+        except Exception as exc:
+            if type(exc).__name__ == "DuplicateKeyError":
+                raise DuplicateRecord from exc
+            raise
+
+    def get(self, application_id: int) -> Any:
+        return self._store.get(application_id)
+
+    def exists(self, student_id: int, job_id: int) -> bool:
+        return self._store.exists(student_id, job_id)
+
+    def list_for_student(self, student_id: int, status: str | None = None) -> list[Any]:
+        return self._store.list_for_student(student_id, status)
+
+    def list_for_job(self, job_id: int) -> list[Any]:
+        return self._store.list_for_job(job_id)
+
+    def count_for_job(self, job_id: int) -> int:
+        return self._store.count_for_job(job_id)
+
+    def update(self, application: Any, **fields: Any) -> Any:
+        return self._store.update(application.id, fields)
+
+
+class MongoRegistrationRepo:
+    def __init__(self, store: RegistrationStore) -> None:
+        self._store = store
+
+    def create(self, student_id: int, event_id: int) -> Any:
+        try:
+            return self._store.create(student_id=student_id, event_id=event_id)
+        except Exception as exc:
+            if type(exc).__name__ == "DuplicateKeyError":
+                raise DuplicateRecord from exc
+            raise
+
+    def exists(self, student_id: int, event_id: int) -> bool:
+        return self._store.exists(student_id, event_id)
+
+    def list_for_student(self, student_id: int) -> list[Any]:
+        return self._store.list_for_student(student_id)
+
+    def list_for_event(self, event_id: int) -> list[Any]:
+        return self._store.list_for_event(event_id)
+
+    def count_for_event(self, event_id: int) -> int:
+        return self._store.count_for_event(event_id)
+
+
 class Repos:
     """The repositories for one request."""
 
@@ -550,6 +721,8 @@ class Repos:
         saved_items: Any = None,
         sessions: Any = None,
         activity: Any = None,
+        applications: Any = None,
+        registrations: Any = None,
     ) -> None:
         self.companies = companies
         self.jobs = jobs
@@ -559,6 +732,8 @@ class Repos:
         self.saved_items = saved_items
         self.sessions = sessions if sessions is not None else NoSessions()
         self.activity = activity if activity is not None else NoActivity()
+        self.applications = applications
+        self.registrations = registrations
 
 
 def make_repos(db: Session) -> Repos:
@@ -574,6 +749,8 @@ def make_repos(db: Session) -> Repos:
             MongoSavedItemRepo(SavedItemStore(database)),
             SessionStore(database),
             ActivityLogStore(database),
+            MongoApplicationRepo(ApplicationStore(database)),
+            MongoRegistrationRepo(RegistrationStore(database)),
         )
     return Repos(
         SqlCompanyRepo(db),
@@ -582,4 +759,6 @@ def make_repos(db: Session) -> Repos:
         SqlStudentRepo(db),
         SqlPreferencesRepo(db),
         SqlSavedItemRepo(db),
+        applications=SqlApplicationRepo(db),
+        registrations=SqlRegistrationRepo(db),
     )

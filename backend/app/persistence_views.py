@@ -1,9 +1,10 @@
-"""Response objects for tables that stay in MySQL but point at Mongo-owned rows.
+"""Response objects for applications and registrations.
 
-Applications and registrations live in MySQL. The job or event they refer to may live in
-MongoDB (PERSISTENCE=mongo), so SQL cannot join to it. These helpers load the MySQL rows
-and attach the job or event (with its company) through the repositories, as objects the
-existing response models read in the same way as the ORM objects.
+The application or registration rows come from the repositories (MySQL or MongoDB,
+by PERSISTENCE). The job or event they refer to may live in MongoDB, so SQL cannot
+join to it. These helpers attach the job or event (with its company) through the
+repositories, as objects the existing response models read in the same way as the
+ORM objects.
 """
 
 from types import SimpleNamespace
