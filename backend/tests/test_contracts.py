@@ -32,9 +32,13 @@ def test_image_names_use_the_pair_prefix():
     "service", [s for s in SERVICES["services"] if s["status"] == "ready"]
 )
 def test_dockerfile_port_matches_the_contract(service):
-    dockerfile = ROOT / "backend" / "services" / service["name"] / "Dockerfile"
-    if not dockerfile.exists():
-        pytest.skip(f"{service['name']} Dockerfile is on another branch")
+    dockerfile = (
+        ROOT / "frontend" / "Dockerfile"
+        if service["name"] == "frontend"
+        else ROOT / "backend" / "services" / service["name"] / "Dockerfile"
+    )
+
+    assert dockerfile.exists(), f"missing Dockerfile for {service['name']}"
 
     text = dockerfile.read_text()
     ports = set(re.findall(r"EXPOSE (\d+)", text))

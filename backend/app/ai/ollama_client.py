@@ -34,6 +34,7 @@ class OllamaClient(ModelClient):
             base_url or settings.ollama_base_url
         ).rstrip("/")
         self.model = model or settings.ollama_model
+        self.num_predict = settings.ollama_num_predict
         self.timeout = httpx.Timeout(
             timeout_seconds,
             connect=10.0,
@@ -44,16 +45,20 @@ class OllamaClient(ModelClient):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        options = {
+            "temperature": 0.1,
+            "num_ctx": 4096,
+        }
+        if self.num_predict is not None:
+            options["num_predict"] = self.num_predict
+
         payload = {
             "model": self.model,
             "messages": messages,
             "tools": tools,
             "stream": False,
             "think": False,
-            "options": {
-                "temperature": 0.1,
-                "num_ctx": 4096,
-            },
+            "options": options,
         }
 
         try:

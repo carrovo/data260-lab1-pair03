@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import PositiveInt
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +19,7 @@ class Settings(BaseSettings):
 
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen3:8b"
+    ollama_num_predict: PositiveInt | None = None
 
     # "sql" keeps companies and jobs in MySQL (unit tests, single-process app);
     # "mongo" stores them in MongoDB (Compose and Kubernetes).

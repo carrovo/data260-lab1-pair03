@@ -197,7 +197,9 @@ make smoke      # python scripts/smoke.py
 The stack includes all six services (Company 9030, Student 9031, Job 9032,
 Application 9033, Event 9034, Assistant 9035). The Assistant needs Ollama
 (`qwen3:8b`) running on the host; set `OLLAMA_BASE_URL` in `.env.compose` to
-override `http://host.docker.internal:11434`.
+override `http://host.docker.internal:11434`. `OLLAMA_NUM_PREDICT` is an optional
+positive-integer response-token cap; it is unset by default, so local behavior is
+unchanged unless the variable is explicitly configured.
 
 End-to-end check of a Kafka flow (company posts a job, the Job service publishes
 `job.created`, the worker indexes it in MongoDB). The token from the Company
@@ -245,7 +247,7 @@ The `grep` shows the access-log line from `p03-job-service` and the
 Manifests live in `k8s/` and use the namespace `p03` and `p03-` names. They run
 the same pieces as Docker Compose: MySQL, MongoDB, Kafka (single node, KRaft),
 the six services (Company, Student, Job, Application, Event, Assistant), the
-frontend gateway and the three Kafka workers. Two Jobs prepare the data first: `p03-db-init` (MySQL tables and migrations) and
+frontend gateway and the four Kafka workers. Two Jobs prepare the data first: `p03-db-init` (MySQL tables and migrations) and
 `p03-kafka-init` (topics and their `.dlq` topics).
 
 ### Local cluster (Docker Desktop)
@@ -330,8 +332,9 @@ and registration routes, and the Assistant tools. With `PERSISTENCE=sql` the ori
 SQL code paths run unchanged.
 
 Status: Mongo mode is verified on Docker Compose and on Kubernetes (50 companies,
-300 jobs, 100 events in MongoDB; smoke test, and JMeter at 100, 300 and 500 users
-with 0 errors; see `METRICS.md`). `k8s/config.yaml` stays on `sql`;
+300 jobs, 100 events in MongoDB, plus the smoke test). The CRUD load plan covers
+100 / 200 / 300 / 400 / 500 users; the recorded Mongo checkpoints at 100, 300 and
+500 users had 0 errors (see `METRICS.md`). `k8s/config.yaml` stays on `sql`;
 `sh scripts/k8s_mongo.sh on` (or `off`) switches a running cluster without editing
 files. On Compose, remove the `PERSISTENCE=mongo` line, rebuild, and reseed to go back.
 
@@ -362,7 +365,7 @@ Kubernetes it is `k8s/frontend.yaml`.
 
 ## Load testing and verification
 
-- `loadtest/` holds the JMeter plan (4 scenarios, 100 / 300 / 500 concurrent users);
+- `loadtest/` holds the JMeter plan (4 scenarios, 100 / 200 / 300 / 400 / 500 concurrent users);
   see `loadtest/README.md` for the commands and `METRICS.md` for the results and
   the two bottlenecks found and fixed (database pool, worker thread pool).
 - `scripts/verify_stack.sh` checks a running Compose stack (smoke test, 5-user trial,

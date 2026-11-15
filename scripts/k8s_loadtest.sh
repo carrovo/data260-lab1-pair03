@@ -34,6 +34,6 @@ OUT=k8s_loadtest_output.txt
   done
   echo "== MySQL peak connections"
   kubectl -n p03 exec p03-mysql-0 -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SHOW STATUS LIKE \"Max_used_connections\"" 2>/dev/null'
-  echo "== throttling note: pod CPU limits in k8s/*.yaml are 500m per service"
+  echo "== throttling note: pod CPU limits in k8s/*.yaml are 2 CPUs per service"
 } > "$OUT" 2>&1
 echo "done: results are in $OUT"

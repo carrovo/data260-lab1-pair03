@@ -18,7 +18,9 @@ use enough loops that all users are active at the same time (watch `Active:` in 
 
     cd loadtest
     jmeter -n -t handshake.jmx -Jusers=25  -Jrampup=20 -Jloops=30 -l results_100.jtl -e -o report_100
+    jmeter -n -t handshake.jmx -Jusers=50  -Jrampup=25 -Jloops=30 -l results_200.jtl -e -o report_200
     jmeter -n -t handshake.jmx -Jusers=75  -Jrampup=30 -Jloops=30 -l results_300.jtl -e -o report_300
+    jmeter -n -t handshake.jmx -Jusers=100 -Jrampup=30 -Jloops=30 -l results_400.jtl -e -o report_400
     jmeter -n -t handshake.jmx -Jusers=125 -Jrampup=30 -Jloops=30 -l results_500.jtl -e -o report_500
 
 `users` is per scenario, so 25 means 100 concurrent users in total (four scenarios). Use a new
@@ -35,7 +37,7 @@ that are already in the past. Anything else is counted as an error.
 ## What to record for the report
 
 From the HTML report: average, p95 and p99 response time, throughput (requests/s) and error %
-per sampler, for 100, 300 and 500 users. Put the numbers in `METRICS.md`.
+per sampler, for 100, 200, 300, 400 and 500 users. Put the numbers in `METRICS.md`.
 
-`build_plan.py` regenerates `handshake.jmx`. The plan has not been run yet: only checked as
-valid XML, so run it once with 5 users and read the first result file before the big runs.
+`build_plan.py` regenerates `handshake.jmx`. The tracked results and analysis for all five
+levels are in `METRICS.md`.
