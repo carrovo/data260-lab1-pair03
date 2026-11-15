@@ -63,6 +63,15 @@ Topics, producers and consumers (code: `backend/common/events.py`):
 | application.status_changed | company | notification-worker | application_id, student_id, job_id, old_status, new_status |
 | event.registration_created | event | event-worker | registration_id, student_id, event_id |
 | job.created | job | job-index-worker | job_id, company_id, title |
+| assistant.memory_consolidation_requested | assistant | assistant-memory-worker | student_id |
+
+The memory request contains only the authenticated student's string ID (no private
+facts). `p03.assistant.memory_consolidation_requested` and its `.dlq` use the shared
+envelope/prefix helper. The consumer loads `student_memory`, uses a versioned
+atomic replacement plus an event receipt in that document, then the common runner
+records `processed_events` under `assistant-memory-worker:<event_id>`. Crash replay
+of a completed replacement is a no-op. `assistant_rules` is never changed by this
+consumer. The HTTP routes only enqueue consolidation; no inference runs there.
 
 The table lists event types. The real Kafka topics are `p03.<event type>` (for example
 `p03.job.created`, dead letters `p03.job.created.dlq`). Code, envelopes and workers use

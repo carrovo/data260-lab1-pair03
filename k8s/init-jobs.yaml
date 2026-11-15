@@ -14,18 +14,12 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: kafka-init
-          image: apache/kafka:3.8.1
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              until /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --list >/dev/null 2>&1; do
-                echo "waiting for kafka"; sleep 3
-              done
-              for topic in application.created application.updated application.status_changed event.registration_created job.created; do
-                /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic p03.$topic --partitions 1 --replication-factor 1
-                /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic p03.$topic.dlq --partitions 1 --replication-factor 1
-              done
-              /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --list
+          image: p03-worker:dev
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "backend.workers.init_topics"]
+          envFrom:
+            - configMapRef:
+                name: p03-config
           resources:
             requests: {cpu: 100m, memory: 256Mi}
             limits: {cpu: 500m, memory: 512Mi}

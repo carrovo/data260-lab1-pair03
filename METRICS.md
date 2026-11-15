@@ -379,3 +379,80 @@ Scope: H07 establishes `client_carried_history`. Live-model resistance, Mongo-mo
 harness coverage, and server-persistent memory are not established. The validator
 supports currently declared constraints; unsupported references/composition and
 other schema constructs require maintenance review as documented in README.
+
+## Assistant memory checkpoint (Carol, 2026-11-15)
+
+Branch `feature/lab2-assistant-memory`, base
+`6124c45ec9ec3e5e2f645a065bdc18374e8531da`; initial verification used working-tree
+code. No assignment PDF was present locally; implementation follows the
+provided official memory requirements. No live model was used for consolidation.
+
+| Verification | Actual result |
+|---|---|
+| Focused memory, harness, Assistant, contracts, messaging, workers, Compose/Kubernetes/topic tests | 144 passed, 0 failed/skipped, 30 warnings |
+| Full backend suite after final seed CLI/test changes | 476 passed, 0 failed/skipped, 88 warnings; 98.30 seconds |
+| Existing deterministic SQL H01–H10 runner | 10 passed, 0 failed; exit 0; H07 remains `client_carried_history` |
+| Compose rendering with non-secret validation placeholders / Kubernetes base rendering | PASS; no live deployment |
+| Real local Kafka/Mongo consolidation | 63 entries before, 30 after; processed-event receipt observed |
+
+The first full run found only an outdated exact service-route expectation (475
+passed, 1 failed). The assertion now includes the three new memory endpoints;
+the final complete run above passed. Deprecation warnings concern Starlette/httpx
+and mongomock datetime usage. Focused memory tests use mongomock and isolated SQL
+fixtures through production HTTP/auth/Agent paths; they establish server-history
+precedence, isolation, cross-session prompt recall, expiry/end, safe memory
+injection, explicit outages and asynchronous handoff. Retry/DLQ, duplicate/crash
+replay, concurrent additions, all seeded groups and unrelated facts are asserted.
+
+Real evidence (production source mounted in temporary `p03-worker:dev` container,
+existing local Docker Kafka/Mongo on `p03-net`, no services restarted):
+
+- Database: `p03_memory_demo_carol_20261115_memory` (synthetic memory subject).
+- Topic: `p03.memorydemo-carol-20261115-memory.assistant.memory_consolidation_requested`.
+- Event: `052e0c31-4f18-4507-b981-846039679967`.
+- Trace: `memory-demo-71cd9f874a704fa1ab14771887433921`.
+- Consumer completion: `assistant-memory-worker:<event_id>`, recorded at
+  `2026-11-15T21:50:20.859119Z`, with the same trace.
+- Safe full before/after entries, 30 merge decisions and completion receipt:
+  `loadtest/temp/assistant-memory/carol-20261115-memory/memory-evidence.json`
+  (ignored temporary evidence).
+
+All 30 duplicate groups merged. Three groups also contained newer contradictory
+assertions; `correction-0`, `correction-1`, `correction-2` won. For example,
+`topic-00` retained `corrected-0` dated February 1 over `original-0` dated January
+1. This is an explicit date/provenance policy, not a fabricated model correction.
+Topics 03–29 retained all 27 unrelated original facts; nothing was removed simply
+to hit the count target. Rules were unchanged in the deterministic tests. No model
+mistake was observed because no consolidation model was invoked.
+
+The real path was publisher -> Kafka -> production common consumer/worker dispatch
+-> Mongo -> processed_events. The shared topic initializer was also executed
+successfully in the isolated prefix, creating all six topics and six DLQs via
+`kafka_topic()`. Real HTTP memory with Ollama, updated Compose service images,
+Kubernetes deployment and AWS remain unverified. Final review replaced the memory
+request's best-effort handoff with an opt-in broker-acknowledged send (two-second
+bound, 503 on failed/unknown delivery) without altering unrelated producers. The
+memory worker also requires acknowledged DLQ publication before committing a
+failed message's offset. No durable HTTP outbox was added. These final changes
+are covered by automated tests; the historical live demo was not rerun.
+Learning is intentionally limited to explicit city/role/work-mode preferences,
+with heuristic dialogue redaction and bounded retrieval/history. Event receipt
+retention needs a future operational policy. A real `--seed-only` rerun preserved
+the already-consolidated 30 entries without resurrecting duplicates. See README for schemas, lifecycle,
+consolidation safety and reproduction commands.
+
+Sanitized synthetic-only submission evidence is preserved in
+`loadtest/evidence_assistant_memory_2026-11-15.json` with the matching
+`loadtest/summary_assistant_memory_2026-11-15.md`. It includes full before/after
+entries, duplicate/contradiction groups, retained unrelated topics, matching event
+and trace receipts, and execution limits. This was a CLI consumer using production
+dispatch, not a separately deployed memory worker. The ignored raw source was
+retained unchanged. Final review also fixed opaque entries sharing IDs being
+overwritten and omitted entire credential-bearing dialogue turns.
+
+Final review verification: focused memory/messaging/topic/harness/Assistant/worker
+tests: 100 passed, 0 failed/skipped, 50 warnings. Complete backend suite after all
+code fixes: 486 passed, 0 failed/skipped, 110 warnings, 94.28 seconds. Warnings are
+the existing Starlette/httpx and mongomock datetime deprecations. SQL harness:
+10/10 passed, exit 0 (`memory-final-review-20261115`); H07 retains its original
+client-carried-history scope. No live model/deployed-worker run was added.

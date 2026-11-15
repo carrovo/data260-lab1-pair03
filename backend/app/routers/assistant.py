@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from backend.app.ai.agent import MAX_HISTORY_MESSAGES, run_assistant
@@ -16,6 +16,8 @@ from backend.app.ai.confirmation_token import (
 )
 from backend.app.ai.ollama_client import ModelClient, OllamaClient
 from backend.app.ai.tools import TOOL_IMPLEMENTATIONS, TOOL_SCHEMAS
+from backend.app.ai.memory import get_memory_store, MemoryModelClient, publish_consolidation
+from backend.common.assistant_memory import MemoryConflict
 from backend.app.models import Student
 from backend.app.routers.student_auth import get_current_student, get_db
 from backend.app.schemas.assistant import (
@@ -162,10 +164,58 @@ def _handle_confirmation(
 @router.post("/chat", response_model=AssistantChatResponse)
 def chat_with_assistant(
     request: AssistantChatRequest,
+    response: Response,
     current_student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
     model_client: ModelClient = Depends(get_model_client),
+    memory=Depends(get_memory_store),
 ) -> AssistantChatResponse:
+    session = None
+    if memory is not None:
+        session = (
+            memory.conversation(current_student.id, request.conversation_id)
+            if request.conversation_id else memory.start(current_student.id)
+        )
+        if session is None:
+            raise HTTPException(404, "Conversation not found or expired.")
+        # A supplied server ID makes stored history authoritative. Caller history
+        # is ignored, avoiding duplicate turns and forged server history.
+        if request.conversation_id:
+            request = request.model_copy(update={
+                "conversation": [ConversationMessage(**item) for item in session["messages"]],
+            })
+        response.headers["X-Conversation-Id"] = session["_id"]
+        if request.message == "/memory":
+            entries = memory.entries(current_student.id)
+            reply = "\n".join(
+                f"{e['date']} [{e['category']}] {e['description']}"
+                for e in entries[-40:]
+            ) or "No learned memory entries."
+            reply = _bounded_reply(reply)
+            result = AssistantChatResponse(reply=reply, conversation=[
+                *request.conversation, ConversationMessage(role="user", content="/memory"),
+                ConversationMessage(role="assistant", content=reply),
+            ][-MAX_HISTORY_MESSAGES:], tool_calls=0)
+            memory.save_conversation(session, [m.model_dump() for m in result.conversation])
+            return result
+        if request.message:
+            memory.learn(current_student.id, request.message)
+        model_client = MemoryModelClient(
+            model_client, memory.entries(current_student.id), request.message or "",
+        )
+    elif request.conversation_id or request.message == "/memory":
+        raise HTTPException(503, "Persistent Assistant memory requires MONGO_URL.")
+
+    result = _chat(request, current_student, db, model_client)
+    if session is not None:
+        try:
+            memory.save_conversation(session, [m.model_dump() for m in result.conversation])
+        except MemoryConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+    return result
+
+
+def _chat(request, current_student, db, model_client):
     if request.confirmation is not None:
         return _handle_confirmation(request, current_student, db)
 
@@ -193,3 +243,35 @@ def chat_with_assistant(
         tool_calls=result.get("tool_calls", 0),
         pending_action=pending_action,
     )
+
+
+@router.get("/memory")
+def list_memory(current_student=Depends(get_current_student), memory=Depends(get_memory_store)):
+    if memory is None:
+        raise HTTPException(503, "Persistent Assistant memory requires MONGO_URL.")
+    entries = memory.entries(current_student.id)
+    return {"entries": entries[-40:], "total": len(entries), "limit": 40}
+
+
+@router.post("/conversations/{conversation_id}/end")
+def end_conversation(conversation_id: str, current_student=Depends(get_current_student),
+                     memory=Depends(get_memory_store)):
+    if memory is None:
+        raise HTTPException(503, "Persistent Assistant memory requires MONGO_URL.")
+    if not memory.end(current_student.id, conversation_id):
+        raise HTTPException(404, "Conversation not found.")
+    if not publish_consolidation(current_student.id):
+        raise HTTPException(503, {
+            "ended": True, "consolidation_enqueued": False,
+            "message": "Conversation ended; consolidation delivery unconfirmed. Retry /memory/consolidate.",
+        })
+    return {"ended": True, "consolidation_enqueued": True}
+
+
+@router.post("/memory/consolidate", status_code=202)
+def request_consolidation(current_student=Depends(get_current_student), memory=Depends(get_memory_store)):
+    if memory is None:
+        raise HTTPException(503, "Persistent Assistant memory requires MONGO_URL.")
+    if not publish_consolidation(current_student.id):
+        raise HTTPException(503, "Consolidation delivery unconfirmed; retry.")
+    return {"consolidation_enqueued": True}

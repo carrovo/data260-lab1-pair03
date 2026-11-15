@@ -17,6 +17,7 @@ import time
 from backend.common.messaging import (
     ConfluentConsumerClient,
     ConfluentPublisher,
+    DeliveryConfirmedPublisher,
     MongoProcessedEventStore,
     run_consumer,
 )
@@ -75,7 +76,8 @@ def main() -> None:
             lambda envelope: handlers[envelope.event_type](envelope, db)
         ),
         store=MongoProcessedEventStore(db["processed_events"]),
-        publisher=ConfluentPublisher(bootstrap),
+        publisher=(DeliveryConfirmedPublisher(bootstrap)
+                   if name == "assistant-memory-worker" else ConfluentPublisher(bootstrap)),
     )
 
 

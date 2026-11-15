@@ -456,3 +456,104 @@ validator: references (`$ref`), composition (`allOf`/`anyOf`/`oneOf`/`not`),
 conditional schemas, patterns/formats, and other array/object constraints are
 unsupported and currently unused. Schema changes must review validator support;
 unsupported constructs are not automatically enforced.
+
+### Assistant memory (Carol)
+
+Memory uses `MONGO_URL` / `MONGO_DB` independently of `PERSISTENCE` (business
+default remains `sql`). With Mongo configured, every Assistant interaction uses
+memory; Mongo failures return 503, with no in-process persistence substitute.
+Without `MONGO_URL`, legacy stateless/client-carried chat remains available;
+memory commands and server conversation IDs explicitly return 503.
+
+Collections and indexes:
+
+| Collection | Document / indexes |
+|---|---|
+| `assistant_rules` | Trusted server rule ID and description; unique `_id`. Idempotently seeded privacy and eligibility rules. Canonical server rules are injected; user text, DB content and consolidation cannot redefine them. |
+| `student_memory` | `_id` and unique `student_id` are the authenticated string ID; `version`, bounded `entries`, event receipts and last consolidation audit. Each entry has stable `id`, ISO `date`, `category`, exclusive fact `key`, `value`, `description`, `provenance`. |
+| `conversations` | Opaque `_id`, owner `student_id`, public `messages`, `version`, `expires_at`; owner/expiry compound index and TTL index on expiry. |
+
+The bounded explicit learning grammar is `My preferred city is San Jose.` (also
+`role` or `work mode`, optionally prefixed `Remember: `). Only the authenticated
+student's input is eligible; retrieved text/model answers never create facts.
+Values are bounded and restricted; instruction/credential-like values are rejected.
+Dialogue storage omits whole credential-bearing turns and redacts emails. These are
+conservative heuristics, not a general sensitive-data classifier; avoid entering
+private information. Memory capacity is 200 entries; request consolidation when full.
+The latest 20 entries, prioritizing fact keys mentioned in the current request,
+are injected as labeled untrusted data through the production sanitizer. Trusted
+privacy/eligibility rules remain instructions. Model inference still uses the
+production bounded Agent, typed validation, allowlist and confirmation protections.
+
+`POST /assistant/chat` preserves the existing response body and adds
+`X-Conversation-Id` when memory is active. Supply that ID as optional JSON
+`conversation_id` on subsequent requests. Stored history then takes precedence:
+caller history is ignored, so turns are not duplicated. Without an ID, a new
+conversation is started and valid client-carried history remains supported.
+Stored dialogue is limited to 40 public turns, expires after eight hours, and is
+logically inaccessible immediately at expiry; Mongo TTL removes it asynchronously.
+Version checks reject concurrent/lapsed history writes with 409. This is separate
+from authentication; existing JWTs and confirmation ownership/replay rules apply.
+
+Authenticated commands/routes (through gateway use `/gw/assistant/...`):
+
+- Chat message `/memory`: deterministic dated/category listing, bounded to 40
+  entries and the existing reply limit; no model summarization.
+- `GET /assistant/memory`: latest 40 learned entries with total count.
+- `POST /assistant/conversations/{id}/end`: owner-only discard of current history,
+  then delivery-confirmed enqueue. Failure returns 503 with `ended: true` and
+  `consolidation_enqueued: false` in the error detail; retry the next route.
+  Session history stays ended.
+- `POST /assistant/memory/consolidate`: returns 202 only after a successful broker
+  acknowledgement, 503 on unavailable/failed/unconfirmed delivery. The scoped
+  send waits at most two seconds for acknowledgement, without consolidation or
+  model inference. Timeout is an unknown outcome: the event may still arrive,
+  so retries can produce another harmless consolidation request. No outbox is used.
+
+`assistant.memory_consolidation_requested` carries only string `student_id`,
+with the request trace supplied by the existing publisher. Physical topics and
+DLQs use `kafka_topic()`; Compose/Kubernetes initialization now runs
+`python -m backend.workers.init_topics` in the shared worker image for all existing
+topics and the new topic. `assistant-memory-worker` uses the existing three-attempt
+retry/DLQ/offset framework. Build the worker image before running init jobs.
+
+Consolidation is deterministic: same category/key denotes an exclusive fact;
+duplicates merge and the latest dated explicit assertion wins contradictions,
+with stable entry-ID tie-breaking. Unrelated keys survive. Invalid opaque entries
+are preserved; invalid dates fail the operation rather than silently delete data.
+No model-generated consolidation output or arbitrary count truncation is used.
+An atomic version comparison replaces entries and records the event receipt in
+the same student document. Concurrent additions force a re-read/recompute; crash
+replay after replacement is a no-op before `processed_events` is repaired. The
+common runner commits offsets after writes/processed recording (or durable DLQ).
+Only the memory worker opts into delivery-confirmed DLQ sends; if confirmation
+fails it raises before offset commit. Existing producers/workers keep their behavior.
+Event receipts currently accumulate; long-running deployments need a coordinated
+receipt retention policy. Rules are unchanged by learning or consolidation.
+
+Verification commands:
+
+```sh
+.venv/bin/python -m pytest -q backend/tests/test_assistant_memory.py -rs
+sh scripts/run_agent_harness.sh --persistence sql --label memory-check
+# Prepared worker environment; choose a NEW label and output directory per demo.
+# MONGO_URL and KAFKA_BOOTSTRAP must identify local services.
+python -m backend.memory_demo --label example-new-run --output-dir loadtest/temp/assistant-memory/example-new-run
+# Idempotent seed only (Mongo required; no Kafka): add --seed-only.
+```
+
+The demo idempotently seeds a synthetic student-memory subject with 63 dated
+entries (30 duplicate pairs and three newer corrections), publishes through real
+Kafka, runs the production consumer/handler against isolated Mongo, and records
+safe before/after entries, event/trace IDs and completion. It uses a dedicated
+`p03_memory_demo_<label>` database and `p03.memorydemo-<label>.` topic namespace;
+it does not reset databases or reuse business accounts. Rerunning the seed preserves
+existing state; choose a fresh label to reproduce the original 63-entry baseline.
+Raw evidence remains ignored under `loadtest/temp/`. A reviewed synthetic-only
+submission copy and summary are tracked in
+`loadtest/evidence_assistant_memory_2026-11-15.json` and
+`loadtest/summary_assistant_memory_2026-11-15.md`. See METRICS for actual
+results. Persistent-memory HTTP behavior is tested with isolated Mongo mocks;
+the real demo verifies Kafka/Mongo consolidation, not a live HTTP/Ollama deployment.
+H07 remains `client_carried_history`. Redux, token/context instrumentation, Part 6
+automatic compaction, live-model memory safety and AWS deployment are out of scope.

@@ -50,6 +50,7 @@ class AssistantChatRequest(BaseModel):
         max_length=MAX_HISTORY_MESSAGES,
     )
     confirmation: AssistantConfirmation | None = None
+    conversation_id: str | None = Field(default=None, min_length=1, max_length=64)
 
     @model_validator(mode="after")
     def require_one_action(self):

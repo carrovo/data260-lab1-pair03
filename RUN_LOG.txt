@@ -332,3 +332,63 @@ Result:   PASS
   H07 is client-carried history. No claim of live-model resistance, Mongo harness
   coverage or server-persistent memory. README records command and validator limits;
   METRICS.md records results. Existing deployment/performance entries preserved.
+
+[Carol Assistant memory — 2026-11-15]
+  Base 6124c45ec9ec3e5e2f645a065bdc18374e8531da; branch feature/lab2-assistant-memory.
+  Added Mongo-only assistant_rules/student_memory/conversations independently of
+  business PERSISTENCE (still sql by default). Explicit preference learning,
+  bounded untrusted prompt data, authenticated /memory, opaque conversation IDs,
+  stored-history precedence, ownership, eight-hour expiry and end lifecycle.
+  Added assistant.memory_consolidation_requested and assistant-memory-worker;
+  versioned atomic replacement/event receipts protect concurrent entries/replay.
+  Shared topic initializer uses kafka_topic() for every topic and DLQ. Existing
+  workers and their failure-demo behavior retained; no tools/repository changes.
+  Focused command:
+    .venv/bin/python -m pytest -q backend/tests/test_assistant_memory.py backend/tests/test_compose.py backend/tests/test_k8s.py backend/tests/test_contracts.py backend/tests/test_workers.py backend/tests/test_topic_prefix.py backend/tests/test_messaging.py backend/tests/test_agent_harness.py backend/tests/test_student_assistant.py -rs
+  Result: 144 passed, 0 failed/skipped, 30 warnings.
+  Full command: .venv/bin/python -m pytest -q backend/tests -rs
+  First full run: 475 passed, 1 failed (old service route-list assertion).
+  Updated exact list for new routes. After the final idempotent seed CLI/test
+  refinement: 476 passed, 0 failed/skipped, 88 warnings, 98.30 seconds.
+  Harness: sh scripts/run_agent_harness.sh --persistence sql --label memory-check-20261115 --output-dir loadtest/temp/agent_harness/memory-check-20261115
+  Result: 10/10 pass, exit 0; H07 remains client_carried_history.
+  Real Kafka/Mongo command (temporary worker, current source mounted):
+    docker run --rm --network p03-net -v /Users/carol/Documents/data260-lab1-pair03:/workspace -w /workspace -e PYTHONPATH=/workspace -e PYTHONDONTWRITEBYTECODE=1 -e MONGO_URL=mongodb://p03-mongo:27017 -e KAFKA_BOOTSTRAP=p03-kafka:9092 p03-worker:dev python -m backend.memory_demo --label carol-20261115-memory --output-dir loadtest/temp/assistant-memory/carol-20261115-memory
+  Result: 63 -> 30 entries, all duplicate groups merged, three newer corrections
+  selected, 27 unrelated topics retained. Event 052e0c31-4f18-4507-b981-846039679967;
+  trace memory-demo-71cd9f874a704fa1ab14771887433921; processed receipt at
+  2026-11-15T21:50:20.859119Z. Full ignored evidence: loadtest/temp/assistant-memory/carol-20261115-memory/memory-evidence.json.
+  Real topic initializer passed in the same isolated namespace. No services were
+  restarted, volumes erased, or production accounts used. Demo data/topics remain
+  for inspection. No model inference/mistakes; deterministic consolidation only.
+  Real --seed-only rerun retained 30 entries; no merged duplicates resurrected.
+  Compose rendered using non-secret placeholders; Kubernetes base rendered locally.
+  Memory HTTP/model interaction uses deterministic model + mongomock tests; live
+  HTTP/Ollama, Kubernetes/AWS deployment and Redux/context instrumentation not run.
+  No local official PDF available; supplied requirements used. Code awaits review;
+  no commit or push in this checkpoint.
+
+[Carol memory final review — 2026-11-15]
+  Reviewed complete implementation and new files at base 6124c45. Fixed memory
+  request publication: local producer buffering is insufficient; opt-in callback
+  acknowledgement required, bounded to two seconds. Unavailable/error/timeout
+  returns 503; end reports ended=true and consolidation_enqueued=false on failure.
+  Timeout is unknown delivery, never reported successful. No outbox or changes
+  to unrelated producer behavior. Memory-worker DLQ sends must be acknowledged
+  before offset commit. Confirmed tests cover failure/no callback/timeout/ack.
+  Fixed opaque entries with colliding IDs being overwritten; retained separately.
+  Whole credential-bearing dialogue turns are omitted rather than partially saved.
+  Added two-consumer CAS, post-completion addition/replay, private-token storage
+  and end/publication failure tests. Auth ownership, stored-history precedence,
+  read-time expiry and existing Agent safeguards preserved.
+  Focused: .venv/bin/python -m pytest -q backend/tests/test_assistant_memory.py backend/tests/test_messaging.py backend/tests/test_topic_prefix.py backend/tests/test_agent_harness.py backend/tests/test_student_assistant.py backend/tests/test_workers.py -rs
+  Result: 100 passed, 0 failed/skipped, 50 warnings.
+  Full: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 486 passed, 0 failed/skipped, 110 warnings, 94.28 seconds.
+  Harness: sh scripts/run_agent_harness.sh --persistence sql --label memory-final-review-20261115 --output-dir loadtest/temp/agent_harness/memory-final-review-20261115
+  Result: 10/10 pass, exit 0. Compile/shell/diff checks pass.
+  Preserved sanitized synthetic evidence under loadtest/evidence_assistant_memory_2026-11-15.json
+  and loadtest/summary_assistant_memory_2026-11-15.md; ignored original unchanged.
+  Evidence is the prior real Kafka/Mongo CLI run using production consumer dispatch,
+  not a separately deployed worker. Final acknowledgement/opaque-entry fixes have
+  automated coverage; real service verification was not rerun during this review.

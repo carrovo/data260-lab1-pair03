@@ -154,11 +154,16 @@ def test_every_worker_in_the_code_has_a_deployment():
 
 
 def test_kafka_init_creates_every_topic_and_its_dlq():
+    from backend.common.events import kafka_topic, dlq_topic
+    from backend.workers.init_topics import topic_names
+
     job = next(d for d in of_kind("Job") if d["metadata"]["name"] == "p03-kafka-init")
-    script = pod_spec(job)["containers"][0]["args"][0]
-    for topic in TOPICS:
-        assert topic in script, topic
-    assert "$topic.dlq" in script
+    assert pod_spec(job)["containers"][0]["command"] == [
+        "python", "-m", "backend.workers.init_topics",
+    ]
+    assert set(topic_names()) == {
+        kafka_topic(name) for topic in TOPICS for name in (topic, dlq_topic(topic))
+    }
 
 
 def test_db_init_runs_schema_then_both_migrations():

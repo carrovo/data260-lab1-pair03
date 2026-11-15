@@ -1,0 +1,1524 @@
+{
+  "schema_version": 1,
+  "subject": "Pair 03 synthetic student-memory subject; no real student account or PII",
+  "execution_method": "CLI backend.memory_demo in a temporary p03-worker:dev container with then-current source mounted. Real ConfluentPublisher -> Kafka -> ConfluentConsumerClient/run_consumer -> WORKERS['assistant-memory-worker'][event_type] (backend.common.assistant_memory.consolidate) -> Mongo and MongoProcessedEventStore. Consumer ran inside the CLI, not a separately deployed worker.",
+  "verification_limits": [
+    "No live Ollama/model inference",
+    "No live HTTP memory or full Compose/Kubernetes/AWS deployment verification",
+    "Run precedes final delivery-acknowledgement and opaque-entry review fixes; these were covered by subsequent tests, not a new live run"
+  ],
+  "physical_topic": "p03.memorydemo-carol-20261115-memory.assistant.memory_consolidation_requested",
+  "event_id": "052e0c31-4f18-4507-b981-846039679967",
+  "trace_id": "memory-demo-71cd9f874a704fa1ab14771887433921",
+  "before_count": 63,
+  "before_entries": [
+    {
+      "id": "demo-00-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-00",
+      "value": "original-0",
+      "description": "Synthetic preference 0: original-0",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-00-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-00",
+      "value": "original-0",
+      "description": "Synthetic preference 0: original-0",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-01-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-01",
+      "value": "original-1",
+      "description": "Synthetic preference 1: original-1",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-01-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-01",
+      "value": "original-1",
+      "description": "Synthetic preference 1: original-1",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-02-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-02",
+      "value": "original-2",
+      "description": "Synthetic preference 2: original-2",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-02-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-02",
+      "value": "original-2",
+      "description": "Synthetic preference 2: original-2",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-03-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-03",
+      "value": "original-3",
+      "description": "Synthetic preference 3: original-3",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-03-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-03",
+      "value": "original-3",
+      "description": "Synthetic preference 3: original-3",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-04-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-04",
+      "value": "original-4",
+      "description": "Synthetic preference 4: original-4",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-04-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-04",
+      "value": "original-4",
+      "description": "Synthetic preference 4: original-4",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-05-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-05",
+      "value": "original-5",
+      "description": "Synthetic preference 5: original-5",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-05-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-05",
+      "value": "original-5",
+      "description": "Synthetic preference 5: original-5",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-06-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-06",
+      "value": "original-6",
+      "description": "Synthetic preference 6: original-6",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-06-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-06",
+      "value": "original-6",
+      "description": "Synthetic preference 6: original-6",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-07-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-07",
+      "value": "original-7",
+      "description": "Synthetic preference 7: original-7",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-07-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-07",
+      "value": "original-7",
+      "description": "Synthetic preference 7: original-7",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-08-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-08",
+      "value": "original-8",
+      "description": "Synthetic preference 8: original-8",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-08-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-08",
+      "value": "original-8",
+      "description": "Synthetic preference 8: original-8",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-09-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-09",
+      "value": "original-9",
+      "description": "Synthetic preference 9: original-9",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-09-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-09",
+      "value": "original-9",
+      "description": "Synthetic preference 9: original-9",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-10-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-10",
+      "value": "original-10",
+      "description": "Synthetic preference 10: original-10",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-10-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-10",
+      "value": "original-10",
+      "description": "Synthetic preference 10: original-10",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-11-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-11",
+      "value": "original-11",
+      "description": "Synthetic preference 11: original-11",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-11-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-11",
+      "value": "original-11",
+      "description": "Synthetic preference 11: original-11",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-12-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-12",
+      "value": "original-12",
+      "description": "Synthetic preference 12: original-12",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-12-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-12",
+      "value": "original-12",
+      "description": "Synthetic preference 12: original-12",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-13-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-13",
+      "value": "original-13",
+      "description": "Synthetic preference 13: original-13",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-13-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-13",
+      "value": "original-13",
+      "description": "Synthetic preference 13: original-13",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-14-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-14",
+      "value": "original-14",
+      "description": "Synthetic preference 14: original-14",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-14-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-14",
+      "value": "original-14",
+      "description": "Synthetic preference 14: original-14",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-15-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-15",
+      "value": "original-15",
+      "description": "Synthetic preference 15: original-15",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-15-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-15",
+      "value": "original-15",
+      "description": "Synthetic preference 15: original-15",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-16-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-16",
+      "value": "original-16",
+      "description": "Synthetic preference 16: original-16",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-16-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-16",
+      "value": "original-16",
+      "description": "Synthetic preference 16: original-16",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-17-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-17",
+      "value": "original-17",
+      "description": "Synthetic preference 17: original-17",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-17-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-17",
+      "value": "original-17",
+      "description": "Synthetic preference 17: original-17",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-18-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-18",
+      "value": "original-18",
+      "description": "Synthetic preference 18: original-18",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-18-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-18",
+      "value": "original-18",
+      "description": "Synthetic preference 18: original-18",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-19-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-19",
+      "value": "original-19",
+      "description": "Synthetic preference 19: original-19",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-19-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-19",
+      "value": "original-19",
+      "description": "Synthetic preference 19: original-19",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-20-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-20",
+      "value": "original-20",
+      "description": "Synthetic preference 20: original-20",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-20-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-20",
+      "value": "original-20",
+      "description": "Synthetic preference 20: original-20",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-21-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-21",
+      "value": "original-21",
+      "description": "Synthetic preference 21: original-21",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-21-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-21",
+      "value": "original-21",
+      "description": "Synthetic preference 21: original-21",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-22-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-22",
+      "value": "original-22",
+      "description": "Synthetic preference 22: original-22",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-22-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-22",
+      "value": "original-22",
+      "description": "Synthetic preference 22: original-22",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-23-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-23",
+      "value": "original-23",
+      "description": "Synthetic preference 23: original-23",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-23-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-23",
+      "value": "original-23",
+      "description": "Synthetic preference 23: original-23",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-24-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-24",
+      "value": "original-24",
+      "description": "Synthetic preference 24: original-24",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-24-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-24",
+      "value": "original-24",
+      "description": "Synthetic preference 24: original-24",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-25-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-25",
+      "value": "original-25",
+      "description": "Synthetic preference 25: original-25",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-25-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-25",
+      "value": "original-25",
+      "description": "Synthetic preference 25: original-25",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-26-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-26",
+      "value": "original-26",
+      "description": "Synthetic preference 26: original-26",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-26-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-26",
+      "value": "original-26",
+      "description": "Synthetic preference 26: original-26",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-27-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-27",
+      "value": "original-27",
+      "description": "Synthetic preference 27: original-27",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-27-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-27",
+      "value": "original-27",
+      "description": "Synthetic preference 27: original-27",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-28-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-28",
+      "value": "original-28",
+      "description": "Synthetic preference 28: original-28",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-28-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-28",
+      "value": "original-28",
+      "description": "Synthetic preference 28: original-28",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-29-0",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-29",
+      "value": "original-29",
+      "description": "Synthetic preference 29: original-29",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-29-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-29",
+      "value": "original-29",
+      "description": "Synthetic preference 29: original-29",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "correction-0",
+      "date": "2026-02-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-00",
+      "value": "corrected-0",
+      "description": "Synthetic preference 0: corrected-0",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "correction-1",
+      "date": "2026-02-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-01",
+      "value": "corrected-1",
+      "description": "Synthetic preference 1: corrected-1",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "correction-2",
+      "date": "2026-02-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-02",
+      "value": "corrected-2",
+      "description": "Synthetic preference 2: corrected-2",
+      "provenance": "synthetic_demo"
+    }
+  ],
+  "after_count": 30,
+  "after_entries": [
+    {
+      "id": "correction-0",
+      "date": "2026-02-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-00",
+      "value": "corrected-0",
+      "description": "Synthetic preference 0: corrected-0",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "correction-1",
+      "date": "2026-02-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-01",
+      "value": "corrected-1",
+      "description": "Synthetic preference 1: corrected-1",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "correction-2",
+      "date": "2026-02-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-02",
+      "value": "corrected-2",
+      "description": "Synthetic preference 2: corrected-2",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-03-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-03",
+      "value": "original-3",
+      "description": "Synthetic preference 3: original-3",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-04-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-04",
+      "value": "original-4",
+      "description": "Synthetic preference 4: original-4",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-05-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-05",
+      "value": "original-5",
+      "description": "Synthetic preference 5: original-5",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-06-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-06",
+      "value": "original-6",
+      "description": "Synthetic preference 6: original-6",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-07-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-07",
+      "value": "original-7",
+      "description": "Synthetic preference 7: original-7",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-08-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-08",
+      "value": "original-8",
+      "description": "Synthetic preference 8: original-8",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-09-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-09",
+      "value": "original-9",
+      "description": "Synthetic preference 9: original-9",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-10-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-10",
+      "value": "original-10",
+      "description": "Synthetic preference 10: original-10",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-11-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-11",
+      "value": "original-11",
+      "description": "Synthetic preference 11: original-11",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-12-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-12",
+      "value": "original-12",
+      "description": "Synthetic preference 12: original-12",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-13-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-13",
+      "value": "original-13",
+      "description": "Synthetic preference 13: original-13",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-14-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-14",
+      "value": "original-14",
+      "description": "Synthetic preference 14: original-14",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-15-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-15",
+      "value": "original-15",
+      "description": "Synthetic preference 15: original-15",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-16-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-16",
+      "value": "original-16",
+      "description": "Synthetic preference 16: original-16",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-17-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-17",
+      "value": "original-17",
+      "description": "Synthetic preference 17: original-17",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-18-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-18",
+      "value": "original-18",
+      "description": "Synthetic preference 18: original-18",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-19-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-19",
+      "value": "original-19",
+      "description": "Synthetic preference 19: original-19",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-20-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-20",
+      "value": "original-20",
+      "description": "Synthetic preference 20: original-20",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-21-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-21",
+      "value": "original-21",
+      "description": "Synthetic preference 21: original-21",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-22-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-22",
+      "value": "original-22",
+      "description": "Synthetic preference 22: original-22",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-23-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-23",
+      "value": "original-23",
+      "description": "Synthetic preference 23: original-23",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-24-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-24",
+      "value": "original-24",
+      "description": "Synthetic preference 24: original-24",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-25-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-25",
+      "value": "original-25",
+      "description": "Synthetic preference 25: original-25",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-26-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-26",
+      "value": "original-26",
+      "description": "Synthetic preference 26: original-26",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-27-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-27",
+      "value": "original-27",
+      "description": "Synthetic preference 27: original-27",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-28-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-28",
+      "value": "original-28",
+      "description": "Synthetic preference 28: original-28",
+      "provenance": "synthetic_demo"
+    },
+    {
+      "id": "demo-29-1",
+      "date": "2026-01-01T00:00:00+00:00",
+      "category": "synthetic",
+      "key": "topic-29",
+      "value": "original-29",
+      "description": "Synthetic preference 29: original-29",
+      "provenance": "synthetic_demo"
+    }
+  ],
+  "duplicate_groups": [
+    {
+      "key": "topic-00",
+      "value": "original-0",
+      "entry_ids": [
+        "demo-00-0",
+        "demo-00-1"
+      ]
+    },
+    {
+      "key": "topic-01",
+      "value": "original-1",
+      "entry_ids": [
+        "demo-01-0",
+        "demo-01-1"
+      ]
+    },
+    {
+      "key": "topic-02",
+      "value": "original-2",
+      "entry_ids": [
+        "demo-02-0",
+        "demo-02-1"
+      ]
+    },
+    {
+      "key": "topic-03",
+      "value": "original-3",
+      "entry_ids": [
+        "demo-03-0",
+        "demo-03-1"
+      ]
+    },
+    {
+      "key": "topic-04",
+      "value": "original-4",
+      "entry_ids": [
+        "demo-04-0",
+        "demo-04-1"
+      ]
+    },
+    {
+      "key": "topic-05",
+      "value": "original-5",
+      "entry_ids": [
+        "demo-05-0",
+        "demo-05-1"
+      ]
+    },
+    {
+      "key": "topic-06",
+      "value": "original-6",
+      "entry_ids": [
+        "demo-06-0",
+        "demo-06-1"
+      ]
+    },
+    {
+      "key": "topic-07",
+      "value": "original-7",
+      "entry_ids": [
+        "demo-07-0",
+        "demo-07-1"
+      ]
+    },
+    {
+      "key": "topic-08",
+      "value": "original-8",
+      "entry_ids": [
+        "demo-08-0",
+        "demo-08-1"
+      ]
+    },
+    {
+      "key": "topic-09",
+      "value": "original-9",
+      "entry_ids": [
+        "demo-09-0",
+        "demo-09-1"
+      ]
+    },
+    {
+      "key": "topic-10",
+      "value": "original-10",
+      "entry_ids": [
+        "demo-10-0",
+        "demo-10-1"
+      ]
+    },
+    {
+      "key": "topic-11",
+      "value": "original-11",
+      "entry_ids": [
+        "demo-11-0",
+        "demo-11-1"
+      ]
+    },
+    {
+      "key": "topic-12",
+      "value": "original-12",
+      "entry_ids": [
+        "demo-12-0",
+        "demo-12-1"
+      ]
+    },
+    {
+      "key": "topic-13",
+      "value": "original-13",
+      "entry_ids": [
+        "demo-13-0",
+        "demo-13-1"
+      ]
+    },
+    {
+      "key": "topic-14",
+      "value": "original-14",
+      "entry_ids": [
+        "demo-14-0",
+        "demo-14-1"
+      ]
+    },
+    {
+      "key": "topic-15",
+      "value": "original-15",
+      "entry_ids": [
+        "demo-15-0",
+        "demo-15-1"
+      ]
+    },
+    {
+      "key": "topic-16",
+      "value": "original-16",
+      "entry_ids": [
+        "demo-16-0",
+        "demo-16-1"
+      ]
+    },
+    {
+      "key": "topic-17",
+      "value": "original-17",
+      "entry_ids": [
+        "demo-17-0",
+        "demo-17-1"
+      ]
+    },
+    {
+      "key": "topic-18",
+      "value": "original-18",
+      "entry_ids": [
+        "demo-18-0",
+        "demo-18-1"
+      ]
+    },
+    {
+      "key": "topic-19",
+      "value": "original-19",
+      "entry_ids": [
+        "demo-19-0",
+        "demo-19-1"
+      ]
+    },
+    {
+      "key": "topic-20",
+      "value": "original-20",
+      "entry_ids": [
+        "demo-20-0",
+        "demo-20-1"
+      ]
+    },
+    {
+      "key": "topic-21",
+      "value": "original-21",
+      "entry_ids": [
+        "demo-21-0",
+        "demo-21-1"
+      ]
+    },
+    {
+      "key": "topic-22",
+      "value": "original-22",
+      "entry_ids": [
+        "demo-22-0",
+        "demo-22-1"
+      ]
+    },
+    {
+      "key": "topic-23",
+      "value": "original-23",
+      "entry_ids": [
+        "demo-23-0",
+        "demo-23-1"
+      ]
+    },
+    {
+      "key": "topic-24",
+      "value": "original-24",
+      "entry_ids": [
+        "demo-24-0",
+        "demo-24-1"
+      ]
+    },
+    {
+      "key": "topic-25",
+      "value": "original-25",
+      "entry_ids": [
+        "demo-25-0",
+        "demo-25-1"
+      ]
+    },
+    {
+      "key": "topic-26",
+      "value": "original-26",
+      "entry_ids": [
+        "demo-26-0",
+        "demo-26-1"
+      ]
+    },
+    {
+      "key": "topic-27",
+      "value": "original-27",
+      "entry_ids": [
+        "demo-27-0",
+        "demo-27-1"
+      ]
+    },
+    {
+      "key": "topic-28",
+      "value": "original-28",
+      "entry_ids": [
+        "demo-28-0",
+        "demo-28-1"
+      ]
+    },
+    {
+      "key": "topic-29",
+      "value": "original-29",
+      "entry_ids": [
+        "demo-29-0",
+        "demo-29-1"
+      ]
+    }
+  ],
+  "contradiction_groups": [
+    {
+      "key": "topic-00",
+      "assertions": [
+        {
+          "id": "demo-00-0",
+          "date": "2026-01-01T00:00:00+00:00",
+          "value": "original-0"
+        },
+        {
+          "id": "demo-00-1",
+          "date": "2026-01-01T00:00:00+00:00",
+          "value": "original-0"
+        },
+        {
+          "id": "correction-0",
+          "date": "2026-02-01T00:00:00+00:00",
+          "value": "corrected-0"
+        }
+      ],
+      "retained_id": "correction-0"
+    },
+    {
+      "key": "topic-01",
+      "assertions": [
+        {
+          "id": "demo-01-0",
+          "date": "2026-01-01T00:00:00+00:00",
+          "value": "original-1"
+        },
+        {
+          "id": "demo-01-1",
+          "date": "2026-01-01T00:00:00+00:00",
+          "value": "original-1"
+        },
+        {
+          "id": "correction-1",
+          "date": "2026-02-01T00:00:00+00:00",
+          "value": "corrected-1"
+        }
+      ],
+      "retained_id": "correction-1"
+    },
+    {
+      "key": "topic-02",
+      "assertions": [
+        {
+          "id": "demo-02-0",
+          "date": "2026-01-01T00:00:00+00:00",
+          "value": "original-2"
+        },
+        {
+          "id": "demo-02-1",
+          "date": "2026-01-01T00:00:00+00:00",
+          "value": "original-2"
+        },
+        {
+          "id": "correction-2",
+          "date": "2026-02-01T00:00:00+00:00",
+          "value": "corrected-2"
+        }
+      ],
+      "retained_id": "correction-2"
+    }
+  ],
+  "retained_unrelated_topics": [
+    {
+      "id": "demo-03-1",
+      "key": "topic-03",
+      "value": "original-3"
+    },
+    {
+      "id": "demo-04-1",
+      "key": "topic-04",
+      "value": "original-4"
+    },
+    {
+      "id": "demo-05-1",
+      "key": "topic-05",
+      "value": "original-5"
+    },
+    {
+      "id": "demo-06-1",
+      "key": "topic-06",
+      "value": "original-6"
+    },
+    {
+      "id": "demo-07-1",
+      "key": "topic-07",
+      "value": "original-7"
+    },
+    {
+      "id": "demo-08-1",
+      "key": "topic-08",
+      "value": "original-8"
+    },
+    {
+      "id": "demo-09-1",
+      "key": "topic-09",
+      "value": "original-9"
+    },
+    {
+      "id": "demo-10-1",
+      "key": "topic-10",
+      "value": "original-10"
+    },
+    {
+      "id": "demo-11-1",
+      "key": "topic-11",
+      "value": "original-11"
+    },
+    {
+      "id": "demo-12-1",
+      "key": "topic-12",
+      "value": "original-12"
+    },
+    {
+      "id": "demo-13-1",
+      "key": "topic-13",
+      "value": "original-13"
+    },
+    {
+      "id": "demo-14-1",
+      "key": "topic-14",
+      "value": "original-14"
+    },
+    {
+      "id": "demo-15-1",
+      "key": "topic-15",
+      "value": "original-15"
+    },
+    {
+      "id": "demo-16-1",
+      "key": "topic-16",
+      "value": "original-16"
+    },
+    {
+      "id": "demo-17-1",
+      "key": "topic-17",
+      "value": "original-17"
+    },
+    {
+      "id": "demo-18-1",
+      "key": "topic-18",
+      "value": "original-18"
+    },
+    {
+      "id": "demo-19-1",
+      "key": "topic-19",
+      "value": "original-19"
+    },
+    {
+      "id": "demo-20-1",
+      "key": "topic-20",
+      "value": "original-20"
+    },
+    {
+      "id": "demo-21-1",
+      "key": "topic-21",
+      "value": "original-21"
+    },
+    {
+      "id": "demo-22-1",
+      "key": "topic-22",
+      "value": "original-22"
+    },
+    {
+      "id": "demo-23-1",
+      "key": "topic-23",
+      "value": "original-23"
+    },
+    {
+      "id": "demo-24-1",
+      "key": "topic-24",
+      "value": "original-24"
+    },
+    {
+      "id": "demo-25-1",
+      "key": "topic-25",
+      "value": "original-25"
+    },
+    {
+      "id": "demo-26-1",
+      "key": "topic-26",
+      "value": "original-26"
+    },
+    {
+      "id": "demo-27-1",
+      "key": "topic-27",
+      "value": "original-27"
+    },
+    {
+      "id": "demo-28-1",
+      "key": "topic-28",
+      "value": "original-28"
+    },
+    {
+      "id": "demo-29-1",
+      "key": "topic-29",
+      "value": "original-29"
+    }
+  ],
+  "consumer_completion": {
+    "_id": "assistant-memory-worker:052e0c31-4f18-4507-b981-846039679967",
+    "event_id": "052e0c31-4f18-4507-b981-846039679967",
+    "event_type": "assistant.memory_consolidation_requested",
+    "consumer": "assistant-memory-worker",
+    "trace_id": "memory-demo-71cd9f874a704fa1ab14771887433921",
+    "processed_at": "2026-11-15T21:50:20.859119Z"
+  },
+  "decisions": [
+    {
+      "retained_id": "correction-0",
+      "merged_ids": [
+        "demo-00-0",
+        "demo-00-1"
+      ],
+      "reason": "latest dated explicit fact"
+    },
+    {
+      "retained_id": "correction-1",
+      "merged_ids": [
+        "demo-01-0",
+        "demo-01-1"
+      ],
+      "reason": "latest dated explicit fact"
+    },
+    {
+      "retained_id": "correction-2",
+      "merged_ids": [
+        "demo-02-0",
+        "demo-02-1"
+      ],
+      "reason": "latest dated explicit fact"
+    },
+    {
+      "retained_id": "demo-03-1",
+      "merged_ids": [
+        "demo-03-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-04-1",
+      "merged_ids": [
+        "demo-04-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-05-1",
+      "merged_ids": [
+        "demo-05-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-06-1",
+      "merged_ids": [
+        "demo-06-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-07-1",
+      "merged_ids": [
+        "demo-07-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-08-1",
+      "merged_ids": [
+        "demo-08-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-09-1",
+      "merged_ids": [
+        "demo-09-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-10-1",
+      "merged_ids": [
+        "demo-10-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-11-1",
+      "merged_ids": [
+        "demo-11-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-12-1",
+      "merged_ids": [
+        "demo-12-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-13-1",
+      "merged_ids": [
+        "demo-13-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-14-1",
+      "merged_ids": [
+        "demo-14-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-15-1",
+      "merged_ids": [
+        "demo-15-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-16-1",
+      "merged_ids": [
+        "demo-16-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-17-1",
+      "merged_ids": [
+        "demo-17-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-18-1",
+      "merged_ids": [
+        "demo-18-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-19-1",
+      "merged_ids": [
+        "demo-19-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-20-1",
+      "merged_ids": [
+        "demo-20-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-21-1",
+      "merged_ids": [
+        "demo-21-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-22-1",
+      "merged_ids": [
+        "demo-22-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-23-1",
+      "merged_ids": [
+        "demo-23-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-24-1",
+      "merged_ids": [
+        "demo-24-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-25-1",
+      "merged_ids": [
+        "demo-25-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-26-1",
+      "merged_ids": [
+        "demo-26-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-27-1",
+      "merged_ids": [
+        "demo-27-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-28-1",
+      "merged_ids": [
+        "demo-28-0"
+      ],
+      "reason": "duplicate fact"
+    },
+    {
+      "retained_id": "demo-29-1",
+      "merged_ids": [
+        "demo-29-0"
+      ],
+      "reason": "duplicate fact"
+    }
+  ],
+  "explanation": "topic-00 retains corrected-0 dated February 1 over January 1 original-0; duplicates merge. Unrelated topics 03-29 remain."
+}
