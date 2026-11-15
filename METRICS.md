@@ -229,6 +229,26 @@ they are indexed reads served by one replica each. The assistant endpoint is mea
 separately (5, 10, 20, 50 users, `scripts/assistant_loadtest.sh`) because each request waits for
 model inference.
 
+### Assistant load test (Docker Compose, 2026-11-13)
+
+The Assistant was tested separately with three chat iterations per user and one login per user.
+All 85 login samples succeeded. The test ran on an Apple M4 MacBook Air with 10 CPU cores and
+16 GB RAM, using Ollama 0.40.6 and `qwen3:8b`. Percentiles use the corrected standard
+nearest-rank calculation and include unsuccessful Assistant samples.
+
+| Users | Assistant samples | Successes | Errors | Success rate | p50 ms | p95 ms | p99 ms | Throughput req/s |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 5 | 15 | 15 | 0 | 100% | 36,933 | 47,537 | 47,537 | 0.121875 |
+| 10 | 30 | 30 | 0 | 100% | 62,071 | 66,259 | 67,428 | 0.154176 |
+| 20 | 60 | 60 | 0 | 100% | 120,492 | 124,361 | 126,213 | 0.161140 |
+| 50 | 150 | 120 | 30 | 80% | 240,693 | 289,255 | 299,736 | 0.189218 |
+
+At 50 users, 20 Assistant requests returned HTTP 500 and 10 failed with
+`NoHttpResponseException`. Saturation begins around 10 users: latency rises sharply while
+throughput improves only slightly. The 50-user level is not reliable in this local environment
+because 20% of Assistant requests failed. Tracked evidence:
+`loadtest/summary_assistant_2026-11-13-pr3-assistant.md`.
+
 #### Kubernetes with MongoDB (`PERSISTENCE=mongo`)
 
 `scripts/k8s_mongo.sh on` switched the cluster (the ConfigMap value is changed while applying;

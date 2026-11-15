@@ -245,6 +245,28 @@ Result:   PASS
     the old unprefixed topics did not move. The application worker logged "processed ... attempts=1"
     for both application events and the event worker for the registration.
 
+[L2-12] Assistant load test (Docker Compose, 2026-11-13 22:24 PST)
+  Evidence label: 2026-11-13-pr3-assistant
+  Runner settings: 5, 10, 20 and 50 users; three Assistant chat iterations per
+    user; one login per user; 5-second ramp-up; 500 ms think time.
+  Environment: Apple M4 MacBook Air, 10 CPU cores, 16 GB RAM, Ollama 0.40.6,
+    qwen3:8b; Assistant reached host Ollama from Docker Compose.
+  Login result: 5/5, 10/10, 20/20 and 50/50 succeeded (85/85 total).
+  Assistant chat results:
+    - 5 users: 15/15 succeeded, 0 errors; p50 36,933 ms, p95/p99 47,537 ms.
+    - 10 users: 30/30 succeeded, 0 errors; p50 62,071 ms, p95 66,259 ms,
+      p99 67,428 ms.
+    - 20 users: 60/60 succeeded, 0 errors; p50 120,492 ms, p95 124,361 ms,
+      p99 126,213 ms.
+    - 50 users: 120/150 succeeded, 30 errors (80% success); p50 240,693 ms,
+      p95 289,255 ms, p99 299,736 ms.
+  Totals: 225/255 Assistant chats and 310/340 JMeter samples succeeded.
+  The 50-user failures were 20 HTTP 500 responses and 10
+    NoHttpResponseException responses; this level is not reliable.
+  Percentiles use the corrected standard nearest-rank calculation. Saturation
+    begins around 10 users as latency rises sharply with little throughput gain.
+  Tracked evidence: loadtest/summary_assistant_2026-11-13-pr3-assistant.md
+
 [L2-7] Not verified
   - Student Assistant: verified working by Xuanhua on her laptop (Ollama,
     qwen3:8b). Not re-run on the Company-side machine, where Ollama is not
