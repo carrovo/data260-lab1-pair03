@@ -3,6 +3,7 @@
 import inspect
 import json
 import logging
+import math
 import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
@@ -443,6 +444,154 @@ def _execute_tool_call(
     return result if isinstance(result, str) else str(result)
 
 
+def _json_type_matches(value: Any, expected_type: str) -> bool:
+    """Return whether a parsed JSON value has the declared schema type."""
+
+    if expected_type == "object":
+        return isinstance(value, dict)
+    if expected_type == "array":
+        return isinstance(value, list)
+    if expected_type == "string":
+        return isinstance(value, str)
+    if expected_type == "boolean":
+        return isinstance(value, bool)
+    if expected_type == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected_type == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if expected_type == "null":
+        return value is None
+    return False
+
+
+def _validate_json_schema_value(
+    value: Any,
+    schema: Any,
+    *,
+    path: str = "$",
+) -> str | None:
+    """Validate the JSON Schema subset used by declared Assistant tools."""
+
+    if not isinstance(schema, dict):
+        return f"{path} has an invalid declared schema"
+
+    if isinstance(value, float) and not math.isfinite(value):
+        return f"{path} must be a finite JSON number"
+
+    expected = schema.get("type")
+    if expected is not None:
+        expected_types = expected if isinstance(expected, list) else [expected]
+        if not all(isinstance(item, str) for item in expected_types):
+            return f"{path} has an invalid declared type"
+        if not any(_json_type_matches(value, item) for item in expected_types):
+            return (
+                f"{path} must be of type "
+                f"{' or '.join(expected_types)}"
+            )
+
+    if "enum" in schema and value not in schema["enum"]:
+        return f"{path} must be one of {schema['enum']}"
+    if "const" in schema and value != schema["const"]:
+        return f"{path} must equal {schema['const']!r}"
+
+    if isinstance(value, dict):
+        properties = schema.get("properties", {})
+        if not isinstance(properties, dict):
+            return f"{path} has invalid declared properties"
+        required = schema.get("required", [])
+        if not isinstance(required, list):
+            return f"{path} has an invalid required-property declaration"
+        for name in required:
+            if name not in value:
+                return f"{path} is missing required property '{name}'"
+
+        additional = schema.get("additionalProperties", True)
+        for name, item in value.items():
+            item_path = f"{path}.{name}"
+            if name in properties:
+                error = _validate_json_schema_value(
+                    item,
+                    properties[name],
+                    path=item_path,
+                )
+                if error:
+                    return error
+            elif additional is False:
+                return f"{path} has unexpected property '{name}'"
+            elif isinstance(additional, dict):
+                error = _validate_json_schema_value(
+                    item,
+                    additional,
+                    path=item_path,
+                )
+                if error:
+                    return error
+
+    if isinstance(value, list) and isinstance(schema.get("items"), dict):
+        for index, item in enumerate(value):
+            error = _validate_json_schema_value(
+                item,
+                schema["items"],
+                path=f"{path}[{index}]",
+            )
+            if error:
+                return error
+
+    if isinstance(value, str):
+        minimum_length = schema.get("minLength")
+        maximum_length = schema.get("maxLength")
+        if isinstance(minimum_length, int) and len(value) < minimum_length:
+            return f"{path} must contain at least {minimum_length} characters"
+        if isinstance(maximum_length, int) and len(value) > maximum_length:
+            return f"{path} must contain at most {maximum_length} characters"
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        minimum = schema.get("minimum")
+        maximum = schema.get("maximum")
+        if isinstance(minimum, (int, float)) and value < minimum:
+            return f"{path} must be at least {minimum}"
+        if isinstance(maximum, (int, float)) and value > maximum:
+            return f"{path} must be at most {maximum}"
+
+    return None
+
+
+def validate_tool_arguments(
+    tool_name: str,
+    arguments: dict[str, Any],
+    tool_schemas: Sequence[dict[str, Any]],
+) -> str | None:
+    """Validate against the same tool schema declaration sent to the model."""
+
+    def contains_nonfinite(value: Any) -> bool:
+        if isinstance(value, float):
+            return not math.isfinite(value)
+        if isinstance(value, dict):
+            return any(contains_nonfinite(item) for item in value.values())
+        if isinstance(value, list):
+            return any(contains_nonfinite(item) for item in value)
+        return False
+
+    if contains_nonfinite(arguments):
+        return f"Invalid arguments for tool '{tool_name}': numbers must be finite."
+
+    for declaration in tool_schemas:
+        function = declaration.get("function", {})
+        if function.get("name") != tool_name:
+            continue
+        parameters = function.get("parameters")
+        if not isinstance(parameters, dict):
+            return f"Tool '{tool_name}' has no valid declared parameter schema."
+        error = _validate_json_schema_value(arguments, parameters)
+        return (
+            f"Invalid arguments for tool '{tool_name}': {error}."
+            if error
+            else None
+        )
+
+    return f"Tool '{tool_name}' has no declared parameter schema."
+
+
 def _request_kind(user_message: str) -> str | None:
     text = user_message.lower()
 
@@ -756,6 +905,23 @@ def run_assistant(
                 repair_used, response = _repair_or_finish(
                     messages,
                     reason,
+                    repair_used,
+                    tool_call_count,
+                )
+                if response is not None:
+                    return response
+                repair_requested = True
+                break
+
+            validation_error = validate_tool_arguments(
+                name,
+                arguments,
+                schemas,
+            )
+            if validation_error:
+                repair_used, response = _repair_or_finish(
+                    messages,
+                    validation_error,
                     repair_used,
                     tool_call_count,
                 )

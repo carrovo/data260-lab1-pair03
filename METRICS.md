@@ -332,3 +332,50 @@ pause.
 JMeter load tests (Compose and Docker Desktop Kubernetes sections above) and MongoDB mode
 (`PERSISTENCE=mongo`) ran locally. The AWS deployment ran with `PERSISTENCE=sql`; AWS results
 are the deployment checks, the Kafka flow check and the Assistant timings in this section.
+
+## Deterministic Agent harness checkpoint (Carol, 2026-11-15)
+
+Verified on `feature/lab2-agent-harness`, based on
+`dd6a7e17c4c91e2e8c0a29524773bd3cd8a7be4a`, with uncommitted checkpoint code.
+These are deterministic-model tests through production modules, using SQL mode
+with isolated in-memory SQLite fixtures. They are separate from JMeter load tests
+and live Assistant/AWS measurements above.
+
+| Case | Scenario | Result |
+|---|---|---|
+| H01 | Authenticated read search | PASS |
+| H02 | Accepted confirmation, exactly one saved row | PASS |
+| H03 | Declined confirmation, zero writes | PASS |
+| H04 | Typed arguments rejected before confirmation/execution | PASS |
+| H05 | Unknown tool rejected | PASS |
+| H06 | No-match result without invented opportunities | PASS |
+| H07 | Two requests with client-carried history | PASS |
+| H08 | Exact model-visible sanitized/delimited tool message | PASS |
+| H09 | Six-iteration bounded stop | PASS |
+| H10 | Exactly one repair followed by a successful read | PASS |
+
+Focused harness/core/router and AI tools/Ollama regression command:
+
+```sh
+.venv/bin/python -m pytest -q backend/tests/test_agent_harness.py backend/tests/test_ai_core.py backend/tests/test_student_assistant.py backend/tests/test_ai_tools.py backend/tests/test_ollama_client.py -rs
+```
+
+Result: 178 passed, 0 failed/skipped, 1 warning. Complete backend command
+`.venv/bin/python -m pytest -q backend/tests -rs`: 465 passed, 0 failed/skipped,
+61 warnings, 76.66 seconds. Warnings concern Starlette/httpx and mongomock's
+deprecated `utcnow()` usage; they are not harness skips.
+
+Two executions of the README runner with label `checkpoint-20261115` and separate
+`--output-dir loadtest/temp/agent_harness/checkpoint-20261115-a` / `-b` directories
+each returned 0 with 10 passed, 0 failed. JSON reports match after excluding only
+run timestamp and per-case elapsed time. Safe JSON and Markdown evidence remain
+ignored temporary output; these results can be reproduced with the README command.
+Mutation tests detect wrong row counts, missing trace headers, raw injection,
+extra repair, absent first-turn context, and validation bypass; the corrupted run
+returns nonzero. Non-finite argument tests cover NaN and both infinities in model
+dictionary and parsed JSON-string forms with zero confirmation/execution/write.
+
+Scope: H07 establishes `client_carried_history`. Live-model resistance, Mongo-mode
+harness coverage, and server-persistent memory are not established. The validator
+supports currently declared constraints; unsupported references/composition and
+other schema constructs require maintenance review as documented in README.

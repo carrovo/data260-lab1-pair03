@@ -312,3 +312,23 @@ Result:   PASS
   - Student Assistant: Xuanhua's laptop (Ollama, qwen3:8b) and AWS (see [L2-15]).
   - JMeter load tests: Docker Compose and Docker Desktop Kubernetes (see METRICS.md).
   - Deployment, Kafka flow check and Assistant timings: AWS EKS (see [L2-13] to [L2-15]).
+
+[Carol harness checkpoint — 2026-11-15]
+  Branch feature/lab2-agent-harness; base dd6a7e17c4c91e2e8c0a29524773bd3cd8a7be4a.
+  Added deterministic H01-H10 evaluation through production auth, Agent, tools,
+  confirmation, sanitizer and tracing, with isolated SQL/SQLite fixtures.
+  Agent validates declared typed schemas before confirmation/execution, including
+  rejection of non-finite numbers. Reports separate requested decisions, token
+  attempts, issued tokens and observed outcomes; actual client classes are recorded.
+  Focused command (harness, ai_core, student_assistant, ai_tools, ollama_client):
+    .venv/bin/python -m pytest -q backend/tests/test_agent_harness.py backend/tests/test_ai_core.py backend/tests/test_student_assistant.py backend/tests/test_ai_tools.py backend/tests/test_ollama_client.py -rs
+  Result: 178 passed, 0 failed/skipped, 1 warning.
+  Full command: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 465 passed, 0 failed/skipped, 61 warnings, 76.66 s.
+  Runner: sh scripts/run_agent_harness.sh --persistence sql --label checkpoint-20261115
+  Run twice with --output-dir loadtest/temp/agent_harness/checkpoint-20261115-a
+  and -b respectively: both exit 0, 10/10 pass, normalized JSON identical after
+  removing timestamp/elapsed time. Safe evidence is ignored temporary JSON/Markdown.
+  H07 is client-carried history. No claim of live-model resistance, Mongo harness
+  coverage or server-persistent memory. README records command and validator limits;
+  METRICS.md records results. Existing deployment/performance entries preserved.

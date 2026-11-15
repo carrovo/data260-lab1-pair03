@@ -423,3 +423,36 @@ Kubernetes it is `k8s/frontend.yaml`.
 - `scripts/verify_k8s.sh` does the same for Kubernetes (`verify_k8s_output.txt`).
 - `scripts/verify_frontend.sh` starts the stack and checks every gateway route
   (`verify_frontend_output.txt`).
+
+## Deterministic Agent harness (Carol)
+
+From the repository root, with the backend dependencies already installed in
+`.venv`, run:
+
+```sh
+sh scripts/run_agent_harness.sh --persistence sql --label wip
+```
+
+The ten stable H01–H10 cases use deterministic scripted/input-sensitive model
+clients through production authentication, Agent, tool, confirmation, sanitizer,
+and tracing modules. SQL mode uses isolated in-memory SQLite fixtures; no running
+database, Kafka, Ollama, or cloud service is required. The command exits nonzero
+if any required case fails. JSON evidence and a Markdown summary are written to
+the ignored `loadtest/temp/agent_harness/wip/` directory as
+`agent_harness_wip.json` and `agent_harness_wip.md`. Use a new label for each run
+or `--output-dir` to select a separate temporary directory.
+
+H07 demonstrates `client_carried_history` using two authenticated requests.
+This checkpoint does not establish live-model injection resistance, Mongo-mode
+harness coverage, or server-persistent conversation memory. Token/context fields
+remain nullable placeholders. Generated evidence is temporary and is not tracked.
+
+The Agent validator reads the same declared tool parameter schemas supplied to
+the model and rejects invalid arguments before confirmation/execution. It covers
+the constraints currently declared: types, properties, required fields,
+`additionalProperties`, enums, and numeric minimums, plus recursive object/array
+values, finite numbers, constants, length bounds, and maximums. It is a limited
+validator: references (`$ref`), composition (`allOf`/`anyOf`/`oneOf`/`not`),
+conditional schemas, patterns/formats, and other array/object constraints are
+unsupported and currently unused. Schema changes must review validator support;
+unsupported constructs are not automatically enforced.
