@@ -271,3 +271,64 @@ mean 9.8 s) because the Student service still uses MySQL in both modes.
 Limits of this test: one machine runs the load generator, Docker and the databases together;
 the assistant (Ollama) is not part of the load test. The Compose table above is the
 baseline; Kubernetes results are in their own section.
+
+## AWS (EKS) Deployment, 2026-11-13 / 2026-11-14
+
+Same Kubernetes manifests as the local cluster, plus the overlay in `aws/overlay` (details in
+`docs/AWS_DEPLOYMENT.md`). `PERSISTENCE=sql`, so companies, jobs and events are in MySQL on AWS.
+
+| Item | Value |
+|---|---|
+| Cluster | Amazon EKS `p03-handshake`, Kubernetes 1.34, us-east-1, one availability zone |
+| Nodes | 2 x m6g.xlarge (Graviton, 4 vCPU, 16 GB each), images built for arm64 |
+| Images | 8 repositories in ECR (`p03-<service>`, tag `lab2`) |
+| Storage | gp3 volumes via the EBS CSI driver (MySQL, MongoDB, Kafka, Ollama models) |
+| Entry point | AWS load balancer on frontend port 9036 (idle timeout 300 s) |
+| Seed | 300 jobs, 100 events, 1,500 applications, 600 registrations |
+
+### Checks through the public address
+
+| Check | Result |
+|---|---|
+| `/healthz` | 200 |
+| Student sign-in, job search | 200, 200 |
+| `scripts/check_kafka_flow.sh` (topic offsets, exact MongoDB documents, processed_events) | PASS (2026-11-13 23:22 PST; again 2026-11-14 after the check was extended) |
+| All pods | Running |
+
+Kafka flow check, first run after a resume: `application.created` was processed 06:28:28 UTC and
+`application.updated` 06:31:36 UTC (about 3 minutes later). The 30 s wait ended first and the
+check reported FAIL; the data was complete and correct a few minutes later and the second run
+passed. Nothing was lost or duplicated (1 attempt each). The cause was not investigated further;
+the worker re-joining the consumer group after the restart is the likely reason.
+
+### Assistant on AWS (Ollama in the cluster, CPU only)
+
+| Measurement | Value |
+|---|---|
+| Model / Ollama | qwen3:8b, Ollama 0.40.16 |
+| Generation speed | about 4.7 tokens/s |
+| Model load after idle (one-word reply) | 61 s and 84 s |
+| Answer, no length cap | first model call 1 min; second call stopped by the 240 s client limit (HTTP 500) |
+| Answer with `OLLAMA_NUM_PREDICT=256` | `run_complete` exit normal, 1 tool call, HTTP 200 in 175.1 s (cold), 149.0 s (warm) |
+
+Time limits that had to match this speed: load balancer idle timeout 60 s -> 300 s, gateway
+(nginx) `proxy_read_timeout` 120 s -> 280 s, Assistant client timeout 240 s per model call. The
+cap (`OLLAMA_NUM_PREDICT`) is set in the AWS overlay only. The nodes have no GPU, so
+generation speed is set by the CPU.
+
+### Cost (approximate, us-east-1)
+
+| State | Cost |
+|---|---|
+| Running (2 nodes, EKS control plane, load balancer, volumes) | about $0.45 per hour |
+| Paused (nodes scaled to 0; control plane, volumes, load balancer remain) | about $4 per day |
+
+`sh scripts/aws_pause.sh down` pauses, `up` resumes (about 5 minutes). Both times the first
+node to drain stayed "Ready,SchedulingDisabled"; terminating that instance by hand finished the
+pause.
+
+### Where each test ran
+
+JMeter load tests (Compose and Docker Desktop Kubernetes sections above) and MongoDB mode
+(`PERSISTENCE=mongo`) ran locally. The AWS deployment ran with `PERSISTENCE=sql`; AWS results
+are the deployment checks, the Kafka flow check and the Assistant timings in this section.

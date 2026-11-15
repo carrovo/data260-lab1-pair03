@@ -267,8 +267,48 @@ Result:   PASS
     begins around 10 users as latency rises sharply with little throughput gain.
   Tracked evidence: loadtest/summary_assistant_2026-11-13-pr3-assistant.md
 
-[L2-7] Not verified
-  - Student Assistant: verified working by Xuanhua on her laptop (Ollama,
-    qwen3:8b). Not re-run on the Company-side machine, where Ollama is not
-    installed.
-  - A cloud deployment (AWS).
+[L2-13] AWS deployment (Amazon EKS + ECR, 2026-11-13 / 2026-11-14)
+  Cluster p03-handshake (Kubernetes 1.34, us-east-1, one availability zone), managed node group of
+  2 x m6g.xlarge (Graviton), namespace p03, gp3 volumes (EBS CSI driver). Eight images in ECR
+  (p03-<service>, tag lab2, arm64). Scripts: aws_preflight, aws_ecr_push, aws_ebs_csi, aws_deploy,
+  aws_verify, aws_pause, aws_ollama (docs/AWS_DEPLOYMENT.md). No account id or secret is committed.
+  - aws_deploy.sh: every pod Running; seed (SEED=3) loaded 300 jobs, 100 events, 1,500 applications
+    and 600 registrations. The frontend gateway has an AWS load balancer on port 9036.
+  - aws_verify.sh through the public address (2026-11-13 23:22 PST): /healthz 200; student sign-in
+    200; job search 200; scripts/check_kafka_flow.sh RESULT: PASS.
+  - Pause and resume: nodes scaled to 0 (2026-11-13 23:34, 2026-11-14 23:09) and back to 2; the
+    cluster, volumes, images and load balancer address stayed. Both times one node stayed
+    "Ready,SchedulingDisabled" for over 10 minutes; its instance was terminated by hand (node group
+    already at 0, so no replacement started) and the node list ended empty.
+  - Evidence screenshots (kept locally, not in git): ECR repositories and tag, EKS cluster, kubectl
+    nodes/pods/services, public jobs page, logged-in page, end-to-end request, Assistant answer.
+
+[L2-14] Kafka flow check with exact MongoDB documents (AWS, 2026-11-14)
+  scripts/check_kafka_flow.sh now looks up the registration and application documents it creates
+  (registrations, applications) and their processed_events entries instead of counting log lines.
+  - Run 1, right after a cluster resume: topic offsets +1 on each p03.* topic, registration 602 and
+    application 1502 correct, but the 30 s wait ended before application.updated was applied:
+    application.created was processed at 06:28:28 UTC and application.updated, published at the
+    same moment, at 06:31:36 UTC (about 3 minutes later; worker re-joining after the restart is the
+    likely cause, not confirmed). Final document correct, 1 attempt each, nothing lost or duplicated.
+  - Run 2 (steady state): RESULT: PASS with all five document checks (student 203, registration
+    603, application 1503).
+
+[L2-15] Assistant on AWS (in-cluster Ollama, 2026-11-14)
+  Ollama 0.40.16 in a pod (p03-ollama) with qwen3:8b on its own 30 GB volume; the Assistant pod
+  reaches it at http://p03-ollama:11434. The nodes have no GPU: generation about 4.7 tokens/s.
+  - First attempt (no length cap): the model chose search_jobs (first call 1m0s), but the second
+    call, writing the answer, hit the Assistant client's 240 s limit (HTTP 500 after 4m0s).
+  - Load balancer idle timeout (60 s default) closed the first browser request; raised to 300 s.
+  - With OLLAMA_NUM_PREDICT=256 (AWS overlay only; unset everywhere else, so local runs are
+    unchanged): the whole flow completes. Assistant log run_complete exit="normal" tool_calls=1,
+    POST /assistant/chat 200 after 175.1 s (cold) and 149.0 s (warm); the answer call took 1m50s.
+  - The gateway (nginx) gave up at its 120 s limit, so the browser showed an error although the
+    Assistant had returned 200; proxy_read_timeout raised to 280 s. After that the Assistant
+    answer "What jobs are open in San Jose?" reached the browser (login -> search_jobs -> answer).
+  - Model load after idle: one-word reply took 61 s and 84 s. Ask one question before a demo.
+
+[L2-7] Where each check was run
+  - Student Assistant: Xuanhua's laptop (Ollama, qwen3:8b) and AWS (see [L2-15]).
+  - JMeter load tests: Docker Compose and Docker Desktop Kubernetes (see METRICS.md).
+  - Deployment, Kafka flow check and Assistant timings: AWS EKS (see [L2-13] to [L2-15]).
