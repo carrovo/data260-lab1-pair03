@@ -232,3 +232,12 @@ def test_sql_default_keeps_students_in_mysql_and_logout_is_a_noop(sql_student):
 
     assert client.post("/auth/logout", headers=auth(token)).status_code == 204
     assert client.get("/auth/me", headers=auth(token)).status_code == 200  # stateless JWT
+
+
+def test_every_service_image_installs_the_mongo_driver():
+    """make_repos() imports pymongo in mongo mode, so each web service needs it."""
+    from pathlib import Path
+
+    services = Path(__file__).resolve().parents[1] / "services"
+    for requirements in services.glob("*/requirements.txt"):
+        assert "pymongo" in requirements.read_text(), requirements.parent.name
