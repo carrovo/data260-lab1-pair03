@@ -23,7 +23,14 @@ from backend.app.routers.company_auth import router as auth_router  # noqa: E402
 from backend.app.routers.company_jobs import router as company_jobs_router  # noqa: E402
 from backend.app.routers.company_profile import router as profile_router  # noqa: E402
 from backend.app.routers.jobs import router as public_jobs_router  # noqa: E402
-from backend.common.mongo_store import CompanyStore, EventStore, JobStore  # noqa: E402
+from backend.common.mongo_store import (  # noqa: E402
+    CompanyStore,
+    EventStore,
+    JobStore,
+    SavedItemStore,
+    SessionStore,
+    StudentStore,
+)
 from backend.common.tracing import TraceMiddleware  # noqa: E402
 
 COMPANY = {
@@ -50,6 +57,9 @@ def mongo_context(monkeypatch):
     CompanyStore(database).ensure_indexes()
     JobStore(database).ensure_indexes()
     EventStore(database).ensure_indexes()
+    StudentStore(database).ensure_indexes()
+    SavedItemStore(database).ensure_indexes()
+    SessionStore(database).ensure_indexes()
     monkeypatch.setattr(settings, "persistence", "mongo")
     monkeypatch.setattr(repos, "get_mongo_database", lambda: database)
 
@@ -188,13 +198,11 @@ def test_a_company_cannot_touch_another_companys_job(mongo_context):
 
 
 def test_a_job_with_applications_cannot_be_deleted(mongo_context):
-    client, engine, _ = mongo_context
+    client, engine, database = mongo_context
     auth = headers(client)
     client.post("/api/companies/jobs", json=JOB, headers=auth)
     with Session(engine) as db:
-        student = Student(email="s@example.com", password_hash="x", full_name="S", city="San Jose")
-        db.add(student)
-        db.commit()
+        student = StudentStore(database).create(email="s@example.com", password_hash="x", full_name="S", city="San Jose")
         db.add(Application(student_id=student.id, job_id=1))
         db.commit()
 
@@ -392,7 +400,7 @@ def test_company_applicant_flow_with_jobs_in_mongo(mongo_context, monkeypatch):
         router as company_applications_router,
     )
 
-    client, engine, _ = mongo_context
+    client, engine, database = mongo_context
     client.app.include_router(company_applications_router)
     sent = []
     monkeypatch.setattr(
@@ -404,12 +412,7 @@ def test_company_applicant_flow_with_jobs_in_mongo(mongo_context, monkeypatch):
     client.post("/api/companies/jobs", json=JOB, headers=owner)  # job 1 (Mongo)
 
     with Session(engine) as db:
-        student = Student(
-            email="s@example.com", password_hash="x", full_name="Sam Student",
-            city="San Jose", major="Data Science",
-        )
-        db.add(student)
-        db.commit()
+        student = StudentStore(database).create(email="s@example.com", password_hash="x", full_name="Sam Student", city="San Jose", major="Data Science")
         application = Application(student_id=student.id, job_id=1)
         db.add(application)
         db.commit()
@@ -505,11 +508,7 @@ def test_event_ownership_and_registration_guard_in_mongo(mongo_context):
     assert client.delete(f"/api/companies/events/{event['id']}", headers=other).status_code == 404
 
     with Session(engine) as db:
-        student = Student(
-            email="s@example.com", password_hash="x", full_name="S", city="San Jose"
-        )
-        db.add(student)
-        db.commit()
+        student = StudentStore(database).create(email="s@example.com", password_hash="x", full_name="S", city="San Jose")
         db.add(Registration(student_id=student.id, event_id=event["id"]))
         db.commit()
 
@@ -544,11 +543,7 @@ def student_side(mongo_context, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "resume_upload_dir", tmp_path)
 
     with Session(engine) as db:
-        student = Student(
-            email="s@example.com", password_hash="x", full_name="Sam Student", city="San Jose"
-        )
-        db.add(student)
-        db.commit()
+        student = StudentStore(database).create(email="s@example.com", password_hash="x", full_name="Sam Student", city="San Jose")
         token = create_access_token(student.id, "student")
     return client, engine, database, {"Authorization": f"Bearer {token}"}
 
@@ -588,6 +583,9 @@ def test_student_applies_and_lists_applications_with_jobs_in_mongo(
             {"key": str(body["id"])},
         )
     ]
+    logged = list(database["activity_logs"].find({"action": "apply"}))
+    assert len(logged) == 1
+    assert logged[0]["detail"] == {"application_id": body["id"], "job_id": job["id"]}
 
     published.clear()
     with Session(engine) as db:
@@ -694,7 +692,7 @@ def test_assistant_tools_read_jobs_and_events_from_mongo(student_side):
     client.post("/api/companies/events", json=_event_payload(major="Data Science"), headers=company)
 
     with Session(engine) as db:
-        student_id = db.query(Student).one().id
+        student_id = database["students"].find_one()["_id"]
         assert "Data Intern" in search_jobs(db, title="intern")
         assert "Remote Analyst" not in search_jobs(db, title="intern")
         assert "Remote Analyst" in search_jobs(db, is_remote=True, min_salary="80")
@@ -711,6 +709,10 @@ def test_assistant_tools_read_jobs_and_events_from_mongo(student_side):
 
         saved = save_job_or_event(db, student_id=student_id, item_type="job", item_id=1)
         assert saved.startswith("Saved job")
+        assert database["saved_items"].count_documents({"student_id": student_id}) == 1
+        assert "already saved" in save_job_or_event(
+            db, student_id=student_id, item_type="job", item_id=1
+        )
         missing = save_job_or_event(db, student_id=student_id, item_type="event", item_id=99)
         assert "No event was found with id 99" in missing
 

@@ -1,10 +1,13 @@
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.config import settings
 from backend.app.database import SessionLocal
-from backend.app.models import Student
+from backend.app.repos import make_repos
 from backend.app.schemas.student_auth import (
     StudentLoginRequest,
     StudentResponse,
@@ -36,7 +39,7 @@ def get_db():
 def get_current_student(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
-) -> Student:
+) -> Any:
     unauthorized_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired access token.",
@@ -59,12 +62,26 @@ def get_current_student(
             detail="Student access is required.",
         )
 
-    student = db.get(Student, student_id)
+    repos = make_repos(db)
+
+    # Mongo mode: a token signed out through /auth/logout is refused.
+    if repos.sessions.is_revoked(credentials.credentials):
+        raise unauthorized_error
+
+    student = repos.students.get(student_id)
 
     if student is None:
         raise unauthorized_error
 
     return student
+
+
+def _start_session(repos: Any, student_id: int, token: str, action: str) -> None:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.access_token_expire_minutes
+    )
+    repos.sessions.start(student_id, token, expires_at)
+    repos.activity.record(student_id, action)
 
 @router.post(
     "/signup",
@@ -77,9 +94,8 @@ def signup(
 ):
     email = str(signup_data.email).strip().lower()
 
-    existing_student = db.scalar(
-        select(Student).where(Student.email == email)
-    )
+    repos = make_repos(db)
+    existing_student = repos.students.get_by_email(email)
 
     if existing_student:
         raise HTTPException(
@@ -87,18 +103,15 @@ def signup(
             detail="An account with this email already exists.",
         )
 
-    student = Student(
+    student = repos.students.create(
         email=email,
         password_hash=hash_password(signup_data.password),
         full_name=signup_data.full_name.strip(),
         city=signup_data.city.strip(),
     )
 
-    db.add(student)
-    db.commit()
-    db.refresh(student)
-
     access_token = create_access_token(student.id, "student")
+    _start_session(repos, student.id, access_token, "signup")
 
     return StudentTokenResponse(
         access_token=access_token,
@@ -116,9 +129,8 @@ def login(
 ):
     email = str(login_data.email).strip().lower()
 
-    student = db.scalar(
-        select(Student).where(Student.email == email)
-    )
+    repos = make_repos(db)
+    student = repos.students.get_by_email(email)
 
     if not student or not verify_password(
         login_data.password,
@@ -131,17 +143,34 @@ def login(
         )
 
     access_token = create_access_token(student.id, "student")
+    _start_session(repos, student.id, access_token, "login")
 
     return StudentTokenResponse(
         access_token=access_token,
         student=StudentResponse.model_validate(student),
     )
 
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def logout(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    current_student: Any = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Sign out: revoke this token's session (Mongo mode; a no-op for SQL)."""
+    repos = make_repos(db)
+    repos.sessions.revoke(credentials.credentials)
+    repos.activity.record(current_student.id, "logout")
+
+
 @router.get(
     "/me",
     response_model=StudentResponse,
 )
 def read_current_student(
-    current_student: Student = Depends(get_current_student),
+    current_student: Any = Depends(get_current_student),
 ):
     return current_student

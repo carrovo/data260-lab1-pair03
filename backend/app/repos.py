@@ -8,7 +8,7 @@ records directly. settings.persistence picks the backend:
 
 Both backends return objects with the same attributes (company.name,
 job.company.name ...), so response models work unchanged. Applications,
-students and saved items stay in MySQL; code that needs a job or company for
+registrations and resume metadata stay in MySQL; code that needs a job or company for
 them asks these repositories instead of joining tables.
 """
 
@@ -21,8 +21,24 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.config import settings
-from backend.app.models import Company, Event, Job
-from backend.common.mongo_store import CompanyStore, EventStore, JobStore
+from backend.app.models import (
+    Company,
+    Event,
+    Job,
+    SavedItem,
+    Student,
+    StudentPreferences,
+)
+from backend.common.mongo_store import (
+    ActivityLogStore,
+    CompanyStore,
+    EventStore,
+    JobStore,
+    SavedItemStore,
+    SessionStore,
+    StudentPreferencesStore,
+    StudentStore,
+)
 
 
 _database: Any = None
@@ -41,6 +57,10 @@ def get_mongo_database() -> Any:
         CompanyStore(database).ensure_indexes()
         JobStore(database).ensure_indexes()
         EventStore(database).ensure_indexes()
+        StudentStore(database).ensure_indexes()
+        SavedItemStore(database).ensure_indexes()
+        SessionStore(database).ensure_indexes()
+        ActivityLogStore(database).ensure_indexes()
         _database = database
     return _database
 
@@ -368,13 +388,177 @@ class MongoEventRepo:
         self._events.delete(event.id)
 
 
+# ------------------------------------------------------------ student side
+# SQL: students, student_preferences and saved_items tables. Sessions and the
+# activity log exist only in MongoDB, so the SQL versions do nothing (the JWT
+# is stateless there and the token and sign-in behaviour are unchanged).
+
+
+class SqlStudentRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def create(self, **fields: Any) -> Student:
+        student = Student(**fields)
+        self._db.add(student)
+        self._db.commit()
+        self._db.refresh(student)
+        return student
+
+    def get(self, student_id: int) -> Student | None:
+        return self._db.get(Student, int(student_id))
+
+    def get_by_email(self, email: str) -> Student | None:
+        return self._db.scalar(select(Student).where(Student.email == email))
+
+    def get_many(self, student_ids: list[int]) -> dict[int, Student]:
+        if not student_ids:
+            return {}
+        rows = self._db.scalars(
+            select(Student).where(Student.id.in_([int(i) for i in student_ids]))
+        ).all()
+        return {row.id: row for row in rows}
+
+    def search(
+        self,
+        name: str | None = None,
+        college: str | None = None,
+        skill: str | None = None,
+        city: str | None = None,
+        limit: int = 100,
+    ) -> list[Student]:
+        statement = select(Student)
+        for column, value in (
+            (Student.full_name, name),
+            (Student.college_name, college),
+            (Student.skills, skill),
+            (Student.city, city),
+        ):
+            if value and value.strip():
+                statement = statement.where(column.ilike(f"%{value.strip()}%"))
+        statement = statement.order_by(Student.full_name.asc()).limit(limit)
+        return list(self._db.scalars(statement).all())
+
+
+class SqlPreferencesRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def get(self, student_id: int) -> StudentPreferences | None:
+        return self._db.get(StudentPreferences, int(student_id))
+
+
+class SqlSavedItemRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def exists(self, student_id: int, item_type: str, item_id: int) -> bool:
+        column = SavedItem.job_id if item_type == "job" else SavedItem.event_id
+        return (
+            self._db.scalar(
+                select(SavedItem.id).where(
+                    SavedItem.student_id == int(student_id), column == int(item_id)
+                )
+            )
+            is not None
+        )
+
+    def create(self, student_id: int, item_type: str, item_id: int) -> None:
+        """Raises sqlalchemy IntegrityError if already saved."""
+        self._db.add(
+            SavedItem(
+                student_id=int(student_id),
+                item_type=item_type,
+                job_id=int(item_id) if item_type == "job" else None,
+                event_id=int(item_id) if item_type == "event" else None,
+            )
+        )
+        self._db.commit()
+
+
+class NoSessions:
+    """SQL mode: tokens are stateless, nothing to record or revoke."""
+
+    def start(self, student_id: int, token: str, expires_at: Any) -> None:
+        return None
+
+    def is_revoked(self, token: str) -> bool:
+        return False
+
+    def revoke(self, token: str) -> bool:
+        return False
+
+
+class NoActivity:
+    def record(self, student_id: int, action: str, detail: dict | None = None) -> None:
+        return None
+
+    def list_for_student(self, student_id: int, limit: int = 50) -> list:
+        return []
+
+
+class MongoStudentRepo:
+    def __init__(self, store: StudentStore) -> None:
+        self._store = store
+
+    def create(self, **fields: Any) -> SimpleNamespace:
+        return self._store.create(**fields)
+
+    def get(self, student_id: int) -> SimpleNamespace | None:
+        return self._store.get(student_id)
+
+    def get_by_email(self, email: str) -> SimpleNamespace | None:
+        return self._store.get_by_email(email)
+
+    def get_many(self, student_ids: list[int]) -> dict[int, SimpleNamespace]:
+        return self._store.get_many(student_ids)
+
+    def search(self, **filters: Any) -> list[SimpleNamespace]:
+        return self._store.search(**filters)
+
+
+class MongoPreferencesRepo:
+    def __init__(self, store: StudentPreferencesStore) -> None:
+        self._store = store
+
+    def get(self, student_id: int) -> SimpleNamespace | None:
+        return self._store.get(student_id)
+
+
+class MongoSavedItemRepo:
+    def __init__(self, store: SavedItemStore) -> None:
+        self._store = store
+
+    def exists(self, student_id: int, item_type: str, item_id: int) -> bool:
+        return self._store.get(student_id, item_type, item_id) is not None
+
+    def create(self, student_id: int, item_type: str, item_id: int) -> None:
+        """Raises pymongo DuplicateKeyError if already saved."""
+        self._store.create(student_id, item_type, item_id)
+
+
 class Repos:
     """The repositories for one request."""
 
-    def __init__(self, companies: Any, jobs: Any, events: Any) -> None:
+    def __init__(
+        self,
+        companies: Any,
+        jobs: Any,
+        events: Any,
+        students: Any = None,
+        preferences: Any = None,
+        saved_items: Any = None,
+        sessions: Any = None,
+        activity: Any = None,
+    ) -> None:
         self.companies = companies
         self.jobs = jobs
         self.events = events
+        self.students = students
+        self.preferences = preferences
+        self.saved_items = saved_items
+        self.sessions = sessions if sessions is not None else NoSessions()
+        self.activity = activity if activity is not None else NoActivity()
 
 
 def make_repos(db: Session) -> Repos:
@@ -385,5 +569,17 @@ def make_repos(db: Session) -> Repos:
             MongoCompanyRepo(company_store),
             MongoJobRepo(job_store, company_store),
             MongoEventRepo(EventStore(database), company_store),
+            MongoStudentRepo(StudentStore(database)),
+            MongoPreferencesRepo(StudentPreferencesStore(database)),
+            MongoSavedItemRepo(SavedItemStore(database)),
+            SessionStore(database),
+            ActivityLogStore(database),
         )
-    return Repos(SqlCompanyRepo(db), SqlJobRepo(db), SqlEventRepo(db))
+    return Repos(
+        SqlCompanyRepo(db),
+        SqlJobRepo(db),
+        SqlEventRepo(db),
+        SqlStudentRepo(db),
+        SqlPreferencesRepo(db),
+        SqlSavedItemRepo(db),
+    )

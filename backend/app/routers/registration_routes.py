@@ -85,6 +85,11 @@ def register_for_event(
         },
         key=str(registration.id),
     )
+    make_repos(db).activity.record(
+        current_student.id,
+        "register",
+        {"registration_id": registration.id, "event_id": event_id},
+    )
 
     if mongo_mode():
         return registration_views(db, [registration])[0]

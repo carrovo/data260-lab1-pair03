@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from backend.app.models import (
     Company,
     Registration,
-    Student,
 )
 from backend.app.repos import make_repos
 from backend.app.routers.company_auth import (
@@ -189,20 +188,24 @@ def list_event_registrants(
         current_company.id,
     )
 
-    statement = (
-        select(Registration, Student)
-        .join(
-            Student,
-            Registration.student_id == Student.id,
-        )
-        .where(Registration.event_id == event.id)
-        .order_by(
-            Registration.registered_at.desc(),
-            Registration.id.desc(),
-        )
+    registrations = list(
+        db.scalars(
+            select(Registration)
+            .where(Registration.event_id == event.id)
+            .order_by(
+                Registration.registered_at.desc(),
+                Registration.id.desc(),
+            )
+        ).all()
     )
-
-    rows = db.execute(statement).all()
+    students = make_repos(db).students.get_many(
+        [registration.student_id for registration in registrations]
+    )
+    rows = [
+        (registration, students[registration.student_id])
+        for registration in registrations
+        if registration.student_id in students
+    ]
 
     return [
         RegisteredStudentResponse(

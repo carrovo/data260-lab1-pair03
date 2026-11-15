@@ -25,8 +25,6 @@ from backend.app.models import (
     Company,
     Event,
     Job,
-    SavedItem,
-    Student,
     StudentPreferences,
 )
 from backend.app.schemas.job import JobCategory
@@ -342,11 +340,12 @@ def get_student_preferences(
         if student_id is None or student_id < 1:
             return "Unable to read preferences: authenticated student missing."
 
-        student = db.get(Student, student_id)
+        repos = make_repos(db)
+        student = repos.students.get(student_id)
         if student is None:
             return "No authenticated student record was found."
 
-        preferences = db.get(StudentPreferences, student_id)
+        preferences = repos.preferences.get(student_id)
         if preferences is None:
             return "No saved job or event preferences were found."
 
@@ -630,7 +629,8 @@ def save_job_or_event(
         )
         if student_id is None or student_id < 1:
             return "Unable to save: authenticated student missing."
-        if db.get(Student, student_id) is None:
+        repos = make_repos(db)
+        if repos.students.get(student_id) is None:
             return "No authenticated student record was found."
 
         target_model = Job if validated.item_type == "job" else Event
@@ -640,40 +640,18 @@ def save_job_or_event(
                 f"{validated.item_id}; nothing was saved."
             )
 
-        target_column = (
-            SavedItem.job_id
-            if validated.item_type == "job"
-            else SavedItem.event_id
-        )
-        existing_id = db.scalar(
-            select(SavedItem.id).where(
-                SavedItem.student_id == student_id,
-                target_column == validated.item_id,
-            )
-        )
-        if existing_id is not None:
+        if repos.saved_items.exists(
+            student_id, validated.item_type, validated.item_id
+        ):
             return (
                 f"This {validated.item_type} is already saved; "
                 "no duplicate was created."
             )
 
-        saved_item = SavedItem(
-            student_id=student_id,
-            item_type=validated.item_type,
-            job_id=(
-                validated.item_id
-                if validated.item_type == "job"
-                else None
-            ),
-            event_id=(
-                validated.item_id
-                if validated.item_type == "event"
-                else None
-            ),
-        )
-        db.add(saved_item)
         try:
-            db.commit()
+            repos.saved_items.create(
+                student_id, validated.item_type, validated.item_id
+            )
         except IntegrityError:
             _rollback_safely(db)
             return (
@@ -683,7 +661,19 @@ def save_job_or_event(
         except SQLAlchemyError:
             _rollback_safely(db)
             return "Unable to save because the database operation failed."
+        except Exception as error:
+            if type(error).__name__ == "DuplicateKeyError":
+                return (
+                    f"This {validated.item_type} is already saved; "
+                    "no duplicate was created."
+                )
+            raise
 
+        repos.activity.record(
+            student_id,
+            "save",
+            {"item_type": validated.item_type, "item_id": validated.item_id},
+        )
         return f"Saved {validated.item_type} #{validated.item_id}."
     except ValidationError as error:
         return _validation_error(error)

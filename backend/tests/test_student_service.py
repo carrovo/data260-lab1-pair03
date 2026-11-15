@@ -30,4 +30,5 @@ def test_student_service_exposes_only_student_routes():
         "/auth/signup",
         "/auth/login",
         "/auth/me",
+        "/auth/logout",
     }

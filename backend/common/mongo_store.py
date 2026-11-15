@@ -10,6 +10,7 @@ mongomock database. Documents come back as objects with attribute access
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from datetime import datetime, timezone
@@ -377,4 +378,247 @@ class EventStore:
         if keyword:
             query["title"] = _contains(keyword)
         cursor = self._collection.find(query).sort([("starts_at", 1), ("_id", 1)])
+        return [_clean(row) for row in cursor]
+
+
+# ---------------------------------------------------------------- student side
+# Students, their preferences and saved items, sign-in sessions and the
+# activity log. Applications, registrations and resumes stay in MySQL and refer
+# to students by id only (the MySQL foreign key to students is dropped in
+# mongo mode by backend/migrate_mongo_persistence.py).
+
+
+class StudentStore:
+    def __init__(self, database: Any) -> None:
+        self._database = database
+        self._collection = database["students"]
+
+    def ensure_indexes(self) -> None:
+        self._collection.create_index("email", unique=True)
+
+    def create(
+        self,
+        *,
+        email: str,
+        password_hash: str,
+        full_name: str,
+        city: str,
+        college_name: str | None = None,
+        major: str | None = None,
+        state: str | None = None,
+        skills: str | None = None,
+        student_id: int | None = None,
+        created_at: datetime | None = None,
+    ) -> SimpleNamespace:
+        document = {
+            "_id": int(student_id) if student_id else next_id(self._database, "students"),
+            "email": email,
+            "password_hash": password_hash,
+            "full_name": full_name,
+            "city": city,
+            "college_name": college_name,
+            "major": major,
+            "state": state,
+            "skills": skills,
+            "created_at": created_at or utc_now(),
+        }
+        self._collection.insert_one(document)  # DuplicateKeyError on same email
+        return _clean(document)
+
+    def get(self, student_id: int) -> SimpleNamespace | None:
+        return _clean(self._collection.find_one({"_id": int(student_id)}))
+
+    def get_by_email(self, email: str) -> SimpleNamespace | None:
+        return _clean(self._collection.find_one({"email": email}))
+
+    def get_many(self, student_ids: list[int]) -> dict[int, SimpleNamespace]:
+        if not student_ids:
+            return {}
+        cursor = self._collection.find({"_id": {"$in": [int(i) for i in student_ids]}})
+        return {row["_id"]: _clean(row) for row in cursor}
+
+    def search(
+        self,
+        *,
+        name: str | None = None,
+        college: str | None = None,
+        skill: str | None = None,
+        city: str | None = None,
+        limit: int = 100,
+    ) -> list[SimpleNamespace]:
+        """Company-side student search: every given filter must match."""
+        conditions: list[dict[str, Any]] = []
+        for field, value in (
+            ("full_name", name),
+            ("college_name", college),
+            ("skills", skill),
+            ("city", city),
+        ):
+            if value and value.strip():
+                conditions.append({field: _contains(value.strip())})
+        query = {"$and": conditions} if conditions else {}
+        cursor = self._collection.find(query).sort([("full_name", 1), ("_id", 1)]).limit(limit)
+        return [_clean(row) for row in cursor]
+
+
+class StudentPreferencesStore:
+    def __init__(self, database: Any) -> None:
+        self._collection = database["student_preferences"]
+
+    def get(self, student_id: int) -> SimpleNamespace | None:
+        document = self._collection.find_one({"_id": int(student_id)})
+        if document is None:
+            return None
+        result = _clean(document)
+        result.student_id = result.id
+        return result
+
+    def upsert(
+        self,
+        student_id: int,
+        *,
+        job_preferences: dict[str, Any] | None = None,
+        event_preferences: dict[str, Any] | None = None,
+    ) -> SimpleNamespace:
+        self._collection.update_one(
+            {"_id": int(student_id)},
+            {
+                "$set": {
+                    "job_preferences": job_preferences,
+                    "event_preferences": event_preferences,
+                    "updated_at": utc_now(),
+                }
+            },
+            upsert=True,
+        )
+        return self.get(student_id)
+
+
+class SavedItemStore:
+    def __init__(self, database: Any) -> None:
+        self._database = database
+        self._collection = database["saved_items"]
+
+    def ensure_indexes(self) -> None:
+        # one saved row per student and target; replaces the MySQL unique keys
+        self._collection.create_index(
+            [("student_id", 1), ("item_type", 1), ("item_id", 1)], unique=True
+        )
+
+    @staticmethod
+    def _view(document: dict[str, Any] | None) -> SimpleNamespace | None:
+        if document is None:
+            return None
+        result = _clean(document)
+        result.job_id = result.item_id if result.item_type == "job" else None
+        result.event_id = result.item_id if result.item_type == "event" else None
+        return result
+
+    def get(self, student_id: int, item_type: str, item_id: int) -> SimpleNamespace | None:
+        return self._view(
+            self._collection.find_one(
+                {"student_id": int(student_id), "item_type": item_type, "item_id": int(item_id)}
+            )
+        )
+
+    def create(self, student_id: int, item_type: str, item_id: int) -> SimpleNamespace:
+        document = {
+            "_id": next_id(self._database, "saved_items"),
+            "student_id": int(student_id),
+            "item_type": item_type,
+            "item_id": int(item_id),
+            "saved_at": utc_now(),
+        }
+        self._collection.insert_one(document)  # DuplicateKeyError if already saved
+        return self._view(document)
+
+    def list_for_student(self, student_id: int) -> list[SimpleNamespace]:
+        cursor = self._collection.find({"student_id": int(student_id)}).sort(
+            [("saved_at", -1), ("_id", -1)]
+        )
+        return [self._view(row) for row in cursor]
+
+    def delete(self, student_id: int, item_type: str, item_id: int) -> None:
+        self._collection.delete_one(
+            {"student_id": int(student_id), "item_type": item_type, "item_id": int(item_id)}
+        )
+
+
+class SessionStore:
+    """One document per issued access token (a SHA-256 hash, never the token).
+
+    The JWT stays self-contained and its claims are unchanged; the session
+    record adds sign-out: a token whose session was revoked is refused. A
+    TTL index removes the record when the token itself would have expired.
+    """
+
+    def __init__(self, database: Any) -> None:
+        self._collection = database["sessions"]
+
+    def ensure_indexes(self) -> None:
+        self._collection.create_index("expires_at", expireAfterSeconds=0)
+        self._collection.create_index("student_id")
+
+    @staticmethod
+    def token_id(token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def start(self, student_id: int, token: str, expires_at: datetime) -> None:
+        self._collection.update_one(
+            {"_id": self.token_id(token)},
+            {
+                "$set": {
+                    "student_id": int(student_id),
+                    "created_at": utc_now(),
+                    "expires_at": expires_at,
+                    "revoked": False,
+                }
+            },
+            upsert=True,
+        )
+
+    def is_revoked(self, token: str) -> bool:
+        document = self._collection.find_one({"_id": self.token_id(token)})
+        return bool(document and document.get("revoked"))
+
+    def revoke(self, token: str) -> bool:
+        result = self._collection.update_one(
+            {"_id": self.token_id(token)}, {"$set": {"revoked": True}}
+        )
+        return result.matched_count > 0
+
+    def list_for_student(self, student_id: int) -> list[SimpleNamespace]:
+        cursor = self._collection.find({"student_id": int(student_id)}).sort("created_at", -1)
+        return [_clean(row) for row in cursor]
+
+
+class ActivityLogStore:
+    """Append-only record of what a student did (sign up, sign in, save, apply, register)."""
+
+    def __init__(self, database: Any) -> None:
+        self._database = database
+        self._collection = database["activity_logs"]
+
+    def ensure_indexes(self) -> None:
+        self._collection.create_index([("student_id", 1), ("at", -1)])
+
+    def record(
+        self, student_id: int, action: str, detail: dict[str, Any] | None = None
+    ) -> None:
+        self._collection.insert_one(
+            {
+                "_id": next_id(self._database, "activity_logs"),
+                "student_id": int(student_id),
+                "action": action,
+                "detail": detail or {},
+                "at": utc_now(),
+            }
+        )
+
+    def list_for_student(self, student_id: int, limit: int = 50) -> list[SimpleNamespace]:
+        cursor = (
+            self._collection.find({"student_id": int(student_id)})
+            .sort([("at", -1), ("_id", -1)])
+            .limit(limit)
+        )
         return [_clean(row) for row in cursor]

@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from backend.app.application_status import ApplicationStatus
 from backend.app.models import (
     Application,
-    Student,
 )
 from backend.app.repos import make_repos
 from backend.app.routers.applications import get_stored_resume_path
@@ -98,7 +97,7 @@ def _verify_company_owns_application(
 
 def _applicant_response(
     application: Application,
-    student: Student,
+    student: Any,
 ) -> ApplicantResponse:
     return ApplicantResponse(
         application_id=application.id,
@@ -130,24 +129,24 @@ def list_job_applicants(
         current_company.id,
     )
 
-    statement = (
-        select(Application, Student)
-        .join(
-            Student,
-            Application.student_id == Student.id,
-        )
-        .where(Application.job_id == job.id)
-        .order_by(
-            Application.applied_at.desc(),
-            Application.id.desc(),
-        )
+    applications = list(
+        db.scalars(
+            select(Application)
+            .where(Application.job_id == job.id)
+            .order_by(
+                Application.applied_at.desc(),
+                Application.id.desc(),
+            )
+        ).all()
+    )
+    students = make_repos(db).students.get_many(
+        [application.student_id for application in applications]
     )
 
-    rows = db.execute(statement).all()
-
     return [
-        _applicant_response(application, student)
-        for application, student in rows
+        _applicant_response(application, students[application.student_id])
+        for application in applications
+        if application.student_id in students
     ]
 
 
@@ -218,10 +217,7 @@ def update_application_status(
         current_company.id,
     )
 
-    student = db.get(
-        Student,
-        application.student_id,
-    )
+    student = make_repos(db).students.get(application.student_id)
 
     if student is None:
         raise HTTPException(

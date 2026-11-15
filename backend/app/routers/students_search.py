@@ -5,10 +5,10 @@ from fastapi import (
     Query,
     status,
 )
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.models import Company, Student
+from backend.app.models import Company
+from backend.app.repos import make_repos
 from backend.app.routers.company_auth import (
     get_current_company,
     get_db,
@@ -38,43 +38,13 @@ def search_students(
         get_current_company
     ),
 ):
-    statement = select(Student)
-
-    if name and name.strip():
-        statement = statement.where(
-            Student.full_name.ilike(
-                f"%{name.strip()}%"
-            )
-        )
-
-    if college and college.strip():
-        statement = statement.where(
-            Student.college_name.ilike(
-                f"%{college.strip()}%"
-            )
-        )
-
-    if skill and skill.strip():
-        statement = statement.where(
-            Student.skills.ilike(
-                f"%{skill.strip()}%"
-            )
-        )
-
-    if city and city.strip():
-        statement = statement.where(
-            Student.city.ilike(
-                f"%{city.strip()}%"
-            )
-        )
-
-    statement = (
-        statement
-        .order_by(Student.full_name.asc())
-        .limit(100)
+    return make_repos(db).students.search(
+        name=name,
+        college=college,
+        skill=skill,
+        city=city,
+        limit=100,
     )
-
-    return list(db.scalars(statement).all())
 
 
 @router.get(
@@ -88,7 +58,7 @@ def get_student_profile(
         get_current_company
     ),
 ):
-    student = db.get(Student, student_id)
+    student = make_repos(db).students.get(student_id)
 
     if student is None:
         raise HTTPException(

@@ -1,9 +1,9 @@
 """Prepare MySQL for PERSISTENCE=mongo.
 
-Companies and jobs live in MongoDB in that mode, so the MySQL foreign keys
-that point at the companies and jobs tables (applications.job_id,
-saved_items.job_id, events.company_id, jobs.company_id ...) would reject rows
-that refer to them. This drops those constraints. The columns stay, so every
+Companies, jobs, events and students live in MongoDB in that mode, so the
+MySQL foreign keys that point at those tables (applications.job_id,
+applications.student_id, registrations.student_id, events.company_id ...)
+would reject rows that refer to them. This drops those constraints. The columns stay, so every
 query and the data shape are unchanged.
 
 Safe to rerun, and a no-op unless PERSISTENCE=mongo and the database is MySQL.
@@ -20,7 +20,7 @@ from sqlalchemy.engine import Engine
 
 from backend.app.config import settings
 
-MONGO_OWNED_TABLES = ("companies", "jobs", "events")
+MONGO_OWNED_TABLES = ("companies", "jobs", "events", "students")
 
 
 def foreign_keys_to(

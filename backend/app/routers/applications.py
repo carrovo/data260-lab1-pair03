@@ -236,6 +236,11 @@ async def apply_to_job(
         },
         key=str(application.id),
     )
+    make_repos(db).activity.record(
+        current_student.id,
+        "apply",
+        {"application_id": application.id, "job_id": job_id},
+    )
 
     if mongo_mode():
         return application_views(db, [application])[0]

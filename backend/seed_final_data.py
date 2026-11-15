@@ -1289,6 +1289,13 @@ def seed_final_data(
             events,
         )
         stage_completed("saved_items")
+        if settings.persistence == "mongo":
+            # students, preferences and saved items are owned by MongoDB in this mode
+            from backend.migrate_student_data import copy_students_to_mongo
+
+            session.flush()
+            copy_students_to_mongo(session, database)
+            stage_completed("student_mongo")
         summary = _verify_seeded_rows(
             session,
             plan,
