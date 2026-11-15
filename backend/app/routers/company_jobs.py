@@ -141,11 +141,7 @@ def delete_company_job(
     )
 
     # Avoid deleting a job that already has student applications.
-    application_count = db.scalar(
-        select(func.count())
-        .select_from(Application)
-        .where(Application.job_id == job.id)
-    )
+    application_count = make_repos(db).applications.count_for_job(job.id)
 
     if application_count:
         raise HTTPException(

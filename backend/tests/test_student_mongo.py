@@ -16,13 +16,21 @@ mongomock = pytest.importorskip("mongomock")
 from backend.app import repos  # noqa: E402
 from backend.app.config import settings  # noqa: E402
 from backend.app.database import Base  # noqa: E402
-from backend.app.models import SavedItem, Student, StudentPreferences  # noqa: E402
+from backend.app.models import (  # noqa: E402
+    Application,
+    Registration,
+    SavedItem,
+    Student,
+    StudentPreferences,
+)
 from backend.app.routers import company_auth, student_auth  # noqa: E402
 from backend.app.routers.company_auth import router as company_auth_router  # noqa: E402
 from backend.app.routers.students_search import router as search_router  # noqa: E402
 from backend.app.security import decode_access_token  # noqa: E402
 from backend.common.mongo_store import (  # noqa: E402
     ActivityLogStore,
+    ApplicationStore,
+    RegistrationStore,
     SavedItemStore,
     SessionStore,
     StudentStore,
@@ -205,12 +213,27 @@ def test_copy_students_to_mongo_keeps_ids_and_is_repeatable(mongo_student):
         student_id = student.id
         db.add(StudentPreferences(student_id=student_id, job_preferences={"city": "SJ"}))
         db.add(SavedItem(student_id=student_id, item_type="job", job_id=7))
+        db.add(
+            Application(
+                student_id=student_id, job_id=7, resume_storage_key="k.pdf",
+                resume_original_name="cv.pdf", resume_size_bytes=12,
+            )
+        )
+        db.add(Registration(student_id=student_id, event_id=3))
         db.commit()
 
         first = copy_students_to_mongo(db, database)
         second = copy_students_to_mongo(db, database)
 
-    assert first == second == {"students": 1, "student_preferences": 1, "saved_items": 1}
+    assert first == second == {
+        "students": 1, "student_preferences": 1, "saved_items": 1,
+        "applications": 1, "registrations": 1,
+    }
+    application = ApplicationStore(database).get(1)
+    assert (application.student_id, application.job_id) == (student_id, 7)
+    assert application.resume_original_name == "cv.pdf"
+    assert database["applications"].find_one()["_id"] == "1"  # string id, as the workers use
+    assert RegistrationStore(database).exists(student_id, 3)
     assert database["students"].find_one()["_id"] == student_id
     assert database["student_preferences"].find_one()["job_preferences"] == {"city": "SJ"}
     assert SavedItemStore(database).get(student_id, "job", 7) is not None
@@ -241,3 +264,33 @@ def test_every_service_image_installs_the_mongo_driver():
     services = Path(__file__).resolve().parents[1] / "services"
     for requirements in services.glob("*/requirements.txt"):
         assert "pymongo" in requirements.read_text(), requirements.parent.name
+
+
+def test_application_and_registration_stores_reject_duplicates_and_share_worker_ids(mongo_student):
+    _, _, database = mongo_student
+    applications, registrations = ApplicationStore(database), RegistrationStore(database)
+    applications.ensure_indexes()
+    registrations.ensure_indexes()
+
+    application = applications.create(student_id=1, job_id=2, resume_original_name="cv.pdf")
+    registration = registrations.create(student_id=1, event_id=2)
+    for duplicate in (
+        lambda: applications.create(student_id=1, job_id=2),
+        lambda: registrations.create(student_id=1, event_id=2),
+    ):
+        with pytest.raises(Exception) as error:
+            duplicate()
+        assert type(error.value).__name__ == "DuplicateKeyError"
+
+    # a worker upsert for the same id updates this document instead of adding one
+    database["applications"].update_one(
+        {"_id": str(application.id)},
+        {"$set": {"student_id": "1", "job_id": "2", "trace_id": "t"},
+         "$setOnInsert": {"created_at": "x"}},
+        upsert=True,
+    )
+    assert database["applications"].count_documents({}) == 1
+    assert applications.update(application.id, {"status": "Reviewed"}).status == "Reviewed"
+    assert applications.list_for_student(1, "Reviewed")[0].id == application.id
+    assert applications.count_for_job(2) == 1 and registrations.count_for_event(2) == 1
+    assert registrations.list_for_event(2)[0].id == registration.id

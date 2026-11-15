@@ -4,7 +4,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.application_status import ApplicationStatus
@@ -72,7 +71,7 @@ def _application_or_404(
     db: Session,
     application_id: int,
 ) -> Application:
-    application = db.get(Application, application_id)
+    application = make_repos(db).applications.get(application_id)
 
     if application is None:
         raise HTTPException(
@@ -129,16 +128,7 @@ def list_job_applicants(
         current_company.id,
     )
 
-    applications = list(
-        db.scalars(
-            select(Application)
-            .where(Application.job_id == job.id)
-            .order_by(
-                Application.applied_at.desc(),
-                Application.id.desc(),
-            )
-        ).all()
-    )
+    applications = make_repos(db).applications.list_for_job(job.id)
     students = make_repos(db).students.get_many(
         [application.student_id for application in applications]
     )
@@ -226,10 +216,9 @@ def update_application_status(
         )
 
     old_status = application.status
-    application.status = payload.status.value
-
-    db.commit()
-    db.refresh(application)
+    application = make_repos(db).applications.update(
+        application, status=payload.status.value
+    )
 
     if old_status != application.status:
         publish_safely(

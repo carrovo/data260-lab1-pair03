@@ -622,3 +622,167 @@ class ActivityLogStore:
             .limit(limit)
         )
         return [_clean(row) for row in cursor]
+
+
+# ------------------------------------------------- applications, registrations
+# The same collections the Application and Event workers write their event
+# projections to. Documents use the workers' conventions (string _id, string
+# student_id / job_id / event_id) so a worker upsert for the same id updates the
+# API's document instead of creating a second one. Resume metadata (storage key,
+# original name, size) is part of the application document; the PDF itself stays
+# in the uploads volume.
+
+EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def _as_datetime(value: Any) -> datetime:
+    """Documents written by a worker carry ISO strings; the API writes datetimes."""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return EPOCH
+    if isinstance(value, datetime):
+        return _aware(value)
+    return EPOCH
+
+
+class ApplicationStore:
+    def __init__(self, database: Any) -> None:
+        self._database = database
+        self._collection = database["applications"]
+
+    def ensure_indexes(self) -> None:
+        # one application per student and job; replaces the MySQL unique key
+        self._collection.create_index([("student_id", 1), ("job_id", 1)], unique=True)
+
+    @staticmethod
+    def _view(document: dict[str, Any] | None) -> SimpleNamespace | None:
+        if document is None:
+            return None
+        return SimpleNamespace(
+            id=int(document["_id"]),
+            student_id=int(document["student_id"]),
+            job_id=int(document["job_id"]),
+            status=document.get("status", "Pending"),
+            applied_at=_as_datetime(document.get("applied_at")),
+            resume_storage_key=document.get("resume_storage_key"),
+            resume_original_name=document.get("resume_original_name"),
+            resume_size_bytes=document.get("resume_size_bytes"),
+        )
+
+    def create(
+        self,
+        *,
+        student_id: int,
+        job_id: int,
+        resume_storage_key: str | None = None,
+        resume_original_name: str | None = None,
+        resume_size_bytes: int | None = None,
+        status: str = "Pending",
+        application_id: int | None = None,
+        applied_at: datetime | None = None,
+    ) -> SimpleNamespace:
+        document = {
+            "_id": str(int(application_id) if application_id else next_id(self._database, "applications")),
+            "student_id": str(int(student_id)),
+            "job_id": str(int(job_id)),
+            "status": status,
+            "applied_at": applied_at or utc_now(),
+            # the workers keep created_at/updated_at on the same document
+            "created_at": applied_at or utc_now(),
+            "resume_storage_key": resume_storage_key,
+            "resume_original_name": resume_original_name,
+            "resume_size_bytes": resume_size_bytes,
+        }
+        self._collection.insert_one(document)  # DuplicateKeyError for the same student and job
+        return self._view(document)
+
+    def get(self, application_id: int) -> SimpleNamespace | None:
+        return self._view(self._collection.find_one({"_id": str(int(application_id))}))
+
+    def exists(self, student_id: int, job_id: int) -> bool:
+        return (
+            self._collection.count_documents(
+                {"student_id": str(int(student_id)), "job_id": str(int(job_id))}, limit=1
+            )
+            > 0
+        )
+
+    @staticmethod
+    def _newest_first(views: list[SimpleNamespace]) -> list[SimpleNamespace]:
+        return sorted(views, key=lambda v: (v.applied_at, v.id), reverse=True)
+
+    def list_for_student(self, student_id: int, status: str | None = None) -> list[SimpleNamespace]:
+        query: dict[str, Any] = {"student_id": str(int(student_id))}
+        if status is not None:
+            query["status"] = status
+        return self._newest_first([self._view(row) for row in self._collection.find(query)])
+
+    def list_for_job(self, job_id: int) -> list[SimpleNamespace]:
+        rows = self._collection.find({"job_id": str(int(job_id))})
+        return self._newest_first([self._view(row) for row in rows])
+
+    def count_for_job(self, job_id: int) -> int:
+        return self._collection.count_documents({"job_id": str(int(job_id))})
+
+    def update(self, application_id: int, fields: dict[str, Any]) -> SimpleNamespace | None:
+        self._collection.update_one({"_id": str(int(application_id))}, {"$set": fields})
+        return self.get(application_id)
+
+
+class RegistrationStore:
+    def __init__(self, database: Any) -> None:
+        self._database = database
+        self._collection = database["registrations"]
+
+    def ensure_indexes(self) -> None:
+        self._collection.create_index([("student_id", 1), ("event_id", 1)], unique=True)
+
+    @staticmethod
+    def _view(document: dict[str, Any] | None) -> SimpleNamespace | None:
+        if document is None:
+            return None
+        return SimpleNamespace(
+            id=int(document["_id"]),
+            student_id=int(document["student_id"]),
+            event_id=int(document["event_id"]),
+            registered_at=_as_datetime(document.get("registered_at")),
+        )
+
+    def create(
+        self,
+        *,
+        student_id: int,
+        event_id: int,
+        registration_id: int | None = None,
+        registered_at: datetime | None = None,
+    ) -> SimpleNamespace:
+        document = {
+            "_id": str(int(registration_id) if registration_id else next_id(self._database, "registrations")),
+            "student_id": str(int(student_id)),
+            "event_id": str(int(event_id)),
+            "registered_at": registered_at or utc_now(),
+        }
+        self._collection.insert_one(document)  # DuplicateKeyError for the same student and event
+        return self._view(document)
+
+    def exists(self, student_id: int, event_id: int) -> bool:
+        return (
+            self._collection.count_documents(
+                {"student_id": str(int(student_id)), "event_id": str(int(event_id))}, limit=1
+            )
+            > 0
+        )
+
+    def list_for_student(self, student_id: int) -> list[SimpleNamespace]:
+        rows = self._collection.find({"student_id": str(int(student_id))})
+        return [self._view(row) for row in rows]
+
+    def list_for_event(self, event_id: int) -> list[SimpleNamespace]:
+        rows = self._collection.find({"event_id": str(int(event_id))})
+        views = [self._view(row) for row in rows]
+        return sorted(views, key=lambda v: (v.registered_at, v.id), reverse=True)
+
+    def count_for_event(self, event_id: int) -> int:
+        return self._collection.count_documents({"event_id": str(int(event_id))})
