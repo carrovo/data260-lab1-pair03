@@ -98,6 +98,7 @@ def copy_students_to_mongo(session: Session, database: Any) -> dict[str, int]:
                     "job_id": str(row.job_id),
                     "status": row.status,
                     "applied_at": row.applied_at,
+                    "created_at": row.applied_at,
                     "resume_storage_key": row.resume_storage_key,
                     "resume_original_name": row.resume_original_name,
                     "resume_size_bytes": row.resume_size_bytes,

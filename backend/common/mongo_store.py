@@ -689,6 +689,8 @@ class ApplicationStore:
             "job_id": str(int(job_id)),
             "status": status,
             "applied_at": applied_at or utc_now(),
+            # the workers keep created_at/updated_at on the same document
+            "created_at": applied_at or utc_now(),
             "resume_storage_key": resume_storage_key,
             "resume_original_name": resume_original_name,
             "resume_size_bytes": resume_size_bytes,
