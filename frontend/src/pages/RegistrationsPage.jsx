@@ -7,7 +7,7 @@ import { formatEventDateTime } from '../eventDateTime'
 
 
 function RegistrationsPage() {
-  const { accessToken, logout } = useAuth()
+  const { logout } = useAuth()
   const dispatch = useDispatch()
   const {
     items: registrations,
@@ -22,8 +22,8 @@ function RegistrationsPage() {
       : ''
 
   useEffect(() => {
-    dispatch(loadMyRegistrations(accessToken))
-  }, [accessToken, dispatch])
+    dispatch(loadMyRegistrations())
+  }, [dispatch])
 
   useEffect(() => {
     if (unauthorized) {

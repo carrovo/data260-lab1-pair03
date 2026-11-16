@@ -1,3 +1,4 @@
+import SaveItemButton from '../components/SaveItemButton'
 import { useEffect, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { Link, useLocation, useParams } from 'react-router-dom'
@@ -66,7 +67,7 @@ function applicationErrorMessage(requestError) {
 function JobDetailPage() {
   const { jobId } = useParams()
   const location = useLocation()
-  const { accessToken, isAuthenticated, logout } = useAuth()
+  const { isAuthenticated, logout } = useAuth()
   const resumeInputRef = useRef(null)
   const dispatch = useDispatch()
   const detail = useSelector(selectJobDetail)
@@ -98,7 +99,7 @@ function JobDetailPage() {
       return
     }
 
-    dispatch(loadMyApplications({ token: accessToken })).then((result) => {
+    dispatch(loadMyApplications({})).then((result) => {
       if (!loadMyApplications.rejected.match(result)) {
         return
       }
@@ -113,7 +114,7 @@ function JobDetailPage() {
         )
       }
     })
-  }, [accessToken, dispatch, isAuthenticated, jobId, logout])
+  }, [dispatch, isAuthenticated, jobId, logout])
 
   function handleResumeChange(event) {
     const selectedFile = event.target.files?.[0] || null
@@ -136,7 +137,7 @@ function JobDetailPage() {
     setApplicationSuccess('')
 
     const result = await dispatch(
-      submitJobApplication({ jobId, resumeFile, token: accessToken }),
+      submitJobApplication({ jobId, resumeFile }),
     )
 
     if (submitJobApplication.fulfilled.match(result)) {
@@ -159,7 +160,7 @@ function JobDetailPage() {
     } else if (requestError.status === 404) {
       setRemovedJobId(jobId)
     } else if (requestError.status === 409) {
-      const refreshed = await dispatch(loadMyApplications({ token: accessToken }))
+      const refreshed = await dispatch(loadMyApplications({}))
 
       if (
         loadMyApplications.rejected.match(refreshed) &&
@@ -214,6 +215,7 @@ function JobDetailPage() {
                 <div>
                   <p className="page-eyebrow">JOB OPPORTUNITY</p>
                   <h1>{job.title}</h1>
+                  <SaveItemButton type="job" id={jobId} />
                   <p className="company-name">{job.company.name}</p>
                 </div>
               </div>

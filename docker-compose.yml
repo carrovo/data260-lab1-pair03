@@ -82,20 +82,18 @@ services:
     networks: [p03-net]
 
   p03-kafka-init:
-    image: apache/kafka:3.8.1
+    build:
+      context: ./backend
+      dockerfile: workers/Dockerfile
+    image: p03-worker:dev
     container_name: p03-kafka-init
     depends_on:
       p03-kafka:
         condition: service_healthy
     restart: "no"
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        for topic in application.created application.updated application.status_changed event.registration_created job.created; do
-          /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic p03.$$topic --partitions 1 --replication-factor 1
-          /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --create --if-not-exists --topic p03.$$topic.dlq --partitions 1 --replication-factor 1
-        done
-        /opt/kafka/bin/kafka-topics.sh --bootstrap-server p03-kafka:9092 --list
+    entrypoint: ["python", "-m", "backend.workers.init_topics"]
+    environment:
+      KAFKA_BOOTSTRAP: p03-kafka:9092
     networks: [p03-net]
 
   # ------------------------------------------------ database preparation
@@ -266,6 +264,23 @@ services:
     networks: [p03-net]
 
   # ------------------------------------------------------------- workers
+  p03-assistant-memory-worker:
+    build:
+      context: ./backend
+      dockerfile: workers/Dockerfile
+    image: p03-worker:dev
+    container_name: p03-assistant-memory-worker
+    restart: unless-stopped
+    depends_on:
+      p03-kafka-init:
+        condition: service_completed_successfully
+      p03-mongo:
+        condition: service_healthy
+    environment:
+      <<: *worker-env
+      WORKER_NAME: assistant-memory-worker
+    networks: [p03-net]
+
   p03-job-index-worker:
     build:
       context: ./backend

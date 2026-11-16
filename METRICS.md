@@ -368,3 +368,320 @@ The 100 to 500 user JMeter runs were done twice: locally on Docker Desktop Kuber
 above) and on AWS (section above). MongoDB mode (`PERSISTENCE=mongo`) and the Assistant load
 test ran locally. The AWS deployment ran with `PERSISTENCE=sql`; AWS results are the deployment
 checks, the Kafka flow check, the Assistant timings and the CRUD load test in this section.
+
+## Deterministic Agent harness checkpoint (Carol, 2026-11-15)
+
+Verified on `feature/lab2-agent-harness`, based on
+`dd6a7e17c4c91e2e8c0a29524773bd3cd8a7be4a`, with uncommitted checkpoint code.
+These are deterministic-model tests through production modules, using SQL mode
+with isolated in-memory SQLite fixtures. They are separate from JMeter load tests
+and live Assistant/AWS measurements above.
+
+| Case | Scenario | Result |
+|---|---|---|
+| H01 | Authenticated read search | PASS |
+| H02 | Accepted confirmation, exactly one saved row | PASS |
+| H03 | Declined confirmation, zero writes | PASS |
+| H04 | Typed arguments rejected before confirmation/execution | PASS |
+| H05 | Unknown tool rejected | PASS |
+| H06 | No-match result without invented opportunities | PASS |
+| H07 | Two requests with client-carried history | PASS |
+| H08 | Exact model-visible sanitized/delimited tool message | PASS |
+| H09 | Six-iteration bounded stop | PASS |
+| H10 | Exactly one repair followed by a successful read | PASS |
+
+Focused harness/core/router and AI tools/Ollama regression command:
+
+```sh
+.venv/bin/python -m pytest -q backend/tests/test_agent_harness.py backend/tests/test_ai_core.py backend/tests/test_student_assistant.py backend/tests/test_ai_tools.py backend/tests/test_ollama_client.py -rs
+```
+
+Result: 178 passed, 0 failed/skipped, 1 warning. Complete backend command
+`.venv/bin/python -m pytest -q backend/tests -rs`: 465 passed, 0 failed/skipped,
+61 warnings, 76.66 seconds. Warnings concern Starlette/httpx and mongomock's
+deprecated `utcnow()` usage; they are not harness skips.
+
+Two executions of the README runner with label `checkpoint-20261115` and separate
+`--output-dir loadtest/temp/agent_harness/checkpoint-20261115-a` / `-b` directories
+each returned 0 with 10 passed, 0 failed. JSON reports match after excluding only
+run timestamp and per-case elapsed time. Safe JSON and Markdown evidence remain
+ignored temporary output; these results can be reproduced with the README command.
+Mutation tests detect wrong row counts, missing trace headers, raw injection,
+extra repair, absent first-turn context, and validation bypass; the corrupted run
+returns nonzero. Non-finite argument tests cover NaN and both infinities in model
+dictionary and parsed JSON-string forms with zero confirmation/execution/write.
+
+Scope: H07 establishes `client_carried_history`. Live-model resistance, Mongo-mode
+harness coverage, and server-persistent memory are not established. The validator
+supports currently declared constraints; unsupported references/composition and
+other schema constructs require maintenance review as documented in README.
+
+## Assistant memory checkpoint (Carol, 2026-11-15)
+
+Branch `feature/lab2-assistant-memory`, base
+`6124c45ec9ec3e5e2f645a065bdc18374e8531da`; initial verification used working-tree
+code. No assignment PDF was present locally; implementation follows the
+provided official memory requirements. No live model was used for consolidation.
+
+| Verification | Actual result |
+|---|---|
+| Focused memory, harness, Assistant, contracts, messaging, workers, Compose/Kubernetes/topic tests | 144 passed, 0 failed/skipped, 30 warnings |
+| Full backend suite after final seed CLI/test changes | 476 passed, 0 failed/skipped, 88 warnings; 98.30 seconds |
+| Existing deterministic SQL H01–H10 runner | 10 passed, 0 failed; exit 0; H07 remains `client_carried_history` |
+| Compose rendering with non-secret validation placeholders / Kubernetes base rendering | PASS; no live deployment |
+| Real local Kafka/Mongo consolidation | 63 entries before, 30 after; processed-event receipt observed |
+
+The first full run found only an outdated exact service-route expectation (475
+passed, 1 failed). The assertion now includes the three new memory endpoints;
+the final complete run above passed. Deprecation warnings concern Starlette/httpx
+and mongomock datetime usage. Focused memory tests use mongomock and isolated SQL
+fixtures through production HTTP/auth/Agent paths; they establish server-history
+precedence, isolation, cross-session prompt recall, expiry/end, safe memory
+injection, explicit outages and asynchronous handoff. Retry/DLQ, duplicate/crash
+replay, concurrent additions, all seeded groups and unrelated facts are asserted.
+
+Real evidence (production source mounted in temporary `p03-worker:dev` container,
+existing local Docker Kafka/Mongo on `p03-net`, no services restarted):
+
+- Database: `p03_memory_demo_carol_20261115_memory` (synthetic memory subject).
+- Topic: `p03.memorydemo-carol-20261115-memory.assistant.memory_consolidation_requested`.
+- Event: `052e0c31-4f18-4507-b981-846039679967`.
+- Trace: `memory-demo-71cd9f874a704fa1ab14771887433921`.
+- Consumer completion: `assistant-memory-worker:<event_id>`, recorded at
+  `2026-11-15T21:50:20.859119Z`, with the same trace.
+- Safe full before/after entries, 30 merge decisions and completion receipt:
+  `loadtest/temp/assistant-memory/carol-20261115-memory/memory-evidence.json`
+  (ignored temporary evidence).
+
+All 30 duplicate groups merged. Three groups also contained newer contradictory
+assertions; `correction-0`, `correction-1`, `correction-2` won. For example,
+`topic-00` retained `corrected-0` dated February 1 over `original-0` dated January
+1. This is an explicit date/provenance policy, not a fabricated model correction.
+Topics 03–29 retained all 27 unrelated original facts; nothing was removed simply
+to hit the count target. Rules were unchanged in the deterministic tests. No model
+mistake was observed because no consolidation model was invoked.
+
+The real path was publisher -> Kafka -> production common consumer/worker dispatch
+-> Mongo -> processed_events. The shared topic initializer was also executed
+successfully in the isolated prefix, creating all six topics and six DLQs via
+`kafka_topic()`. Real HTTP memory with Ollama, updated Compose service images,
+Kubernetes deployment and AWS remain unverified. Final review replaced the memory
+request's best-effort handoff with an opt-in broker-acknowledged send (two-second
+bound, 503 on failed/unknown delivery) without altering unrelated producers. The
+memory worker also requires acknowledged DLQ publication before committing a
+failed message's offset. No durable HTTP outbox was added. These final changes
+are covered by automated tests; the historical live demo was not rerun.
+Learning is intentionally limited to explicit city/role/work-mode preferences,
+with heuristic dialogue redaction and bounded retrieval/history. Event receipt
+retention needs a future operational policy. A real `--seed-only` rerun preserved
+the already-consolidated 30 entries without resurrecting duplicates. See README for schemas, lifecycle,
+consolidation safety and reproduction commands.
+
+Sanitized synthetic-only submission evidence is preserved in
+`loadtest/evidence_assistant_memory_2026-11-15.json` with the matching
+`loadtest/summary_assistant_memory_2026-11-15.md`. It includes full before/after
+entries, duplicate/contradiction groups, retained unrelated topics, matching event
+and trace receipts, and execution limits. This was a CLI consumer using production
+dispatch, not a separately deployed memory worker. The ignored raw source was
+retained unchanged. Final review also fixed opaque entries sharing IDs being
+overwritten and omitted entire credential-bearing dialogue turns.
+
+Final review verification: focused memory/messaging/topic/harness/Assistant/worker
+tests: 100 passed, 0 failed/skipped, 50 warnings. Complete backend suite after all
+code fixes: 486 passed, 0 failed/skipped, 110 warnings, 94.28 seconds. Warnings are
+the existing Starlette/httpx and mongomock datetime deprecations. SQL harness:
+10/10 passed, exit 0 (`memory-final-review-20261115`); H07 retains its original
+client-carried-history scope. No live model/deployed-worker run was added.
+
+## Student Redux checkpoint (Carol, 2026-11-15)
+
+Scope: three slices added to the existing store: session/authentication, saved
+items and Assistant conversation. Business slices and persistence repositories
+remain unchanged. Identity generations and request IDs reject late responses;
+student caches clear at logout/account changes/current authentication failures.
+JWT and pending confirmation secrets remain outside Redux. The pre-existing JWT
+localStorage key is retained; no conversation or confirmation persistence is added.
+
+Frontend verification: `npm --prefix frontend test` — 32 passed, 0 failed,
+0 skipped (16 pre-existing business-store tests, 16 new state/client tests).
+`npm --prefix frontend run lint` and `npm --prefix frontend run build` passed.
+The tests cover restore/logout/401/account changes, delayed responses, saved-item
+loading/deduplication/mutations, stale refresh after confirmation, conversation ID
+versus history, navigation-lifetime state, both confirmation decisions, expiration,
+ended-session handling and token redaction.
+
+Browser verification used the real frontend and production FastAPI HTTP routes
+with isolated SQLite, Mongo mock and a deterministic model. Verified synthetic
+login → Assistant exchange → Saved items → Assistant with retained dialogue;
+job save → saved list → unsave; logout → second account with empty saved/thread
+state. Temporary loopback test servers were stopped afterward. This is not a
+Compose deployment, live Mongo/Kafka/Ollama, or cross-device restoration result.
+Confirmation approval/decline is covered by frontend client tests and existing
+backend production-path regressions, not a new live-model browser demonstration.
+
+Actual Redux DevTools captures remain pending; README gives exact safe capture
+steps for `session` and `assistant` (optionally `savedItems`). Browser page checks
+are not represented as DevTools evidence. No JMeter/performance run was performed.
+
+Backend validation: `.venv/bin/python -m pytest -q backend/tests -rs` —
+490 passed, 0 failed, 0 skipped, 110 existing dependency deprecation warnings,
+94.90 seconds. Focused saved-item/CORS/Student/Assistant service checks —
+8 passed, 0 failed/skipped, 1 warning. Both SQL and Mongo saved-item facade
+cases executed (Mongo uses mongomock). `git diff --check` passed.
+
+Final scoped review tightened the new saved-item request boundary to positive,
+strict integer IDs (rejecting booleans, coercion and extra identity fields), and
+added explicit restart behavior if a pending confirmation loses its private token.
+Frontend tests/lint/build and the 8 focused backend tests were rerun successfully.
+The 490-test full backend result above is reused from the preceding checkpoint;
+that complete suite and the isolated browser scenario were not rerun in this review.
+Manual Redux DevTools screenshots remain pending.
+
+## Agent usage and conversation compaction (Carol, 2026-11-15 local)
+
+Native Ollama prompt/completion counters are preserved for every model call,
+including tools, repairs, summary generation and measurement probes. Request
+usage sums overlapping calls. Context percentage uses only the latest call's
+prompt + completion against the actual configured request `num_ctx` (default
+4096); it is explicitly an occupancy estimate, not exact resident KV state or a
+character-based token count. Unavailable counters/capacity stay unknown. The UI
+warns strictly above 70%; automatic compaction defaults to strictly above 80%
+(configurable). It is bounded to one attempt/HTTP request and three extra model
+calls, never an unbounded/recursive model loop.
+
+Compaction uses authenticated Mongo ownership/read-time expiry and atomic version
+CAS. A source-grounded extractive summary preserves whole sentences and concrete
+identifiers across preferences/jobs/companies/events/applications/current request/
+next steps/other facts, with two recent public messages retained verbatim. Generated
+summary data is never a system instruction or verified application/opportunity
+fact. Pending confirmations block compaction until resolved or session end; tokens
+are not stored. Failure/invalid output/no measured reduction/concurrent writes do
+not replace history. Large novel histories can legitimately fail the conservative
+6500-character/40-quotes-per-group bound; no arbitrary truncation is substituted.
+
+Live evidence (host Ollama 0.40.6, `qwen3:8b`, requested context 4096, no output-cap
+override), through authenticated production ASGI routes, actual local Mongo and
+isolated SQLite auth/business fixtures, not a deployed API/browser/Compose rebuild:
+
+| Run | Measured probe prompt tokens before → after | Public messages before → after | Recall |
+|---|---:|---:|---|
+| Initial policy, 2026-11-16 03:42:24 UTC | 1309 → 1168 | 12 → 3 | Passed |
+| Final other-facts coverage, 2026-11-16 03:46:44 UTC | 1309 → 1194 | 12 → 3 | Passed |
+
+The second run retains uncategorized sentences too. Its three calls used prompt/
+completion counters **1309/2, 740/142, 1194/2**: request total **3243 prompt + 146
+completion = 3389 tokens**, distinct from the latest context estimate
+**1196 / 4096 = 29.19921875%**. Recall used **1195 prompt + 19 completion** and
+returned “Your preferred city is San Jose. The unresolved next step is to check
+eligibility with tools.” Learned-memory count was zero: this recalled stored
+compacted dialogue, with no client-carried history. Both original run files remain
+ignored/unmodified; a sanitized tracked report with source hashes and exact
+model-visible defended summary is `loadtest/summary_assistant_observability_2026-11-15.md`.
+
+Final whole-sentence/negation validation was replayed against that observed summary
+unchanged; numeric-logging/validation hardening after the live run was tested
+locally, not claimed as another live run. Automatic threshold, concurrent-turn,
+failure and confirmation cases use deterministic production-path tests, not live
+failure injection. No shared services were restarted; no existing database/volume,
+environment file, AWS/Kafka deployment or JMeter evidence was changed.
+
+Verification: focused production tests — 132 passed, 0 failed/skipped, 218 dependency
+deprecation warnings. Frontend — 35 passed, 0 failed/skipped; lint/build passed.
+Existing SQL deterministic harness — H01–H10 all passed, exit 0, preserving H07's
+`client_carried_history` claim. Raw harness reports are ignored under
+`loadtest/temp/agent_harness/observability-final/`. UI browser verification and
+actual Redux DevTools screenshots were not added; the existing safe capture
+checklist remains pending. This small live example does not establish general
+live-model injection resistance, load performance or AWS/gateway timeout behavior.
+
+Final complete backend command: `.venv/bin/python -m pytest -q backend/tests -rs`:
+**518 passed, 0 failed, 0 skipped, 277 existing-library deprecation warnings,
+40.49 seconds**, after final code changes. Warnings are Starlette/httpx and
+mongomock datetime deprecations. Final SQL harness rerun (`observability-review`):
+10/10 passed, exit 0. Python compile/import, shell syntax and diff checks passed.
+Compaction remains synchronous: three bounded calls can still exceed existing
+proxy timeouts on slow hardware; gateway/AWS behavior was not verified or changed.
+
+Final scoped save review: fixed correction chronology/category validation,
+malformed-summary flattening and detection of quoted credential fields before
+compaction. Added adversarial correction/category, malformed-source, concurrent
+usage-isolation and five credential-source tests. Final reruns: **140 focused
+backend tests passed** (218 warnings), **526 complete backend tests passed**
+(0 failed/skipped, **276 warnings**, 40.80 seconds), **35 frontend tests passed**,
+lint/build passed; SQL harness `observability-finalize` **10/10**, exit 0.
+The earlier 277 warnings and this run's 276 are the same dependency categories:
+Starlette TestClient/httpx deprecation (1 here) and mongomock's datetime.utcnow
+(275 here). No new application warning category or unrelated dependency upgrade.
+Recorded live inference/evidence was reused, not rerun: final source-history
+privacy and summary order/category checks reproduce the exact stored after-history.
+Redux DevTools screenshots and deployed/browser compaction evidence remain pending.
+
+## Carol — Assistant trace and 50-request stage attribution (2026-11-15)
+
+Evidence: `loadtest/evidence_assistant_trace_stage50/` (50 JSONL observations,
+separate warm-ups, successful/failed trace dossiers, source hashes, reproducible
+analysis and sanitized synthetic responses). UTC start: 2026-11-16T05:21:01.728950.
+Base `58e09200d6534e4ae227485894f54370d29fd843` plus the eight instrumented source
+hashes in environment.json identifies the exact uncommitted runtime code used.
+
+Command: `sh scripts/assistant_stage_timing.sh --label carol-stage50 --requests 50 --warmup 2`.
+Actual authenticated network HTTP to a new loopback Uvicorn instance, production
+routers/Agent/tools, **live** host Ollama 0.40.6 `qwen3:8b`, **real** MongoDB 7.0.48
+in a unique synthetic namespace. This is not in-process ASGI or fake-model timing.
+Apple M4, 10 logical cores, 16 GiB RAM, Darwin 24.6.0 arm64; hardware verified with
+sysctl. Process-only Mongo business persistence; shared SQL default unchanged.
+Fresh server-backed conversation each request; same synthetic account; read-only
+`search_jobs` against the synthetic Pair03 Trace Data Intern in San Jose.
+
+Concurrency 1; two warm-ups excluded; no client retries/replacements; all measured
+outcomes retained. Model num_ctx 4096, num_predict 128, think=false, temperature 0.1;
+60-second model-call deadline, 420-second client HTTP deadline.
+
+| Measured requests | Successes | Errors | Client HTTP timeouts | p50 ms | p95 ms | p99 ms |
+|---:|---:|---:|---:|---:|---:|---:|
+| 50 | 50 | 0 | 0 | 16463.086 | 20145.471 | 24119.175 |
+
+Standard nearest-rank percentiles include every measured request. The existing
+model abstraction reports internal transport failures as `model_backend_error`;
+the timeout column specifically counts client HTTP deadlines, not inferred model
+transport-timeout subtypes. No measured row had a model/backend error.
+
+| Directly measured inclusive stage | Total ms | Mean per request ms | Coverage |
+|---|---:|---:|---:|
+| Model-call wall time | 720089.447 | 14401.789 | 50/50 |
+| Native prompt/decode inference | 704436.421 | 14088.728 | 50/50 |
+| Actual tool implementation | 39380.023 | 787.600 | 50/50 |
+| Mongo command round trips | 83573.552 | 1671.471 | 50/50 |
+| Mongo command time inside tools | 37564.601 | 751.292 | 50/50 |
+
+100 model calls, 50 real tool executions, 700 Mongo commands. Model-call wall time
+dominates the fully covered measured stages; directly reported native inference
+accounts for 97.83% of that model wall time. Native inference is inside model time;
+DB spans can be inside tool time. These rows must not be summed as exclusive
+request costs. DB instrumentation excludes unobserved pool/server-selection wait
+and repository materialization. Queue wait is **unavailable**; neither residual
+time nor client/server differences establish it. Server lifecycle timing can end
+after the client has received the response, so it is separately labeled.
+
+Successful trace `trace-f77e5d5679-measured-01`: HTTP 200, actual matching title/city
+response, 2 model calls, 1 search_jobs execution, 14 Mongo commands; 14322.896 ms
+client end-to-end. Failed trace `trace-f77e5d5679-failure-01`: separate controlled
+model-connect failure on the isolated app only, excluded from the 50; HTTP 200
+with **safe_error**, 648.993 ms end-to-end, 2 bounded model attempts, 0 tools,
+12 Mongo commands, observed model_backend_error. HTTP status alone is not success.
+The failure did not stop or reconfigure shared Ollama/Mongo services.
+
+Important limitation: backend regression tests overlapped warm-ups and early
+measured requests, and other Docker workloads were present. This is shared-host
+stage attribution, **not** an idle-machine capacity result, JMeter concurrency
+replacement, deployed gateway/browser result or AWS evidence. Synthetic namespace
+is retained; own HTTP server stopped; shared services were left unchanged.
+Trapti's API → Kafka worker → Mongo evidence was not modified.
+
+Verification after final production changes: full backend **534 passed, 0 failed,
+0 skipped, 277 warnings**, 211.12 seconds. Focused timing/tracing/Ollama **30 passed**,
+0 failed/skipped, 1 warning. Warnings: Starlette/httpx (1) and mongomock UTC datetime
+(276 in full run), not timing failures. Deterministic SQL harness **10/10**, exit 0,
+run separately after live measurements; H07 remains client-carried history. These
+regressions are distinct from the live timing evidence. No frontend files changed;
+frontend checks were not rerun. Redux DevTools screenshots remain pending.

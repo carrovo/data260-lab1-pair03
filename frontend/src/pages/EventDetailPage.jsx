@@ -1,3 +1,4 @@
+import SaveItemButton from '../components/SaveItemButton'
 import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { Link, useLocation, useParams } from 'react-router-dom'
@@ -29,7 +30,7 @@ function registrationErrorMessage(requestError) {
 function EventDetailPage() {
   const { eventId } = useParams()
   const location = useLocation()
-  const { accessToken, isAuthenticated, logout } = useAuth()
+  const { isAuthenticated, logout } = useAuth()
   const dispatch = useDispatch()
   const detail = useSelector(selectEventDetail)
   const myRegistrations = useSelector(selectMyRegistrations)
@@ -62,7 +63,7 @@ function EventDetailPage() {
       return
     }
 
-    dispatch(loadMyRegistrations(accessToken)).then((result) => {
+    dispatch(loadMyRegistrations()).then((result) => {
       if (!loadMyRegistrations.rejected.match(result)) {
         return
       }
@@ -76,13 +77,13 @@ function EventDetailPage() {
         )
       }
     })
-  }, [accessToken, dispatch, eventId, isAuthenticated, logout])
+  }, [dispatch, eventId, isAuthenticated, logout])
 
   async function handleRegistration() {
     setRegistrationError('')
     setRegistrationSuccess('')
 
-    const result = await dispatch(registerForEvent({ eventId, token: accessToken }))
+    const result = await dispatch(registerForEvent({ eventId }))
 
     if (registerForEvent.fulfilled.match(result)) {
       setRegistrationSuccess('You are registered for this event.')
@@ -97,7 +98,7 @@ function EventDetailPage() {
     } else if (requestError.status === 404) {
       setRemovedEventId(eventId)
     } else if (requestError.status === 409) {
-      const refreshed = await dispatch(loadMyRegistrations(accessToken))
+      const refreshed = await dispatch(loadMyRegistrations())
 
       if (
         loadMyRegistrations.rejected.match(refreshed) &&
@@ -150,6 +151,7 @@ function EventDetailPage() {
                 <div>
                 <p className="page-eyebrow">UPCOMING EVENT</p>
                 <h1>{event.title}</h1>
+                <SaveItemButton type="event" id={eventId} />
                 <p className="company-name">
                   {event.company?.name || 'Independent event'}
                 </p>

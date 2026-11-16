@@ -1,0 +1,182 @@
+{
+  "index": 1,
+  "phase": "failure",
+  "trace_id": "trace-f77e5d5679-failure-01",
+  "echoed_trace_id": "trace-f77e5d5679-failure-01",
+  "http_status": 200,
+  "outcome": "safe_error",
+  "timeout": false,
+  "trace_correlated": true,
+  "end_to_end_ms": 648.9925000350922,
+  "error_category": "application_outcome_failed",
+  "injected_failure": true,
+  "response": {
+    "reply": "I couldn't complete that request after one repair attempt. Reason: The request requires search_jobs, but the completed tool sequence was empty.",
+    "api_tool_calls": 0,
+    "pending_confirmation": false
+  },
+  "timing": {
+    "trace_id": "trace-f77e5d5679-failure-01",
+    "http_status": 200,
+    "server_elapsed_ms": 648.5709580592811,
+    "model_elapsed_ms": 535.899416776374,
+    "model_call_count": 2,
+    "native_inference_ms": null,
+    "tool_elapsed_ms": 0.0,
+    "tool_call_count": 0,
+    "database_elapsed_ms": 44.96833402663469,
+    "database_call_count": 12,
+    "database_inside_tool_ms": 0.0,
+    "queue_wait_ms": null,
+    "request_error": null,
+    "errors": [
+      "model_backend_error"
+    ],
+    "dropped_spans": 0,
+    "spans": [
+      {
+        "id": 1,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 19.218875095248222,
+        "end_ms": 34.75012513808906,
+        "elapsed_ms": 15.531250042840838,
+        "error": null
+      },
+      {
+        "id": 2,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 35.416708094999194,
+        "end_ms": 39.10687519237399,
+        "elapsed_ms": 3.690167097374797,
+        "error": null
+      },
+      {
+        "id": 3,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 74.56941599957645,
+        "end_ms": 79.00145812891424,
+        "elapsed_ms": 4.432042129337788,
+        "error": null
+      },
+      {
+        "id": 4,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 79.98245814815164,
+        "end_ms": 83.67533306591213,
+        "elapsed_ms": 3.6928749177604914,
+        "error": null
+      },
+      {
+        "id": 5,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 84.35291610658169,
+        "end_ms": 86.0365410335362,
+        "elapsed_ms": 1.6836249269545078,
+        "error": null
+      },
+      {
+        "id": 6,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 86.59750013612211,
+        "end_ms": 88.88400020077825,
+        "elapsed_ms": 2.2865000646561384,
+        "error": null
+      },
+      {
+        "id": 7,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 89.46362510323524,
+        "end_ms": 91.85670805163682,
+        "elapsed_ms": 2.3930829484015703,
+        "error": null
+      },
+      {
+        "id": 8,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 93.91491604037583,
+        "end_ms": 95.93095816671848,
+        "elapsed_ms": 2.0160421263426542,
+        "error": null
+      },
+      {
+        "id": 9,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 96.497958060354,
+        "end_ms": 97.84904099069536,
+        "elapsed_ms": 1.351082930341363,
+        "error": null
+      },
+      {
+        "id": 10,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 98.29125017859042,
+        "end_ms": 100.86391610093415,
+        "elapsed_ms": 2.572665922343731,
+        "error": null
+      },
+      {
+        "id": 11,
+        "parent_id": null,
+        "stage": "model",
+        "operation": "agent",
+        "start_ms": 101.35070816613734,
+        "end_ms": 374.58950001746416,
+        "elapsed_ms": 273.2387918513268,
+        "error": "model_backend_error",
+        "native_inference_ms": null
+      },
+      {
+        "id": 12,
+        "parent_id": null,
+        "stage": "model",
+        "operation": "agent",
+        "start_ms": 374.9037501402199,
+        "end_ms": 637.5643750652671,
+        "elapsed_ms": 262.66062492504716,
+        "error": "model_backend_error",
+        "native_inference_ms": null
+      },
+      {
+        "id": 13,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 639.0004160348326,
+        "end_ms": 642.9825001396239,
+        "elapsed_ms": 3.9820841047912836,
+        "error": null
+      },
+      {
+        "id": 14,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 645.963708171621,
+        "end_ms": 647.3006249871105,
+        "elapsed_ms": 1.3369168154895306,
+        "error": null
+      }
+    ]
+  },
+  "bounded_failure_verified": true
+}

@@ -13,9 +13,13 @@ import logging
 import re
 import sys
 import time
+import json
 from contextvars import ContextVar
 
 from .events import TRACE_HEADER, new_trace_id
+from .timing import begin_request, end_request, install_database_timing
+
+install_database_timing()
 
 logger = logging.getLogger("p03.http")
 
@@ -53,9 +57,10 @@ def _ensure_logger() -> None:
 class TraceMiddleware:
     """Pure ASGI middleware, so the context variable is set for every handler."""
 
-    def __init__(self, app, service: str = "") -> None:
+    def __init__(self, app, service: str = "", timing_sink=None) -> None:
         self.app = app
         self.service = service
+        self.timing_sink = timing_sink
         _ensure_logger()
 
     async def __call__(self, scope, receive, send):
@@ -71,7 +76,9 @@ class TraceMiddleware:
         trace_id = clean_trace_id(incoming)
         token = _current_trace_id.set(trace_id)
         started = time.perf_counter()
+        timing = begin_request(trace_id, started) if scope.get("path") == "/assistant/chat" else None
         status = {"code": 500}
+        failed = False
 
         async def send_with_trace(message):
             if message["type"] == "http.response.start":
@@ -83,7 +90,20 @@ class TraceMiddleware:
 
         try:
             await self.app(scope, receive, send_with_trace)
+        except Exception:
+            failed = True
+            raise
         finally:
+            if timing is not None:
+                recorder, timing_token, parent_token = timing
+                report = recorder.report(status["code"], failed)
+                logger.info("assistant_timing %s", json.dumps(report, separators=(",", ":")))
+                if self.timing_sink is not None:
+                    try:
+                        self.timing_sink(report)
+                    except Exception:
+                        logger.warning("timing_sink_unavailable trace_id=%s", trace_id)
+                end_request(timing_token, parent_token)
             logger.info(
                 "request service=%s method=%s path=%s status=%s "
                 "duration_ms=%.1f trace_id=%s",

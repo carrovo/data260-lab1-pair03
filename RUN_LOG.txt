@@ -312,3 +312,225 @@ Result:   PASS
   - Student Assistant: Xuanhua's laptop (Ollama, qwen3:8b) and AWS (see [L2-15]).
   - JMeter load tests: Docker Compose and Docker Desktop Kubernetes (see METRICS.md).
   - Deployment, Kafka flow check and Assistant timings: AWS EKS (see [L2-13] to [L2-15]).
+
+[Carol harness checkpoint — 2026-11-15]
+  Branch feature/lab2-agent-harness; base dd6a7e17c4c91e2e8c0a29524773bd3cd8a7be4a.
+  Added deterministic H01-H10 evaluation through production auth, Agent, tools,
+  confirmation, sanitizer and tracing, with isolated SQL/SQLite fixtures.
+  Agent validates declared typed schemas before confirmation/execution, including
+  rejection of non-finite numbers. Reports separate requested decisions, token
+  attempts, issued tokens and observed outcomes; actual client classes are recorded.
+  Focused command (harness, ai_core, student_assistant, ai_tools, ollama_client):
+    .venv/bin/python -m pytest -q backend/tests/test_agent_harness.py backend/tests/test_ai_core.py backend/tests/test_student_assistant.py backend/tests/test_ai_tools.py backend/tests/test_ollama_client.py -rs
+  Result: 178 passed, 0 failed/skipped, 1 warning.
+  Full command: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 465 passed, 0 failed/skipped, 61 warnings, 76.66 s.
+  Runner: sh scripts/run_agent_harness.sh --persistence sql --label checkpoint-20261115
+  Run twice with --output-dir loadtest/temp/agent_harness/checkpoint-20261115-a
+  and -b respectively: both exit 0, 10/10 pass, normalized JSON identical after
+  removing timestamp/elapsed time. Safe evidence is ignored temporary JSON/Markdown.
+  H07 is client-carried history. No claim of live-model resistance, Mongo harness
+  coverage or server-persistent memory. README records command and validator limits;
+  METRICS.md records results. Existing deployment/performance entries preserved.
+
+[Carol Assistant memory — 2026-11-15]
+  Base 6124c45ec9ec3e5e2f645a065bdc18374e8531da; branch feature/lab2-assistant-memory.
+  Added Mongo-only assistant_rules/student_memory/conversations independently of
+  business PERSISTENCE (still sql by default). Explicit preference learning,
+  bounded untrusted prompt data, authenticated /memory, opaque conversation IDs,
+  stored-history precedence, ownership, eight-hour expiry and end lifecycle.
+  Added assistant.memory_consolidation_requested and assistant-memory-worker;
+  versioned atomic replacement/event receipts protect concurrent entries/replay.
+  Shared topic initializer uses kafka_topic() for every topic and DLQ. Existing
+  workers and their failure-demo behavior retained; no tools/repository changes.
+  Focused command:
+    .venv/bin/python -m pytest -q backend/tests/test_assistant_memory.py backend/tests/test_compose.py backend/tests/test_k8s.py backend/tests/test_contracts.py backend/tests/test_workers.py backend/tests/test_topic_prefix.py backend/tests/test_messaging.py backend/tests/test_agent_harness.py backend/tests/test_student_assistant.py -rs
+  Result: 144 passed, 0 failed/skipped, 30 warnings.
+  Full command: .venv/bin/python -m pytest -q backend/tests -rs
+  First full run: 475 passed, 1 failed (old service route-list assertion).
+  Updated exact list for new routes. After the final idempotent seed CLI/test
+  refinement: 476 passed, 0 failed/skipped, 88 warnings, 98.30 seconds.
+  Harness: sh scripts/run_agent_harness.sh --persistence sql --label memory-check-20261115 --output-dir loadtest/temp/agent_harness/memory-check-20261115
+  Result: 10/10 pass, exit 0; H07 remains client_carried_history.
+  Real Kafka/Mongo command (temporary worker, current source mounted):
+    docker run --rm --network p03-net -v /Users/carol/Documents/data260-lab1-pair03:/workspace -w /workspace -e PYTHONPATH=/workspace -e PYTHONDONTWRITEBYTECODE=1 -e MONGO_URL=mongodb://p03-mongo:27017 -e KAFKA_BOOTSTRAP=p03-kafka:9092 p03-worker:dev python -m backend.memory_demo --label carol-20261115-memory --output-dir loadtest/temp/assistant-memory/carol-20261115-memory
+  Result: 63 -> 30 entries, all duplicate groups merged, three newer corrections
+  selected, 27 unrelated topics retained. Event 052e0c31-4f18-4507-b981-846039679967;
+  trace memory-demo-71cd9f874a704fa1ab14771887433921; processed receipt at
+  2026-11-15T21:50:20.859119Z. Full ignored evidence: loadtest/temp/assistant-memory/carol-20261115-memory/memory-evidence.json.
+  Real topic initializer passed in the same isolated namespace. No services were
+  restarted, volumes erased, or production accounts used. Demo data/topics remain
+  for inspection. No model inference/mistakes; deterministic consolidation only.
+  Real --seed-only rerun retained 30 entries; no merged duplicates resurrected.
+  Compose rendered using non-secret placeholders; Kubernetes base rendered locally.
+  Memory HTTP/model interaction uses deterministic model + mongomock tests; live
+  HTTP/Ollama, Kubernetes/AWS deployment and Redux/context instrumentation not run.
+  No local official PDF available; supplied requirements used. Code awaits review;
+  no commit or push in this checkpoint.
+
+[Carol memory final review — 2026-11-15]
+  Reviewed complete implementation and new files at base 6124c45. Fixed memory
+  request publication: local producer buffering is insufficient; opt-in callback
+  acknowledgement required, bounded to two seconds. Unavailable/error/timeout
+  returns 503; end reports ended=true and consolidation_enqueued=false on failure.
+  Timeout is unknown delivery, never reported successful. No outbox or changes
+  to unrelated producer behavior. Memory-worker DLQ sends must be acknowledged
+  before offset commit. Confirmed tests cover failure/no callback/timeout/ack.
+  Fixed opaque entries with colliding IDs being overwritten; retained separately.
+  Whole credential-bearing dialogue turns are omitted rather than partially saved.
+  Added two-consumer CAS, post-completion addition/replay, private-token storage
+  and end/publication failure tests. Auth ownership, stored-history precedence,
+  read-time expiry and existing Agent safeguards preserved.
+  Focused: .venv/bin/python -m pytest -q backend/tests/test_assistant_memory.py backend/tests/test_messaging.py backend/tests/test_topic_prefix.py backend/tests/test_agent_harness.py backend/tests/test_student_assistant.py backend/tests/test_workers.py -rs
+  Result: 100 passed, 0 failed/skipped, 50 warnings.
+  Full: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 486 passed, 0 failed/skipped, 110 warnings, 94.28 seconds.
+  Harness: sh scripts/run_agent_harness.sh --persistence sql --label memory-final-review-20261115 --output-dir loadtest/temp/agent_harness/memory-final-review-20261115
+  Result: 10/10 pass, exit 0. Compile/shell/diff checks pass.
+  Preserved sanitized synthetic evidence under loadtest/evidence_assistant_memory_2026-11-15.json
+  and loadtest/summary_assistant_memory_2026-11-15.md; ignored original unchanged.
+  Evidence is the prior real Kafka/Mongo CLI run using production consumer dispatch,
+  not a separately deployed worker. Final acknowledgement/opaque-entry fixes have
+  automated coverage; real service verification was not rerun during this review.
+
+2026-11-15 — Carol: student Redux checkpoint (uncommitted review branch)
+  Branch: feature/lab2-redux-student-state
+  Base: 67eb3c3e7d1324a6887043f35e8bd137280f605b
+  Added session, savedItems and assistant slices to the existing store. Auth
+  adapter/client preserve existing JWT storage while keeping secrets out of Redux.
+  Added generation/request guards, account-bound cache clearing, saved-item UI,
+  server conversation ID/header handling and private transient confirmation vault.
+  Small backend gaps: authenticated saved-item facade over existing stores; expose
+  X-Conversation-Id for development CORS. Business repositories/slices unchanged.
+  npm --prefix frontend test: 31 passed, 0 failed/skipped.
+  npm --prefix frontend run lint; npm --prefix frontend run build: passed.
+  Focused backend routes/service checks: 8 passed, 1 deprecation warning.
+  Browser: synthetic login, Assistant navigation continuity, save/list/unsave,
+  logout and second-account isolation verified against isolated SQLite/Mongo mock
+  and deterministic model over real HTTP. Temporary test servers stopped.
+  No live deployment/model or automatic refresh/cross-device thread claim.
+  Redux DevTools extension unavailable in automation browser; actual panel
+  captures for session and assistant remain manual, steps in README.
+  No commit/push, JMeter, AWS, Kafka or token/context instrumentation performed.
+  Final full backend: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 490 passed, 0 failed/skipped, 110 dependency deprecation warnings,
+  94.90 seconds. git diff --check passed. No dependencies added/upgraded.
+
+  Redux final scoped review:
+  Verified expected branch/base and preserved all 28 checkpoint files.
+  Tightened saved-item HTTP request ID/type/extra-field validation; SQL and Mongo
+  mock coverage includes invalid IDs, unauthenticated writes and repeated deletes.
+  Missing confirmation-token memory now gives a restart instruction, blocks
+  submissions and ends an active server conversation on explicit restart.
+  Reran frontend: 32 tests passed, 0 failed/skipped; lint/build passed.
+  Reran focused saved-item/Student/Assistant checks: 8 passed, 1 warning.
+  Reused prior full backend result: 490 passed, 110 warnings; not rerun here.
+  Browser evidence remains the prior isolated SQL/Mongo-mock/deterministic-model
+  real-HTTP check, not live-service evidence. DevTools screenshots still pending.
+
+2026-11-15 local — Carol: Agent observability checkpoint (uncommitted review)
+  Branch: feature/lab2-agent-observability
+  Base: 562d0d6bc5345ac3dab7612d9556c7bc9abc4370
+  Added per-call Ollama counters, overlapping request totals and separately
+  labeled latest-call occupancy estimates; configurable request num_ctx default
+  4096, UI warning strictly above 70%, auto-compaction threshold default 80%.
+  /compact uses server-owned Mongo history, source-validated extractive summary,
+  two-message tail and existing ownership/expiry/version CAS. At most three
+  compaction calls, once per HTTP request. Pending confirmation blocks compaction.
+  No credentials/tokens/private tool payloads are persisted by summary/metrics.
+  Focused command: .venv/bin/python -m pytest -q backend/tests/test_agent_observability.py backend/tests/test_ollama_client.py backend/tests/test_ai_core.py backend/tests/test_student_assistant.py backend/tests/test_assistant_memory.py -rs
+  Result: 132 passed, 0 failed/skipped, 218 dependency deprecation warnings.
+  npm --prefix frontend test: 35 passed, 0 failed/skipped.
+  npm --prefix frontend run lint; npm --prefix frontend run build: passed.
+  sh scripts/run_agent_harness.sh --persistence sql --label observability-final --output-dir loadtest/temp/agent_harness/observability-final
+  Result: H01–H10 10/10 passed, exit 0; H07 remains client-carried history.
+  Live command: .venv/bin/python -m backend.observability_demo --label local-observability
+  Actual UTC 2026-11-16T03:42:24.444521+00:00: measured probe prompts 1309 ->
+  1168; 12 -> 3 stored messages; input-sensitive follow-up recalled city/next step.
+  After strengthening other-facts coverage, ran a distinct fresh namespace:
+  .venv/bin/python -m backend.observability_demo --label coverage-validated
+  Actual UTC 2026-11-16T03:46:44.612370+00:00: measured 1309 -> 1194 prompt
+  tokens, 12 -> 3 messages. Three-call request totals 3243 prompt/146 completion;
+  latest-call estimated occupancy 1196/4096 = 29.19921875%. Recall 1195/19,
+  San Jose + eligibility step, no learned entries or resubmitted client history.
+  Actual host Ollama 0.40.6/qwen3:8b and local Mongo; authenticated ASGI routes
+  with isolated SQLite fixtures. Not a deployed server/browser/worker check.
+  No shared restart, volume/database reset, environment overwrite or secret output.
+  Both ignored raw files preserved, tracked synthetic summary:
+  loadtest/summary_assistant_observability_2026-11-15.md
+  Final quote-validation/logging hardening has automated coverage; observed final
+  live summary revalidated unchanged. No extra live run claimed afterward.
+  Existing Redux DevTools capture checklist remains pending. No JMeter or AWS run.
+  Final complete backend after code changes:
+  .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 518 passed, 0 failed/skipped, 277 dependency deprecation warnings,
+  40.49 seconds. Final frontend tests/lint/build passed (35 tests).
+  Final SQL harness rerun:
+  sh scripts/run_agent_harness.sh --persistence sql --label observability-review --output-dir loadtest/temp/agent_harness/observability-review
+  Result: 10/10 passed, exit 0. Compile/import, shell syntax, conflict/secret and
+  diff checks passed. Checkpoint remains uncommitted; no push/merge/deployment.
+  Final authorized save review:
+  Preserved all 20 checkpoint files; reviewed full diff/new files directly.
+  Fixed A/B/A correction ordering, quote-category/order validation, malformed
+  summary-shaped history and JSON-quoted credential keys; private source data
+  fails before any compaction model call. Added 8 focused adversarial cases.
+  Reran focused backend: 140 passed, 218 warnings; complete backend: 526 passed,
+  0 failed/skipped, 276 warnings in 40.80 seconds. Frontend: 35 passed,
+  lint/build passed. SQL harness observability-finalize: 10/10, exit 0.
+  Warning review: one Starlette TestClient/httpx deprecation, 275 mongomock
+  datetime.utcnow deprecations; no new application warning category or fixes
+  to unrelated dependencies. Original 277-warning run preserved above.
+  Live artifact is unchanged under final validation/privacy checks; no new live
+  inference. 1309 -> 1194 remains measured probe prompt tokens; 3389 remains
+  overlapping three-call request usage. No deployed/browser claim added.
+  Redux DevTools screenshots remain pending. No AWS/JMeter/shared branch changes.
+
+2026-11-15 local / 2026-11-16 UTC — Carol Assistant traces and stage timing
+  Branch: feature/lab2-assistant-trace-evidence
+  Base: 58e09200d6534e4ae227485894f54370d29fd843; runtime hashes in environment.json.
+  Added monotonic request-local model/tool/SQL cursor/Mongo command timing.
+  Metadata only; no prompt/SQL/DB payload logging. Native inference is directly
+  reported prompt_eval_duration + eval_duration; DB/tool spans overlap.
+  Queue wait unavailable; residual time is not labeled queue wait.
+  Command: sh scripts/assistant_stage_timing.sh --label carol-stage50 --requests 50 --warmup 2
+  UTC start 2026-11-16T05:21:01.728950+00:00. Actual network HTTP to isolated
+  loopback Uvicorn, production authenticated routes/Agent/tools, live host Ollama
+  0.40.6/qwen3:8b and MongoDB 7.0.48 in a new synthetic database.
+  Apple M4, 10 logical cores, 16 GiB RAM; Darwin 24.6.0 arm64 (sysctl verified).
+  num_ctx=4096; num_predict=128; think=false; temperature=0.1; concurrency=1;
+  model deadline=60s; client deadline=420s; 2 warm-ups excluded; no client retries.
+  Same synthetic student, fresh conversation/request; actual read-only search_jobs.
+  All 50 measured requests retained: 50 success, 0 errors, 0 client HTTP timeouts.
+  End-to-end nearest-rank p50/p95/p99: 16463.086/20145.471/24119.175 ms.
+  Stage total/mean ms: model 720089.447/14401.789; native inference
+  704436.421/14088.728; tool 39380.023/787.600; DB 83573.552/1671.471;
+  nested DB inside tools 37564.601/751.292. Not additive inclusive stages.
+  100 model calls, 50 actual tool executions, 700 Mongo commands; model wall time
+  dominates; measured native inference is 97.83% of model wall time.
+  Successful trace: trace-f77e5d5679-measured-01; HTTP200/success, matching title
+  and city, 2 model calls/1 tool/14 DB commands, 14322.896ms end-to-end.
+  Failure trace: trace-f77e5d5679-failure-01, excluded from50; reserved non-listening
+  loopback model endpoint override on isolated app; HTTP200/safe_error, 648.993ms,
+  2 bounded attempts/0 tools/12 DB commands, model_backend_error. Shared services
+  unaffected. Internal transport-timeout subtype is unavailable; reported timeout
+  counts refer specifically to client HTTP deadlines.
+  Limitation: backend pytest overlapped warm-ups and early measured requests;
+  other Docker workloads present. Shared-host attribution, not idle-machine/JMeter
+  concurrency/deployed/browser/AWS evidence. No selective reruns or replacements.
+  Raw ignored path: loadtest/temp/assistant_trace/carol-stage50-f77e5d5679
+  Export: .venv/bin/python -m backend.assistant_trace_submission loadtest/temp/assistant_trace/carol-stage50-f77e5d5679 --output-dir loadtest/evidence_assistant_trace_stage50
+  Verified 50 ordered distinct traces, all stage counts, reproduced aggregates,
+  eight runtime source hashes; byte-identical safe raw copies with SHA256 manifest.
+  Submission: loadtest/evidence_assistant_trace_stage50/ (traces.md, summary.md,
+  measurements.jsonl, environment/host observations and separate warm-ups).
+  Focused: .venv/bin/python -m pytest -q backend/tests/test_assistant_stage_timing.py backend/tests/test_tracing.py backend/tests/test_ollama_client.py -x -rs
+  Result: 30 passed, 0 failed/skipped, 1 dependency warning.
+  Full: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 534 passed, 0 failed/skipped, 277 dependency warnings, 211.12s.
+  Categories: 1 Starlette/httpx deprecation, 276 mongomock datetime deprecations.
+  SQL harness after live run:
+  sh scripts/run_agent_harness.sh --persistence sql --label assistant-trace-final --output-dir loadtest/temp/agent_harness/assistant-trace-final
+  Result: 10/10 passed, exit0; H07 remains client_carried_history.
+  Own server shut down; synthetic DB retained; shared services not restarted.
+  No JMeter/AWS/Kafka flow run or partner evidence change; frontend unchanged.
+  Redux DevTools screenshots pending. No commit/push/merge in this checkpoint.

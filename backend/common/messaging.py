@@ -254,6 +254,33 @@ class ConfluentPublisher:
         else:
             self._producer.poll(0)
 
+    def send_confirmed(
+        self, topic: str, key: str | None, value: str, timeout: float = 2.0
+    ) -> bool:
+        """Opt-in broker acknowledgement; existing send() semantics stay unchanged.
+
+        False includes an unknown delivery outcome at timeout. A retry may therefore
+        produce another event; the memory consumer must remain idempotent.
+        """
+        delivered: list[bool] = []
+
+        def acknowledge(error: Any, message: Any) -> None:
+            delivered.append(error is None)
+
+        self._producer.produce(
+            kafka_topic(topic), key=key, value=value, on_delivery=acknowledge,
+        )
+        pending = self._producer.flush(timeout)
+        return pending == 0 and delivered == [True]
+
+
+class DeliveryConfirmedPublisher(ConfluentPublisher):
+    """Opt-in strict sends for the memory worker's dead-letter publications."""
+
+    def send(self, topic: str, key: str | None, value: str) -> None:
+        if not self.send_confirmed(topic, key, value, timeout=self._flush_timeout):
+            raise RuntimeError("Kafka delivery unconfirmed")
+
 
 class ConfluentConsumerClient:
     def __init__(

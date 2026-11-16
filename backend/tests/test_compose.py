@@ -45,15 +45,17 @@ def test_host_ports_stay_in_the_pair_block_and_match_the_contract():
 
 
 def test_every_topic_and_its_dead_letter_topic_is_created():
-    for topic in TOPICS:
-        assert topic in TEXT
-    assert "--topic p03.$$topic " in TEXT
-    assert "--topic p03.$$topic.dlq" in TEXT
-    k8s = (ROOT / "k8s" / "init-jobs.yaml").read_text()
-    assert "--topic p03.$topic " in k8s
-    assert "--topic p03.$topic.dlq" in k8s
-    for topic in TOPICS:
-        assert topic in k8s
+    from backend.common.events import kafka_topic, dlq_topic
+    from backend.workers.init_topics import topic_names
+
+    assert COMPOSE["services"]["p03-kafka-init"]["entrypoint"] == [
+        "python", "-m", "backend.workers.init_topics",
+    ]
+    assert "backend.workers.init_topics" in (ROOT / "k8s" / "init-jobs.yaml").read_text()
+    assert set(topic_names()) == {
+        kafka_topic(name) for topic in TOPICS for name in (topic, dlq_topic(topic))
+    }
+    assert len(topic_names()) == 2 * len(TOPICS)
 
 
 def test_no_secret_value_is_written_into_the_file():

@@ -35,6 +35,7 @@ class OllamaClient(ModelClient):
         ).rstrip("/")
         self.model = model or settings.ollama_model
         self.num_predict = settings.ollama_num_predict
+        self.num_ctx = settings.ollama_num_ctx
         self.timeout = httpx.Timeout(
             timeout_seconds,
             connect=10.0,
@@ -47,7 +48,7 @@ class OllamaClient(ModelClient):
     ) -> dict[str, Any]:
         options = {
             "temperature": 0.1,
-            "num_ctx": 4096,
+            "num_ctx": self.num_ctx,
         }
         if self.num_predict is not None:
             options["num_predict"] = self.num_predict
@@ -69,19 +70,32 @@ class OllamaClient(ModelClient):
                 )
                 response.raise_for_status()
                 data = response.json()
-        except (httpx.HTTPError, ValueError) as exc:
+        except (httpx.HTTPError, ValueError):
             return {
                 "role": "assistant",
-                "content": f"[model backend unreachable: {exc}]",
+                "content": "[model backend unavailable]",
                 "tool_calls": None,
+                "model_error": "backend_unavailable",
+                "usage": {"prompt_tokens": None, "completion_tokens": None,
+                          "context_capacity": self.num_ctx, "capacity_source": "request.options.num_ctx", "source": "unknown"},
             }
 
         message = data.get("message", {})
-        return {
+        result = {
             "role": "assistant",
             "content": message.get("content"),
             "tool_calls": message.get("tool_calls"),
+            "usage": {
+                "prompt_tokens": data.get("prompt_eval_count"),
+                "completion_tokens": data.get("eval_count"),
+                "context_capacity": self.num_ctx,
+                "capacity_source": "request.options.num_ctx", "source": "ollama",
+            },
         }
+        keys = ("total_duration", "load_duration", "prompt_eval_duration", "eval_duration")
+        if any(key in data for key in keys):
+            result["runtime"] = {key: data.get(key) for key in keys}
+        return result
 
 
 class FakeModelClient(ModelClient):

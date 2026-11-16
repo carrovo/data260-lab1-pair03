@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from backend.common.events import TOPICS, EventEnvelope
+from backend.common.assistant_memory import EVENT, consolidate
 
 
 def _now() -> str:
@@ -123,6 +124,7 @@ def handle_application_updated(envelope: EventEnvelope, db: Any) -> None:
 WORKERS: dict[
     str, dict[str, Callable[[EventEnvelope, Any], None]]
 ] = {
+    "assistant-memory-worker": {EVENT: consolidate},
     "application-worker": {
         "application.created": handle_application_created,
         "application.updated": handle_application_updated,

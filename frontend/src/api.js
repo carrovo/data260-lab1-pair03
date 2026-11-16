@@ -1,5 +1,5 @@
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || 'http://127.0.0.1:9030'
+  import.meta.env?.VITE_API_URL || 'http://127.0.0.1:9030'
 
 function getErrorMessage(data, fallbackMessage) {
   if (typeof data.detail === 'string') {
@@ -20,7 +20,7 @@ function getErrorMessage(data, fallbackMessage) {
 
 async function apiRequest(
   path,
-  { token, responseType = 'json', ...options } = {},
+  { token = globalThis.localStorage?.getItem('student_access_token'), responseType = 'json', ...options } = {},
 ) {
   const headers = new Headers(options.headers)
 
@@ -36,8 +36,10 @@ async function apiRequest(
   if (!response.ok) {
     let message = `Request failed with status ${response.status}.`
 
+    let ended = false
     try {
       const data = await response.json()
+      ended = data.detail?.ended === true
 
       message = getErrorMessage(data, message)
     } catch {
@@ -45,6 +47,7 @@ async function apiRequest(
     }
 
     const requestError = new Error(message)
+    requestError.ended = ended
     requestError.status = response.status
     throw requestError
   }
@@ -53,7 +56,10 @@ async function apiRequest(
     return response.blob()
   }
 
-  return response.json()
+  if (response.status === 204) return null
+  const result = await response.json()
+  const conversationId = response.headers.get('X-Conversation-Id')
+  return conversationId ? { ...result, conversation_id: conversationId } : result
 }
 
 export function fetchJobs({ keyword = '', city = '' } = {}) {
@@ -182,3 +188,12 @@ export function sendAssistantMessage(payload, token) {
     token,
   })
 }
+
+export const logoutStudent = token => apiRequest('/auth/logout', { method: 'POST', token })
+export const fetchSavedItems = token => apiRequest('/auth/saved-items', { token })
+export const saveItem = (itemType, itemId, token) => apiRequest('/auth/saved-items', {
+  method: 'POST', token, headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ item_type: itemType, [`${itemType}_id`]: Number(itemId) }),
+})
+export const unsaveItem = (itemType, itemId, token) => apiRequest(`/auth/saved-items/${itemType}/${encodeURIComponent(itemId)}`, { method: 'DELETE', token })
+export const endAssistantConversation = (id, token) => apiRequest(`/assistant/conversations/${encodeURIComponent(id)}/end`, { method: 'POST', token })

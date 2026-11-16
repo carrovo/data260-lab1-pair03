@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -19,6 +20,11 @@ TRACE_HEADER = "X-Trace-Id"
 
 # topic -> who publishes it, who consumes it, and the payload keys it must carry
 TOPICS: dict[str, dict[str, Any]] = {
+    "assistant.memory_consolidation_requested": {
+        "producer": "assistant",
+        "consumer": "assistant-memory-worker",
+        "required": ["student_id"],
+    },
     "application.created": {
         "producer": "application",
         "consumer": "application-worker",
@@ -98,6 +104,11 @@ class EventEnvelope(BaseModel):
             raise ValueError(
                 f"{self.event_type} payload is missing: {', '.join(missing)}"
             )
+        if self.event_type == "assistant.memory_consolidation_requested":
+            if (set(self.payload) != {"student_id"}
+                    or not isinstance(self.payload["student_id"], str)
+                    or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", self.payload["student_id"])):
+                raise ValueError("Memory consolidation requires only a bounded string student_id")
         return self
 
     def to_json(self) -> str:

@@ -4,6 +4,7 @@ from backend.common.runtime import configure_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.common.tracing import TraceMiddleware
+from backend.app.routers.saved_items import router as saved_items_router
 from backend.app.routers.student_auth import router as student_auth_router
 
 
@@ -27,6 +28,7 @@ app.add_middleware(
 app.add_middleware(TraceMiddleware, service="student")
 
 app.include_router(student_auth_router)
+app.include_router(saved_items_router)
 
 
 @app.get("/")

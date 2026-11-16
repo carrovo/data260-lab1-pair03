@@ -516,6 +516,127 @@ def test_second_repair_failure_stops_without_third_model_attempt(
     assert len(model.calls) == 2
 
 
+@pytest.mark.parametrize(
+    "invalid_arguments",
+    [
+        {"item_type": "job"},
+        {"item_type": "job", "item_id": 1, "unexpected": True},
+        {"item_type": "job", "item_id": "1"},
+    ],
+    ids=["missing-required", "extra-property", "wrong-type"],
+)
+def test_declared_schema_rejects_invalid_write_before_confirmation_or_execution(
+    recording_tools,
+    invalid_arguments,
+):
+    calls, implementations = recording_tools
+    model = FakeModelClient([
+        model_tool_call("save_job_or_event", invalid_arguments),
+        model_tool_call("save_job_or_event", invalid_arguments),
+    ])
+
+    result = run_with_tools(
+        model,
+        implementations,
+        user_message="Save job 1.",
+        tool_schemas=DATABASE_TOOL_SCHEMAS,
+    )
+
+    assert calls == []
+    assert "pending_action" not in result
+    assert "after one repair attempt" in result["reply"]
+    assert len(model.calls) == 2
+    repair_messages = [
+        message
+        for message in model.calls[1]["messages"]
+        if message.get("role") == "system"
+        and message.get("content", "").startswith("REPAIR_ATTEMPT:")
+    ]
+    assert len(repair_messages) == 1
+    assert "Invalid arguments for tool 'save_job_or_event'" in (
+        repair_messages[0]["content"]
+    )
+
+
+def test_declared_schema_allows_valid_read_and_write_calls(recording_tools):
+    calls, implementations = recording_tools
+    read_model = FakeModelClient([
+        model_tool_call("search_jobs", {"skills": "Python"}),
+        model_text("Read completed."),
+    ])
+    write_model = FakeModelClient([
+        model_tool_call(
+            "save_job_or_event",
+            {"item_type": "job", "item_id": 1},
+        ),
+        model_text("Write completed."),
+    ])
+
+    read_result = run_with_tools(
+        read_model,
+        implementations,
+        user_message="Find Python jobs.",
+        tool_schemas=DATABASE_TOOL_SCHEMAS,
+    )
+    write_result = run_with_tools(
+        write_model,
+        implementations,
+        user_message="Save job 1.",
+        auto_approve=True,
+        tool_schemas=DATABASE_TOOL_SCHEMAS,
+    )
+
+    assert read_result["reply"] == "Read completed."
+    assert write_result["reply"] == "Write completed."
+    assert [call["name"] for call in calls] == [
+        "search_jobs",
+        "save_job_or_event",
+    ]
+
+
+def test_declared_schema_rejects_invalid_nested_values(recording_tools):
+    calls, implementations = recording_tools
+    nested_schema = [{
+        "type": "function",
+        "function": {
+            "name": "echo",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filters": {
+                        "type": "object",
+                        "properties": {
+                            "ids": {
+                                "type": "array",
+                                "items": {"type": "integer"},
+                            },
+                        },
+                        "required": ["ids"],
+                        "additionalProperties": False,
+                    },
+                },
+                "required": ["filters"],
+                "additionalProperties": False,
+            },
+        },
+    }]
+    invalid = {"filters": {"ids": [1, "not-an-integer"]}}
+    model = FakeModelClient([
+        model_tool_call("echo", invalid),
+        model_tool_call("echo", invalid),
+    ])
+
+    result = run_with_tools(
+        model,
+        implementations,
+        tool_schemas=nested_schema,
+    )
+
+    assert calls == []
+    assert "after one repair attempt" in result["reply"]
+    assert "$.filters.ids[1] must be of type integer" in result["reply"]
+
+
 def test_hard_iteration_ceiling_stops_repeated_tool_calls(recording_tools):
     calls, implementations = recording_tools
     model = FakeModelClient([

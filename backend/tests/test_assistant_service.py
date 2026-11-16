@@ -28,4 +28,7 @@ def test_assistant_service_exposes_only_student_assistant_routes():
         "/",
         "/health",
         "/assistant/chat",
+        "/assistant/memory",
+        "/assistant/memory/consolidate",
+        "/assistant/conversations/{conversation_id}/end",
     }

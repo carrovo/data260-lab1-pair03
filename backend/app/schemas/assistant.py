@@ -50,6 +50,7 @@ class AssistantChatRequest(BaseModel):
         max_length=MAX_HISTORY_MESSAGES,
     )
     confirmation: AssistantConfirmation | None = None
+    conversation_id: str | None = Field(default=None, min_length=1, max_length=64)
 
     @model_validator(mode="after")
     def require_one_action(self):
@@ -73,6 +74,46 @@ class PendingAction(BaseModel):
     item_id: int = Field(gt=0)
 
 
+class ModelCallUsage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    index: int = Field(ge=1)
+    purpose: str
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
+    context_capacity: int | None = Field(default=None, gt=0)
+    source: Literal["ollama", "synthetic", "unknown"]
+    capacity_source: Literal["request.options.num_ctx", "unknown"]
+
+
+class AssistantUsage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    calls: list[ModelCallUsage]
+    model_calls: int = Field(ge=0)
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
+    total_tokens: int | None = Field(default=None, ge=0)
+    latest_context_tokens: int | None = Field(default=None, ge=0)
+    context_capacity: int | None = Field(default=None, gt=0)
+    context_percent: float | None = Field(default=None, ge=0)
+    warning: bool
+    context_call_index: int | None = None
+    capacity_source: Literal["request.options.num_ctx", "unknown"]
+    context_source: Literal["latest_call_prompt_plus_completion", "unknown"]
+    context_is_estimate: bool
+
+
+class CompactionReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["compacted", "not_needed", "failed"]
+    before_prompt_tokens: int | None = None
+    after_prompt_tokens: int | None = None
+    measurement_source: Literal["ollama", "synthetic", "unknown"] = "unknown"
+    before_messages: int
+    after_messages: int
+    error: str | None = None
+    automatic: bool = False
+
+
 class AssistantChatResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -82,3 +123,5 @@ class AssistantChatResponse(BaseModel):
     )
     tool_calls: int = Field(ge=0)
     pending_action: PendingAction | None = None
+    usage: AssistantUsage | None = None
+    compaction: CompactionReport | None = None

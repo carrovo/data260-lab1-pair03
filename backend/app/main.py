@@ -17,6 +17,7 @@ from backend.app.routers.registration_routes import (
     router as registration_router,
 )
 from backend.app.routers.jobs import router as jobs_router
+from backend.app.routers.saved_items import router as saved_items_router
 from backend.app.routers.student_auth import router as student_auth_router
 from backend.app.routers.students_search import router as students_search_router
 
@@ -35,11 +36,13 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Conversation-Id"],
 )
 
 app.add_middleware(TraceMiddleware, service="app")
 
 app.include_router(student_auth_router)
+app.include_router(saved_items_router)
 app.include_router(jobs_router)
 app.include_router(applications_router)
 app.include_router(events_router)

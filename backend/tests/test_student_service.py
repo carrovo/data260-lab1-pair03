@@ -31,4 +31,6 @@ def test_student_service_exposes_only_student_routes():
         "/auth/login",
         "/auth/me",
         "/auth/logout",
+        "/auth/saved-items",
+        "/auth/saved-items/{item_type}/{item_id}",
     }
