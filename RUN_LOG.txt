@@ -313,7 +313,7 @@ Result:   PASS
   - JMeter load tests: Docker Compose and Docker Desktop Kubernetes (see METRICS.md).
   - Deployment, Kafka flow check and Assistant timings: AWS EKS (see [L2-13] to [L2-15]).
 
-[Carol harness checkpoint — 2026-11-15]
+[Xuanhua Li harness checkpoint — 2026-11-15]
   Branch feature/lab2-agent-harness; base dd6a7e17c4c91e2e8c0a29524773bd3cd8a7be4a.
   Added deterministic H01-H10 evaluation through production auth, Agent, tools,
   confirmation, sanitizer and tracing, with isolated SQL/SQLite fixtures.
@@ -333,7 +333,7 @@ Result:   PASS
   coverage or server-persistent memory. README records command and validator limits;
   METRICS.md records results. Existing deployment/performance entries preserved.
 
-[Carol Assistant memory — 2026-11-15]
+[Xuanhua Li Assistant memory — 2026-11-15]
   Base 6124c45ec9ec3e5e2f645a065bdc18374e8531da; branch feature/lab2-assistant-memory.
   Added Mongo-only assistant_rules/student_memory/conversations independently of
   business PERSISTENCE (still sql by default). Explicit preference learning,
@@ -368,7 +368,7 @@ Result:   PASS
   No local official PDF available; supplied requirements used. Code awaits review;
   no commit or push in this checkpoint.
 
-[Carol memory final review — 2026-11-15]
+[Xuanhua Li memory final review — 2026-11-15]
   Reviewed complete implementation and new files at base 6124c45. Fixed memory
   request publication: local producer buffering is insufficient; opt-in callback
   acknowledgement required, bounded to two seconds. Unavailable/error/timeout
@@ -393,7 +393,7 @@ Result:   PASS
   not a separately deployed worker. Final acknowledgement/opaque-entry fixes have
   automated coverage; real service verification was not rerun during this review.
 
-2026-11-15 — Carol: student Redux checkpoint (uncommitted review branch)
+2026-11-15 — Xuanhua Li: student Redux checkpoint (uncommitted review branch)
   Branch: feature/lab2-redux-student-state
   Base: 67eb3c3e7d1324a6887043f35e8bd137280f605b
   Added session, savedItems and assistant slices to the existing store. Auth
@@ -428,7 +428,7 @@ Result:   PASS
   Browser evidence remains the prior isolated SQL/Mongo-mock/deterministic-model
   real-HTTP check, not live-service evidence. DevTools screenshots still pending.
 
-2026-11-15 local — Carol: Agent observability checkpoint (uncommitted review)
+2026-11-15 local — Xuanhua Li: Agent observability checkpoint (uncommitted review)
   Branch: feature/lab2-agent-observability
   Base: 562d0d6bc5345ac3dab7612d9556c7bc9abc4370
   Added per-call Ollama counters, overlapping request totals and separately
@@ -485,7 +485,7 @@ Result:   PASS
   overlapping three-call request usage. No deployed/browser claim added.
   Redux DevTools screenshots remain pending. No AWS/JMeter/shared branch changes.
 
-2026-11-15 local / 2026-11-16 UTC — Carol Assistant traces and stage timing
+2026-11-15 local / 2026-11-16 UTC — Xuanhua Li Assistant traces and stage timing
   Branch: feature/lab2-assistant-trace-evidence
   Base: 58e09200d6534e4ae227485894f54370d29fd843; runtime hashes in environment.json.
   Added monotonic request-local model/tool/SQL cursor/Mongo command timing.

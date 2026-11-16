@@ -369,7 +369,7 @@ above) and on AWS (section above). MongoDB mode (`PERSISTENCE=mongo`) and the As
 test ran locally. The AWS deployment ran with `PERSISTENCE=sql`; AWS results are the deployment
 checks, the Kafka flow check, the Assistant timings and the CRUD load test in this section.
 
-## Deterministic Agent harness checkpoint (Carol, 2026-11-15)
+## Deterministic Agent harness checkpoint (Xuanhua Li, 2026-11-15)
 
 Verified on `feature/lab2-agent-harness`, based on
 `dd6a7e17c4c91e2e8c0a29524773bd3cd8a7be4a`, with uncommitted checkpoint code.
@@ -416,7 +416,7 @@ harness coverage, and server-persistent memory are not established. The validato
 supports currently declared constraints; unsupported references/composition and
 other schema constructs require maintenance review as documented in README.
 
-## Assistant memory checkpoint (Carol, 2026-11-15)
+## Assistant memory checkpoint (Xuanhua Li, 2026-11-15)
 
 Branch `feature/lab2-assistant-memory`, base
 `6124c45ec9ec3e5e2f645a065bdc18374e8531da`; initial verification used working-tree
@@ -493,7 +493,7 @@ the existing Starlette/httpx and mongomock datetime deprecations. SQL harness:
 10/10 passed, exit 0 (`memory-final-review-20261115`); H07 retains its original
 client-carried-history scope. No live model/deployed-worker run was added.
 
-## Student Redux checkpoint (Carol, 2026-11-15)
+## Student Redux checkpoint (Xuanhua Li, 2026-11-15)
 
 Scope: three slices added to the existing store: session/authentication, saved
 items and Assistant conversation. Business slices and persistence repositories
@@ -537,7 +537,7 @@ The 490-test full backend result above is reused from the preceding checkpoint;
 that complete suite and the isolated browser scenario were not rerun in this review.
 Manual Redux DevTools screenshots remain pending.
 
-## Agent usage and conversation compaction (Carol, 2026-11-15 local)
+## Agent usage and conversation compaction (Xuanhua Li, 2026-11-15 local)
 
 Native Ollama prompt/completion counters are preserved for every model call,
 including tools, repairs, summary generation and measurement probes. Request
@@ -616,7 +616,7 @@ Recorded live inference/evidence was reused, not rerun: final source-history
 privacy and summary order/category checks reproduce the exact stored after-history.
 Redux DevTools screenshots and deployed/browser compaction evidence remain pending.
 
-## Carol — Assistant trace and 50-request stage attribution (2026-11-15)
+## Xuanhua Li — Assistant trace and 50-request stage attribution (2026-11-15)
 
 Evidence: `loadtest/evidence_assistant_trace_stage50/` (50 JSONL observations,
 separate warm-ups, successful/failed trace dossiers, source hashes, reproducible

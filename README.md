@@ -424,7 +424,7 @@ Kubernetes it is `k8s/frontend.yaml`.
 - `scripts/verify_frontend.sh` starts the stack and checks every gateway route
   (`verify_frontend_output.txt`).
 
-## Deterministic Agent harness (Carol)
+## Deterministic Agent harness (Xuanhua Li)
 
 From the repository root, with the backend dependencies already installed in
 `.venv`, run:
@@ -457,7 +457,7 @@ conditional schemas, patterns/formats, and other array/object constraints are
 unsupported and currently unused. Schema changes must review validator support;
 unsupported constructs are not automatically enforced.
 
-### Assistant memory (Carol)
+### Assistant memory (Xuanhua Li)
 
 Memory uses `MONGO_URL` / `MONGO_DB` independently of `PERSISTENCE` (business
 default remains `sql`). With Mongo configured, every Assistant interaction uses
@@ -558,7 +558,7 @@ the real demo verifies Kafka/Mongo consolidation, not a live HTTP/Ollama deploym
 H07 remains `client_carried_history`. Redux, token/context instrumentation, Part 6
 automatic compaction, live-model memory safety and AWS deployment are out of scope.
 
-### Student Redux state (Carol)
+### Student Redux state (Xuanhua Li)
 
 The existing store now also owns `session`, `savedItems` and `assistant`. The
 jobs, companies, applications and events slice implementations are unchanged.
@@ -608,7 +608,7 @@ JWT, password or `action_token`; do not capture Network headers, localStorage,
 private dialogue or real student information. These must be actual Redux-panel
 captures, not ordinary page screenshots or exported state dumps.
 
-### Agent usage and conversation compaction (Carol)
+### Agent usage and conversation compaction (Xuanhua Li)
 
 Assistant responses add `usage` and `compaction` fields; existing response fields,
 authentication, tool validation, one-repair/six-iteration limits and explicit
@@ -718,7 +718,7 @@ credential keys use the shared privacy filter; detected private/invalid source
 history is rejected before any compaction model call. The recorded synthetic live
 example passes these stricter checks unchanged, so no inference rerun was needed.
 
-### Assistant trace and 50-request stage evidence (Carol)
+### Assistant trace and 50-request stage evidence (Xuanhua Li)
 
 `TraceMiddleware` now correlates bounded numeric Assistant stage spans with the
 existing `X-Trace-Id` and `p03.http` logger. It emits an `assistant_timing` JSON
