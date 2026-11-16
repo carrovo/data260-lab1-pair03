@@ -685,3 +685,60 @@ Verification after final production changes: full backend **534 passed, 0 failed
 run separately after live measurements; H07 remains client-carried history. These
 regressions are distinct from the live timing evidence. No frontend files changed;
 frontend checks were not rerun. Redux DevTools screenshots remain pending.
+
+## Xuanhua Li — bounded canonical compaction verification (2026-11-16)
+
+Baseline `406c85e96a98e1877c3b0b47862c7f2c2fa7ea5a`, with the reviewed structured
+output/canonical-source fix. Actual network HTTP through an isolated Vite frontend
+proxy (5174) to the integrated backend (9130), real local Mongo and host Ollama
+`qwen3:8b`; this was not in-process ASGI or a deployed gateway/AWS verification.
+No shared-service restart, context increase, timeout increase or load-test rerun.
+
+The original 32-message conversation was preserved; exactly one compaction used a
+same-owner source-identical Mongo copy, followed by one stored-history recall.
+Earlier failed attempts remain retained, not replaced or selectively relabeled.
+Native structured output selected bounded integer IDs from one canonical inventory;
+source grounding and chronology were validated before durable version-CAS storage.
+
+| Phase | Measured prompt tokens | Measured completion tokens |
+|---|---:|---:|
+| Before probe | 2922 | 2 |
+| Canonical ID selection | 1558 | 238 |
+| After probe | 2505 | 2 |
+| One stored-history recall | 2517 | 45 |
+
+Actual probe reduction: **417 tokens / 14.27%**. Stored messages **32 → 3**;
+test-copy version **1 → 2** at compaction. Original version **13**, 32 messages and
+history hash unchanged. Total compaction client elapsed **268825.108 ms (~269 s)**.
+Compaction request usage was **6985 prompt + 242 completion = 7227 tokens across
+three calls**, not context occupancy. Latest-call occupancy estimate was
+**2507 / 4096 = 61.20605%**, derived from measured counters.
+
+Preflight values were separately **estimated**: 3573 input tokens + 399 reserved
+output tokens within the configured 4096 context. They are heuristic budget values,
+not measured tokens. Actual selection used 1558 prompt / 238 completion tokens.
+The existing 240-second per-call timeout and automatic threshold were unchanged.
+Canonical input retained 75 exact source quotes, with source spans/hashes checked;
+no category required more items than its schema permits. Large or ambiguous
+sources may still be rejected before inference rather than lose essential facts.
+
+Recall: HTTP 200, one model call, zero tool calls, no manually supplied history or
+answers. Observed checks matched San Jose, negative submission, uncertain status
+and eligibility step. Independent inspection of the actual compacted catalog
+verified all requested facts, original-source provenance and the retained recent
+tail. Learned memory contained only the city key; city recall alone is not claimed
+as summary-retention proof. No live negative-control inference was performed.
+
+Ignored local records: `loadtest/temp/final-evidence/compaction-budget/live-result.json`,
+`offline-verified.json`, README.md and focused/full/harness logs. Prior failures
+remain in `loadtest/temp/final-evidence/compaction-fix/` and the original log. None
+of those temporary/private artifacts or screenshots are added to this commit.
+Older tracked memory/compaction/trace evidence remains intact and separately dated.
+
+Reused final verification: focused **95 passed**, 0 failed/skipped, 256 dependency
+warnings; full backend **559 passed**, 0 failed/skipped, 316 dependency warnings,
+103.47 s; SQL harness **10/10**, exit 0. No inference or suites rerun for this save.
+Warnings are existing Starlette/httpx and mongomock datetime deprecations.
+The ~269-second synchronous request leaves limited timeout headroom; deployed
+nginx/gateway/AWS behavior remains **unverified**. Screenshots remain pending for
+separate chat/folder delivery, including actual Redux DevTools and live UI capture.

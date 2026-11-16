@@ -811,3 +811,55 @@ early measured requests; other Docker workloads were present. Keep this shared-h
 limitation with any reuse of the numbers. Reported timeouts mean client HTTP
 deadlines; the existing model abstraction classifies internal transport failures
 as bounded `model_backend_error`, without identifying their timeout subtype.
+
+### Bounded conversation compaction — Xuanhua Li (2026-11-16)
+
+`/compact` now uses Ollama native JSON Schema output for a bounded selection of
+canonical source-quote IDs. A single inventory replaces duplicated dialogue and
+required-quote text. Narrow rules remove exact duplicates, clearly equivalent
+single-clause notes and recognized acknowledgements/procedural scaffolding;
+distinct facts, identifiers, uncertainties, negations and corrections remain exact
+source quotes. The stored untrusted catalog preserves global chronological order,
+with category references and source-span/hash provenance. Older grouped summaries
+remain readable. No arbitrary free-text summary or invented fact is accepted.
+
+Preflight validates coverage, source privacy, group/reference/summary limits and
+available context before any model call. Token preflight is explicitly an
+**estimate** (ASCII UTF-8 bytes/2 plus framing reserve; non-ASCII byte fallback),
+including production rule/memory injection, not measured tokenizer output. The
+summary receives a per-call output allocation capped at 512 tokens and never above
+an existing configured output cap. Infeasible sources fail explicitly; they are not
+silently truncated. Native model context 4096, 240-second timeout, existing
+thresholds, ownership/confirmation protections and atomic Mongo version checks
+were not raised or relaxed. Compaction still uses at most three model calls.
+
+One controlled real-network verification used the current frontend proxy, real
+local Mongo/Ollama and a same-owner source-identical copy of the 32-message
+conversation. Measured probe prompts fell **2922 → 2505 (14.27%)** and stored
+messages **32 → 3**. The original conversation remained version 13 / 32 messages,
+with its history hash unchanged. The one follow-up supplied only conversation ID
+and a question, without answers/history; recall matched the preferred city,
+unsubmitted/unknown application state and eligibility-check next step. All 75
+source references and requested facts were independently checked in the stored
+catalog. City also exists in learned memory, so city recall alone is not proof.
+
+The request took approximately **269 seconds**. This is isolated local network
+HTTP evidence, not deployed gateway/AWS/browser screenshot verification. Synchronous
+latency remains substantial, and the heuristic preflight is not a guarantee against
+native truncation for every input. Earlier invalid-JSON, no-reduction and timeout
+attempts remain preserved; older successful demo evidence is not relabeled.
+
+Existing local verification records remain ignored under
+`loadtest/temp/final-evidence/compaction-budget/` (README.md, live-result.json,
+offline-verified.json and test/harness logs); prior failures remain under
+`loadtest/temp/final-evidence/compaction-fix/` and in the original backend log.
+These are local paths, not claimed tracked submission artifacts. No private login
+file, raw dialogue/logs, temporary evidence or screenshot is included in this fix.
+Screenshots remain for separate chat/folder delivery: use the actual Redux DevTools,
+usage/compaction/recall UI and saved-evidence views; do not substitute state dumps
+or relabel earlier ASGI evidence as a browser run. The five-prompt set still needs
+confirmation before its screenshots are claimed.
+
+Verification reused without another run: **95 focused tests**, **559 backend tests**
+(no failures/skips) and SQL deterministic harness **10/10**. See METRICS.md and
+RUN_LOG.txt for measured counters and command records.

@@ -115,3 +115,41 @@ def test_num_predict_setting_defaults_to_none(monkeypatch):
     )
 
     assert configured.ollama_num_predict is None
+
+
+def test_response_schema_is_native_per_call_and_preserves_chat_configuration(monkeypatch):
+    captured = capture_payload(monkeypatch)
+    client = OllamaClient()
+    schema = {'type': 'object', 'properties': {'items': {'type': 'array'}}, 'required': ['items']}
+    configured = client.with_response_schema(schema)
+    schema['required'].append('changed_after_configuration')
+
+    complete_once(configured)
+    assert captured['json']['format']['required'] == ['items']
+    assert captured['json']['options']['num_ctx'] == client.num_ctx
+    assert captured['json']['think'] is False
+    assert captured['json']['stream'] is False
+    assert captured['json']['model'] == client.model
+    assert captured['timeout'] is client.timeout
+
+    complete_once(client)
+    assert 'format' not in captured['json']  # Original chat/probe client unchanged.
+
+
+def test_summary_output_budget_is_per_call_without_changing_context_or_timeout(monkeypatch):
+    captured = capture_payload(monkeypatch)
+    original = OllamaClient()
+    configured = original.with_response_schema({'type':'object'}, num_predict=320)
+    complete_once(configured)
+    assert captured['json']['options']['num_predict'] == 320
+    assert captured['json']['options']['num_ctx'] == original.num_ctx
+    assert captured['timeout'] is original.timeout
+    complete_once(original)
+    assert 'format' not in captured['json']
+    assert captured['json']['options'].get('num_predict') == original.num_predict
+
+
+@pytest.mark.parametrize('invalid', [True, 0, -1, '256'])
+def test_invalid_per_call_summary_budget_is_rejected(invalid):
+    with pytest.raises(ValueError, match='invalid_output_budget'):
+        OllamaClient().with_response_schema({'type':'object'}, num_predict=invalid)
