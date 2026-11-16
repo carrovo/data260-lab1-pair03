@@ -102,6 +102,26 @@ class AssistantUsage(BaseModel):
     context_is_estimate: bool
 
 
+class CompactionBudget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: Literal["estimated_utf8_bytes_div2_ascii_plus_framing"]
+    estimated_input_tokens: int = Field(ge=0)
+    reserved_output_tokens: int = Field(gt=0, le=512)
+    context_capacity: int = Field(gt=0)
+
+
+class CompactionQuoteSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    quote_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    message_index: int = Field(ge=0)
+    excerpt_index: int = Field(ge=0)
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+    role: Literal["user", "assistant"]
+    equivalent_message_indices: list[int] = Field(max_length=40)
+    categories: list[str] = Field(max_length=8)
+
+
 class CompactionReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: Literal["compacted", "not_needed", "failed"]
@@ -112,6 +132,9 @@ class CompactionReport(BaseModel):
     after_messages: int
     error: str | None = None
     automatic: bool = False
+    budget: CompactionBudget | None = None
+    source_history_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_provenance: list[CompactionQuoteSource] = Field(default_factory=list, max_length=96)
 
 
 class AssistantChatResponse(BaseModel):

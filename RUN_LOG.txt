@@ -534,3 +534,46 @@ Result:   PASS
   Own server shut down; synthetic DB retained; shared services not restarted.
   No JMeter/AWS/Kafka flow run or partner evidence change; frontend unchanged.
   Redux DevTools screenshots pending. No commit/push/merge in this checkpoint.
+
+2026-11-16 — Xuanhua Li: verified bounded compaction fix
+  Worktree: /private/tmp/data260-final-evidence-xuanhua
+  Branch: feature/lab2-final-evidence-xuanhua
+  Base: 406c85e96a98e1877c3b0b47862c7f2c2fa7ea5a.
+  Native Ollama JSON Schema now selects bounded quote IDs from a canonical source,
+  avoiding duplicated full dialogue/quote inventory and unbounded string generation.
+  Exact grounding, negations/corrections, global chronology and source provenance
+  retained; infeasible coverage/context/output limits fail before inference.
+  Configured output caps respected; per-call summary maximum512, actual reserve399.
+  Context4096, 240s timeout, thresholds and ownership/version-CAS checks unchanged.
+  Completed focused verification (reused for final save):
+  .venv/bin/python -m pytest -q backend/tests/test_compaction_budget.py backend/tests/test_agent_observability.py backend/tests/test_ollama_client.py backend/tests/test_assistant_memory.py backend/tests/test_assistant_stage_timing.py -rs
+  95 passed,0 failed/skipped,256 dependency warnings,2.00s.
+  Completed full backend after final production edits:
+  .venv/bin/python -m pytest -q backend/tests -rs
+  559 passed,0 failed/skipped,316 dependency warnings,103.47s.
+  Completed SQL harness:
+  sh scripts/run_agent_harness.sh --persistence sql --label budget-verified --output-dir loadtest/temp/final-evidence/compaction-budget/sql-harness-verified
+  10/10 passed,exit0; H07 remains client_carried_history.
+  Existing installed virtualenv reused; its temporary worktree link was removed.
+  No dependencies installed. No inference/suites rerun during final save review.
+  Controlled live command (run once, not a reusable retry loop):
+  PYTHONPATH=/private/tmp/data260-final-evidence-xuanhua /Users/carol/Documents/data260-lab1-pair03/.venv/bin/python loadtest/temp/final-evidence/compaction-budget/verify_once.py
+  Actual UTC start2026-11-16T09:59:47.951892+00:00; local PST2026-11-16.
+  Trace:xuanhua-budget-compact-c0694baa3a; real network HTTP via frontend5174 to
+  isolated integrated backend9130, real local Mongo/Ollama qwen3:8b.
+  Exactly one same-owner source-identical copy; HTTP200/compacted.
+  Measured prompt/completion: before2922/2, selection1558/238, after2505/2.
+  Probe2922 ->2505 =417 fewer prompt tokens (14.27%); messages32 ->3.
+  Request total7227 tokens across3 calls; latest occupancy2507/4096=61.20605%.
+  Preflight3573 input +399 reserved output are ESTIMATES, not measured counters.
+  Total client268825.108ms (~269s); gateway/AWS behavior not verified.
+  One recall with only conversation_id/question: HTTP200,2517/45 measured tokens,
+  one model call/zero tools. City, unsubmitted/unknown status and eligibility-step
+  checks matched;75 actual stored-catalog source references and fact coverage verified.
+  City learned memory also existed; city recall alone is not summary proof.
+  Original conversation remains version13/messages32/hash unchanged. Prior
+  invalid-JSON/no-reduction/timeout attempts and original log remain preserved.
+  Ignored local evidence: loadtest/temp/final-evidence/compaction-budget/.
+  No screenshot, private login, raw log/dialogue or temporary evidence staged.
+  Screenshots remain separate chat/folder delivery; intended five-prompt set pending.
+  Isolated servers and synthetic data left available; shared services unchanged.
