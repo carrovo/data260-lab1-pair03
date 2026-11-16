@@ -60,6 +60,8 @@ def test_unset_num_predict_does_not_add_an_override(monkeypatch):
         "role": "assistant",
         "content": "Model response",
         "tool_calls": None,
+        "usage": {"prompt_tokens": None, "completion_tokens": None,
+                  "context_capacity": 4096, "capacity_source": "request.options.num_ctx", "source": "ollama"},
     }
 
 

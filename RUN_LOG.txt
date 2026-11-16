@@ -427,3 +427,60 @@ Result:   PASS
   Reused prior full backend result: 490 passed, 110 warnings; not rerun here.
   Browser evidence remains the prior isolated SQL/Mongo-mock/deterministic-model
   real-HTTP check, not live-service evidence. DevTools screenshots still pending.
+
+2026-11-15 local — Carol: Agent observability checkpoint (uncommitted review)
+  Branch: feature/lab2-agent-observability
+  Base: 562d0d6bc5345ac3dab7612d9556c7bc9abc4370
+  Added per-call Ollama counters, overlapping request totals and separately
+  labeled latest-call occupancy estimates; configurable request num_ctx default
+  4096, UI warning strictly above 70%, auto-compaction threshold default 80%.
+  /compact uses server-owned Mongo history, source-validated extractive summary,
+  two-message tail and existing ownership/expiry/version CAS. At most three
+  compaction calls, once per HTTP request. Pending confirmation blocks compaction.
+  No credentials/tokens/private tool payloads are persisted by summary/metrics.
+  Focused command: .venv/bin/python -m pytest -q backend/tests/test_agent_observability.py backend/tests/test_ollama_client.py backend/tests/test_ai_core.py backend/tests/test_student_assistant.py backend/tests/test_assistant_memory.py -rs
+  Result: 132 passed, 0 failed/skipped, 218 dependency deprecation warnings.
+  npm --prefix frontend test: 35 passed, 0 failed/skipped.
+  npm --prefix frontend run lint; npm --prefix frontend run build: passed.
+  sh scripts/run_agent_harness.sh --persistence sql --label observability-final --output-dir loadtest/temp/agent_harness/observability-final
+  Result: H01–H10 10/10 passed, exit 0; H07 remains client-carried history.
+  Live command: .venv/bin/python -m backend.observability_demo --label local-observability
+  Actual UTC 2026-11-16T03:42:24.444521+00:00: measured probe prompts 1309 ->
+  1168; 12 -> 3 stored messages; input-sensitive follow-up recalled city/next step.
+  After strengthening other-facts coverage, ran a distinct fresh namespace:
+  .venv/bin/python -m backend.observability_demo --label coverage-validated
+  Actual UTC 2026-11-16T03:46:44.612370+00:00: measured 1309 -> 1194 prompt
+  tokens, 12 -> 3 messages. Three-call request totals 3243 prompt/146 completion;
+  latest-call estimated occupancy 1196/4096 = 29.19921875%. Recall 1195/19,
+  San Jose + eligibility step, no learned entries or resubmitted client history.
+  Actual host Ollama 0.40.6/qwen3:8b and local Mongo; authenticated ASGI routes
+  with isolated SQLite fixtures. Not a deployed server/browser/worker check.
+  No shared restart, volume/database reset, environment overwrite or secret output.
+  Both ignored raw files preserved, tracked synthetic summary:
+  loadtest/summary_assistant_observability_2026-11-15.md
+  Final quote-validation/logging hardening has automated coverage; observed final
+  live summary revalidated unchanged. No extra live run claimed afterward.
+  Existing Redux DevTools capture checklist remains pending. No JMeter or AWS run.
+  Final complete backend after code changes:
+  .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 518 passed, 0 failed/skipped, 277 dependency deprecation warnings,
+  40.49 seconds. Final frontend tests/lint/build passed (35 tests).
+  Final SQL harness rerun:
+  sh scripts/run_agent_harness.sh --persistence sql --label observability-review --output-dir loadtest/temp/agent_harness/observability-review
+  Result: 10/10 passed, exit 0. Compile/import, shell syntax, conflict/secret and
+  diff checks passed. Checkpoint remains uncommitted; no push/merge/deployment.
+  Final authorized save review:
+  Preserved all 20 checkpoint files; reviewed full diff/new files directly.
+  Fixed A/B/A correction ordering, quote-category/order validation, malformed
+  summary-shaped history and JSON-quoted credential keys; private source data
+  fails before any compaction model call. Added 8 focused adversarial cases.
+  Reran focused backend: 140 passed, 218 warnings; complete backend: 526 passed,
+  0 failed/skipped, 276 warnings in 40.80 seconds. Frontend: 35 passed,
+  lint/build passed. SQL harness observability-finalize: 10/10, exit 0.
+  Warning review: one Starlette TestClient/httpx deprecation, 275 mongomock
+  datetime.utcnow deprecations; no new application warning category or fixes
+  to unrelated dependencies. Original 277-warning run preserved above.
+  Live artifact is unchanged under final validation/privacy checks; no new live
+  inference. 1309 -> 1194 remains measured probe prompt tokens; 3389 remains
+  overlapping three-call request usage. No deployed/browser claim added.
+  Redux DevTools screenshots remain pending. No AWS/JMeter/shared branch changes.

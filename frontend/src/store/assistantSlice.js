@@ -2,10 +2,12 @@ import { createSlice, nanoid } from '@reduxjs/toolkit'
 import { boundary, logoutSession } from './sessionSlice.js'
 import { publicMessages, publicText } from './studentRuntime.js'
 import { refreshSavedItems } from './savedItemsSlice.js'
+import { safeUsage, safeCompaction } from './observability.js'
 
 const initialState = {
   messages: [], conversationId: null, pending: null, status: 'idle', error: null,
   requestId: null, expired: false, restartRequired: false,
+  usage: null, compaction: null,
 }
 const slice = createSlice({
   name: 'assistant', initialState,
@@ -20,6 +22,7 @@ const slice = createSlice({
       if (state.requestId !== payload.requestId) return
       state.messages = payload.messages; state.conversationId = payload.conversationId
       state.pending = payload.pending; state.status = 'succeeded'; state.requestId = null
+      state.usage = payload.usage; state.compaction = payload.compaction
     },
     failed(state, { payload }) {
       if (state.requestId !== payload.requestId) return
@@ -77,6 +80,7 @@ function exchange(input) {
       const fallback = [...current.messages, ...(!confirming ? [{ role: 'user', content: input.message.trim() }] : []),
         { role: 'assistant', content: result.reply || 'The assistant returned no response.' }]
       dispatch(slice.actions.completed({ requestId, pending,
+        usage: safeUsage(result.usage), compaction: safeCompaction(result.compaction),
         messages: publicMessages(result.conversation?.length ? result.conversation : fallback, [token, previousPendingToken, action?.action_token]),
         conversationId: result.conversation_id || current.conversationId,
       }))

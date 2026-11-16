@@ -768,7 +768,7 @@ def _handle_declined_confirmation(
     )
 
 
-def run_assistant(
+def _run_assistant(
     db: Any,
     user_message: str,
     conversation: Any,
@@ -996,3 +996,19 @@ def run_assistant(
         tool_call_count,
         "iteration_ceiling",
     )
+
+
+def run_assistant(db, user_message, conversation, model_client, *, student_id=None,
+                  auto_approve=False, max_iterations=DEFAULT_MAX_ITERATIONS,
+                  tool_schemas=None, tool_implementations=None):
+    """Observe every iteration/repair through the same client, without changing limits."""
+    from backend.app.ai.usage import UsageModelClient
+
+    tracked = model_client if isinstance(model_client, UsageModelClient) else UsageModelClient(model_client)
+    result = _run_assistant(
+        db, user_message, conversation, tracked, student_id=student_id,
+        auto_approve=auto_approve, max_iterations=max_iterations,
+        tool_schemas=tool_schemas, tool_implementations=tool_implementations,
+    )
+    result["usage"] = tracked.recorder.report()
+    return result

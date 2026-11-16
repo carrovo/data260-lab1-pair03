@@ -607,3 +607,113 @@ saving a synthetic opportunity. Verify that neither State nor Action contains a
 JWT, password or `action_token`; do not capture Network headers, localStorage,
 private dialogue or real student information. These must be actual Redux-panel
 captures, not ordinary page screenshots or exported state dumps.
+
+### Agent usage and conversation compaction (Carol)
+
+Assistant responses add `usage` and `compaction` fields; existing response fields,
+authentication, tool validation, one-repair/six-iteration limits and explicit
+confirmation remain intact. The existing trace logger records only numeric usage,
+call purpose/source and trace ID, never model prompts, replies or credentials.
+
+`OllamaClient` preserves `prompt_eval_count` and `eval_count` as per-call prompt and
+completion counts ([Ollama API](https://docs.ollama.com/api/chat)). Request totals
+sum every invocation, including tool loops, repair calls and compaction probes/
+summary generation. Repeated prompts overlap: totals describe evaluated request
+work, not unique context or billing. Any missing counter makes that aggregate
+unknown (`null`); a request with no model invocations legitimately totals zero.
+Deterministic tests label supplied counters `synthetic`, never live measurements.
+
+`OLLAMA_NUM_CTX` is a positive integer, default **4096**, preserving the previously
+hard-coded native request budget. Capacity comes from the actual request's
+`options.num_ctx`, not a guessed model architecture limit. Latest-call context is
+`(latest prompt + latest completion) / requested num_ctx * 100`, using only the
+latest call, never the request sum. This is an **estimated occupancy derived from
+measured counters**, not an exact observation of Ollama's resident/sliding KV
+window. It can exceed 100% when evaluated work exceeds the requested budget; it
+is not silently clamped. Missing usage/capacity is displayed as unknown. The UI
+warns strictly above **70%**, using the unrounded value. Per-call source/purpose,
+request totals and latest-call percentage are shown separately in the existing
+Redux Assistant state, with the existing account/late-response guards and resets.
+
+In an active Mongo-backed Assistant conversation, type **`/compact`** or choose
+Compact conversation. The command uses the authenticated student's stored history;
+client-supplied history cannot replace it. `ASSISTANT_COMPACT_THRESHOLD_PERCENT`
+(default **80**, valid range `(0, 100]`) automatically attempts compaction when a
+completed Agent call's known context estimate exceeds that percentage. There is
+at most one automatic attempt per HTTP request and no recursive Agent loop.
+Unknown occupancy never triggers it. No Compose/Kubernetes/AWS defaults changed.
+
+Compaction is separate from Kafka learned-memory consolidation. It performs at
+most three calls: a before probe, a model-selected extractive summary, and an after
+probe. Probes use identical trusted rules, tool schemas and a fixed READY request;
+reported before/after values are their measured **prompt** counts, not the summary
+call's input/output or character estimates. All three calls count toward request
+usage. If metadata is unavailable, reduction is explicitly unverified/unknown;
+when comparable counts exist, no reduction means failure and no replacement.
+
+The summary retains source-verbatim quotes grouped into preferences, jobs,
+companies, events, applications, current request, next steps and other facts.
+Every original sentence and concrete identifier must remain represented by the
+summary or the **two most recent public messages**, retained verbatim. Exact
+duplicates may merge; no unrelated facts are dropped to hit a target. Bounds are
+40 quotes per group and 6500 characters for the defended summary (a safety bound,
+not a token estimate). This conservative extractive policy may refuse to compact
+a large, entirely novel history; it does not fabricate a lossy paraphrase.
+
+Generated text is validated against source dialogue and passed through production
+untrusted-data delimiters/sanitization as a user-role recollection. It never
+becomes a system rule or verified opportunity/application fact; reverify those
+facts with tools. Private content is not persisted. Previously compacted quotes
+are flattened on repeat compaction, rather than nesting summaries. Mongo's
+existing ownership/expiry/version CAS atomically replaces history plus numeric
+`last_usage`/`last_compaction` metadata. Failed models, unusable summaries, expiry
+or a concurrent turn retain the old/current history. Automatic failure still
+saves the current public turn without discarding the uncompressed conversation.
+
+A durable `pending_confirmation` boolean blocks compaction and further normal
+turns until the student confirms, declines or ends the session. It contains no
+confirmation token. Compaction calls cannot dispatch tools, approve or replay a
+write. Existing transient-token restart UI remains unchanged. No Redux persistence,
+refresh/cross-device restore, AWS deployment or load testing was added.
+
+Verification commands (repository root, installed `.venv`/frontend dependencies):
+
+```bash
+.venv/bin/python -m pytest -q backend/tests/test_agent_observability.py backend/tests/test_ollama_client.py backend/tests/test_ai_core.py backend/tests/test_student_assistant.py backend/tests/test_assistant_memory.py -rs
+npm --prefix frontend test
+npm --prefix frontend run lint
+npm --prefix frontend run build
+.venv/bin/python -m pytest -q backend/tests -rs
+sh scripts/run_agent_harness.sh --persistence sql --label observability-final --output-dir loadtest/temp/agent_harness/observability-final
+```
+
+Optional live verification, only when host Ollama `qwen3:8b` and the existing
+`p03-mongo` container/host port 9038 are already available:
+
+```bash
+.venv/bin/python -m backend.observability_demo --label local-check
+```
+
+The demo reads existing container credentials in memory, creates a fresh
+`p03_observability_<label>_<suffix>` database and isolated SQLite authentication
+fixtures, and invokes authenticated production routes via local ASGI TestClient.
+It does not deploy an API or restart services, overwrite environment files, delete
+data, or access real student records. Each run writes a new synthetic JSON file
+under ignored `loadtest/temp/observability/` and reports its path. Model generation
+is not deterministic; retain/report failures rather than claiming success from
+health checks. See the tracked observability summary and METRICS for actual runs.
+The earlier Redux DevTools screenshot checklist remains pending and unchanged.
+
+Compaction is synchronous and adds bounded model work. On slow hardware, multiple
+calls may exceed unchanged gateway/proxy timeouts; this checkpoint does not claim
+AWS/gateway timeout or load validation. Final live output was revalidated against
+the strengthened whole-sentence/negation validator unchanged; validation/logging
+hardening afterward has automated coverage, not a separately claimed live rerun.
+
+Final review additionally preserves each duplicate quote's last-occurrence order
+(e.g. A → B → A retains B before the final A), rejecting model-reordered or
+misclassified quotes. Malformed summary-shaped data is retained as ordinary
+untrusted history rather than silently skipping invalid fields. Quoted JSON
+credential keys use the shared privacy filter; detected private/invalid source
+history is rejected before any compaction model call. The recorded synthetic live
+example passes these stricter checks unchanged, so no inference rerun was needed.

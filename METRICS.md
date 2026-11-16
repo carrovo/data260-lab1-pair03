@@ -500,3 +500,82 @@ Frontend tests/lint/build and the 8 focused backend tests were rerun successfull
 The 490-test full backend result above is reused from the preceding checkpoint;
 that complete suite and the isolated browser scenario were not rerun in this review.
 Manual Redux DevTools screenshots remain pending.
+
+## Agent usage and conversation compaction (Carol, 2026-11-15 local)
+
+Native Ollama prompt/completion counters are preserved for every model call,
+including tools, repairs, summary generation and measurement probes. Request
+usage sums overlapping calls. Context percentage uses only the latest call's
+prompt + completion against the actual configured request `num_ctx` (default
+4096); it is explicitly an occupancy estimate, not exact resident KV state or a
+character-based token count. Unavailable counters/capacity stay unknown. The UI
+warns strictly above 70%; automatic compaction defaults to strictly above 80%
+(configurable). It is bounded to one attempt/HTTP request and three extra model
+calls, never an unbounded/recursive model loop.
+
+Compaction uses authenticated Mongo ownership/read-time expiry and atomic version
+CAS. A source-grounded extractive summary preserves whole sentences and concrete
+identifiers across preferences/jobs/companies/events/applications/current request/
+next steps/other facts, with two recent public messages retained verbatim. Generated
+summary data is never a system instruction or verified application/opportunity
+fact. Pending confirmations block compaction until resolved or session end; tokens
+are not stored. Failure/invalid output/no measured reduction/concurrent writes do
+not replace history. Large novel histories can legitimately fail the conservative
+6500-character/40-quotes-per-group bound; no arbitrary truncation is substituted.
+
+Live evidence (host Ollama 0.40.6, `qwen3:8b`, requested context 4096, no output-cap
+override), through authenticated production ASGI routes, actual local Mongo and
+isolated SQLite auth/business fixtures, not a deployed API/browser/Compose rebuild:
+
+| Run | Measured probe prompt tokens before → after | Public messages before → after | Recall |
+|---|---:|---:|---|
+| Initial policy, 2026-11-16 03:42:24 UTC | 1309 → 1168 | 12 → 3 | Passed |
+| Final other-facts coverage, 2026-11-16 03:46:44 UTC | 1309 → 1194 | 12 → 3 | Passed |
+
+The second run retains uncategorized sentences too. Its three calls used prompt/
+completion counters **1309/2, 740/142, 1194/2**: request total **3243 prompt + 146
+completion = 3389 tokens**, distinct from the latest context estimate
+**1196 / 4096 = 29.19921875%**. Recall used **1195 prompt + 19 completion** and
+returned “Your preferred city is San Jose. The unresolved next step is to check
+eligibility with tools.” Learned-memory count was zero: this recalled stored
+compacted dialogue, with no client-carried history. Both original run files remain
+ignored/unmodified; a sanitized tracked report with source hashes and exact
+model-visible defended summary is `loadtest/summary_assistant_observability_2026-11-15.md`.
+
+Final whole-sentence/negation validation was replayed against that observed summary
+unchanged; numeric-logging/validation hardening after the live run was tested
+locally, not claimed as another live run. Automatic threshold, concurrent-turn,
+failure and confirmation cases use deterministic production-path tests, not live
+failure injection. No shared services were restarted; no existing database/volume,
+environment file, AWS/Kafka deployment or JMeter evidence was changed.
+
+Verification: focused production tests — 132 passed, 0 failed/skipped, 218 dependency
+deprecation warnings. Frontend — 35 passed, 0 failed/skipped; lint/build passed.
+Existing SQL deterministic harness — H01–H10 all passed, exit 0, preserving H07's
+`client_carried_history` claim. Raw harness reports are ignored under
+`loadtest/temp/agent_harness/observability-final/`. UI browser verification and
+actual Redux DevTools screenshots were not added; the existing safe capture
+checklist remains pending. This small live example does not establish general
+live-model injection resistance, load performance or AWS/gateway timeout behavior.
+
+Final complete backend command: `.venv/bin/python -m pytest -q backend/tests -rs`:
+**518 passed, 0 failed, 0 skipped, 277 existing-library deprecation warnings,
+40.49 seconds**, after final code changes. Warnings are Starlette/httpx and
+mongomock datetime deprecations. Final SQL harness rerun (`observability-review`):
+10/10 passed, exit 0. Python compile/import, shell syntax and diff checks passed.
+Compaction remains synchronous: three bounded calls can still exceed existing
+proxy timeouts on slow hardware; gateway/AWS behavior was not verified or changed.
+
+Final scoped save review: fixed correction chronology/category validation,
+malformed-summary flattening and detection of quoted credential fields before
+compaction. Added adversarial correction/category, malformed-source, concurrent
+usage-isolation and five credential-source tests. Final reruns: **140 focused
+backend tests passed** (218 warnings), **526 complete backend tests passed**
+(0 failed/skipped, **276 warnings**, 40.80 seconds), **35 frontend tests passed**,
+lint/build passed; SQL harness `observability-finalize` **10/10**, exit 0.
+The earlier 277 warnings and this run's 276 are the same dependency categories:
+Starlette TestClient/httpx deprecation (1 here) and mongomock's datetime.utcnow
+(275 here). No new application warning category or unrelated dependency upgrade.
+Recorded live inference/evidence was reused, not rerun: final source-history
+privacy and summary order/category checks reproduce the exact stored after-history.
+Redux DevTools screenshots and deployed/browser compaction evidence remain pending.

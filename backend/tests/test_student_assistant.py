@@ -212,6 +212,16 @@ def test_authenticated_normal_response(assistant_test_context):
         ],
         "tool_calls": 0,
         "pending_action": None,
+        "compaction": None,
+        "usage": {
+            "calls": [{"index": 1, "purpose": "agent", "prompt_tokens": None,
+                       "completion_tokens": None, "context_capacity": None,
+                       "source": "unknown", "capacity_source": "unknown"}],
+            "model_calls": 1, "prompt_tokens": None, "completion_tokens": None,
+            "total_tokens": None, "latest_context_tokens": None, "context_capacity": None,
+            "context_percent": None, "warning": False, "context_call_index": 1,
+            "capacity_source": "unknown", "context_source": "unknown", "context_is_estimate": False,
+        },
     }
 
 

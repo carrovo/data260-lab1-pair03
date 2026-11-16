@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { selectAssistant, sendChat, decideConfirmation, startNewConversation } from '../store/assistantSlice.js'
+import { contextWarning } from '../store/observability.js'
 
 
 const MAX_MESSAGE_LENGTH = 8000
@@ -57,10 +58,23 @@ function AssistantPage() {
           </p>
         </div>
         <button type="button" className="secondary-button" disabled={loading} onClick={() => dispatch(startNewConversation())}>New conversation</button>
+        <button type="button" className="secondary-button" disabled={loading || Boolean(pendingAction) || expired || !state.conversationId}
+          onClick={() => dispatch(sendChat('/compact'))}>Compact conversation</button>
         <span className="assistant-status-badge">
           <span aria-hidden="true" /> AI assistant
         </span>
       </div>
+
+      <section className="surface-card" aria-label="Model usage">
+        <p>Last completed request: prompt {state.usage?.prompt_tokens ?? 'unknown'} · completion {state.usage?.completion_tokens ?? 'unknown'} · total {state.usage?.total_tokens ?? 'unknown'} tokens · model calls {state.usage?.model_calls ?? 'unknown'}.</p>
+        <p>Latest-call context: {state.usage?.context_percent == null ? 'unknown' : `${state.usage.context_percent.toFixed(1)}%`}
+          {' '}of configured request capacity ({state.usage?.context_capacity ?? 'unknown'} tokens).
+          {state.usage?.context_is_estimate && ' Estimated occupancy from measured prompt + completion counters; not an exact resident-window measurement.'}</p>
+        <p>Request prompt totals overlap; they are not context occupancy. Missing metadata is unknown.</p>
+        {contextWarning(state.usage) && <p role="alert" className="error-message">Context usage exceeds 70%. Consider /compact.</p>}
+        {state.usage?.calls.map(call => <p key={call.index}>Call {call.index} ({call.purpose}, {call.source}): prompt {call.prompt_tokens ?? 'unknown'}, completion {call.completion_tokens ?? 'unknown'}.</p>)}
+        {state.compaction && <p role="status">Compaction: {state.compaction.status}{state.compaction.automatic ? ' (automatic)' : ''}; before {state.compaction.before_prompt_tokens ?? 'unknown'} → after {state.compaction.after_prompt_tokens ?? 'unknown'} prompt tokens ({state.compaction.measurement_source}).</p>}
+      </section>
 
       <div className="surface-card assistant-workspace">
         <div

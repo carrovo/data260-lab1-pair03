@@ -23,7 +23,8 @@ def now():
 
 def public_text(text):
     if re.search(
-        r"(?i)\b(?:password|token|secret|api.key)\s*(?:is\b|[:=])|bearer\s+\S+"
+        r"(?i)\b(?:password|(?:access_|action_|refresh_)?token|secret|api[_ .-]?key|authorization)"
+        r"[\"']?\s*(?:is\b|[:=])|bearer\s+\S+"
         r"|\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"
         r"|BEGIN .*PRIVATE KEY|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b|\b\w+://\S+",
         text,
@@ -101,14 +102,21 @@ class MemoryStore:
             "expires_at": {"$gt": now()},
         })
 
-    def save_conversation(self, document, messages):
+    def save_conversation(self, document, messages, *, usage=None, pending_confirmation=None, compaction=None):
+        fields = {"messages": [
+            {"role": item["role"], "content": public_text(item["content"])}
+            for item in messages[-40:] if item["role"] in {"user", "assistant"}
+        ]}
+        if usage is not None:
+            fields["last_usage"] = usage
+        if pending_confirmation is not None:
+            fields["pending_confirmation"] = bool(pending_confirmation)
+        if compaction is not None:
+            fields["last_compaction"] = compaction
         result = self.db.conversations.update_one(
             {"_id": document["_id"], "student_id": document["student_id"],
              "version": document["version"], "expires_at": {"$gt": now()}},
-            {"$set": {"messages": [
-                {"role": item["role"], "content": public_text(item["content"])}
-                for item in messages[-40:] if item["role"] in {"user", "assistant"}
-            ]}, "$inc": {"version": 1}},
+            {"$set": fields, "$inc": {"version": 1}},
         )
         if not result.matched_count:
             raise MemoryConflict("Conversation changed or expired; retry with current history.")
