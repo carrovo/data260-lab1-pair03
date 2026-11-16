@@ -359,15 +359,45 @@ dashboards.
 - At 500 users the login is slower on AWS (43.9 s) than on Docker Desktop Kubernetes (11.4 s).
   The cause was not isolated (one replica on 4 vCPU nodes shared with the Ollama pod, and the
   network path from the load generator are candidates).
-- The Assistant load test was not run on AWS; it ran on a local machine (see the Assistant load
-  test section above).
+- The Assistant load test on AWS is in the next section.
+
+### Assistant load test on AWS (JMeter, 2026-11-16)
+
+Plan `loadtest/assistant_aws.jmx` (the local Assistant plan with the paths under `/gw`, so every
+request goes through the public load balancer on port 9036). Each virtual user logs in as a
+student and sends one Assistant chat message (ramp-up 5 s, 1 loop, 500 ms think time). Run from
+a MacBook terminal against the EKS deployment above, where the Assistant uses the in-cluster
+Ollama (qwen3:8b, CPU only, about 150 to 175 s per answer when alone). Results:
+`assistant_aws_N.jtl` and `report_assistant_aws_N` dashboards in `loadtest/` (not committed).
+
+| Users | Chat samples | Chat errors | Chat average (s) | Chat max (s) | Student login average (s) |
+|---:|---:|---:|---:|---:|---:|
+| 5 | 5 | 0 | 87.3 | 114.9 | 2.0 |
+| 10 | 10 | 0 | 160.1 | 222.9 | 7.0 |
+| 20 | 20 | 15 (75%) | 259.3 | 280.2 | 15.6 |
+| 50 | 50 | 46 (92%) | 217.5 | 280.2 | 36.1 |
+
+- 5 and 10 users: every chat returned HTTP 200. The 10-user average is almost twice the 5-user
+  average, so the answers are queued on one CPU-only Ollama pod.
+- 20 users: 5 chats returned 200 and 15 returned HTTP 504 (Gateway Time-out) at about 280 s,
+  the gateway `proxy_read_timeout`.
+- 50 users: 4 chats returned 200, 36 returned 504 and 10 returned HTTP 500. The cause of the 500
+  responses was not isolated.
+- Student login had 0 errors at every level; it slowed from 2.0 s to 36.1 s as users increased,
+  the same bcrypt effect as in the CRUD test above.
+- This is a capacity measurement of CPU-only inference on 2 nodes; no GPU was used. The
+  dashboard percentiles differ slightly from nearest-rank values, and with 5 and 10 samples they
+  are coarse.
+- The pods were not restarted by the test; the cluster was paused afterwards with
+  `scripts/aws_pause.sh down`.
 
 ### Where each test ran
 
 The 100 to 500 user JMeter runs were done twice: locally on Docker Desktop Kubernetes (sections
-above) and on AWS (section above). MongoDB mode (`PERSISTENCE=mongo`) and the Assistant load
-test ran locally. The AWS deployment ran with `PERSISTENCE=sql`; AWS results are the deployment
-checks, the Kafka flow check, the Assistant timings and the CRUD load test in this section.
+above) and on AWS (section above). MongoDB mode (`PERSISTENCE=mongo`) ran locally. The Assistant
+load test ran twice: locally (Ollama on a laptop) and on AWS (in-cluster Ollama, CPU only). The
+AWS deployment ran with `PERSISTENCE=sql`; AWS results are the deployment checks, the Kafka flow
+check, the Assistant timings, the CRUD load test and the Assistant load test in this section.
 
 ## Deterministic Agent harness checkpoint (Xuanhua Li, 2026-11-15)
 

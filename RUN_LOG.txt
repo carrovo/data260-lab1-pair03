@@ -308,6 +308,15 @@ Result:   PASS
     answer "What jobs are open in San Jose?" reached the browser (login -> search_jobs -> answer).
   - Model load after idle: one-word reply took 61 s and 84 s. Ask one question before a demo.
 
+[L2-16] Assistant load test on AWS (JMeter, 2026-11-16)
+  Plan loadtest/assistant_aws.jmx (assistant.jmx with paths under /gw). Command per level:
+  jmeter -n -t assistant_aws.jmx -Jhost=$LB -Jstudent_port=9036 -Jassistant_port=9036 -Jusers=N
+  -Jrampup=5 -Jloops=1 -Jthink_ms=500 -l assistant_aws_N.jtl, N = 5, 10, 20, 50.
+  Chat average: 87.3 s (5 users, 0 errors), 160.1 s (10, 0 errors), 259.3 s (20, 15 x HTTP 504),
+  217.5 s (50, 36 x 504 and 10 x 500). 504 = gateway proxy_read_timeout 280 s. Student login 0
+  errors at every level. CPU-only Ollama, one pod; the cause of the 10 x 500 was not isolated.
+  Cluster paused afterwards (aws_pause.sh down); one node was terminated by hand.
+
 [L2-7] Where each check was run
   - Student Assistant: Xuanhua's laptop (Ollama, qwen3:8b) and AWS (see [L2-15]).
   - JMeter load tests: Docker Compose and Docker Desktop Kubernetes (see METRICS.md).
