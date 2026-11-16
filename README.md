@@ -717,3 +717,97 @@ untrusted history rather than silently skipping invalid fields. Quoted JSON
 credential keys use the shared privacy filter; detected private/invalid source
 history is rejected before any compaction model call. The recorded synthetic live
 example passes these stricter checks unchanged, so no inference rerun was needed.
+
+### Assistant trace and 50-request stage evidence (Carol)
+
+`TraceMiddleware` now correlates bounded numeric Assistant stage spans with the
+existing `X-Trace-Id` and `p03.http` logger. It emits an `assistant_timing` JSON
+record per `/assistant/chat` request. No new tracing service or public debug route
+is added. The same production Agent/model/tool paths are timed; an optional
+middleware sink lets the isolated evidence runner retain those exact reports.
+No prompts, SQL statements, Mongo command contents, credentials or tokens enter
+stage records. A maximum of 256 detailed spans is retained per request; aggregates
+remain counted, and dropped detail is explicitly reported.
+
+Definitions (all local spans use `time.perf_counter`):
+
+- Client end-to-end: actual HTTP POST until response or observed timeout.
+- Server elapsed: ASGI request lifecycle until final timing reporting; dependency
+  cleanup can finish after the client has received its response.
+- Model-call wall time/count: each actual client invocation, including tool-loop
+  and repair calls and failed connections. Includes client/network, model load,
+  remote scheduling and inference; it is not all pure inference.
+- Native inference: directly reported Ollama `prompt_eval_duration + eval_duration`
+  in nanoseconds, converted to ms. Missing metadata stays unavailable; no
+  inference time is fabricated from tokens or client wall time.
+- Tool time/count: actual implementation execution, not merely proposed or rejected
+  tool calls. Confirmation-path execution uses the same timing span.
+- Database: directly observed PyMongo command round trips and SQLAlchemy cursor
+  execution, including failures. These exclude unobserved server selection,
+  pool wait and full repository/result-materialization overhead.
+- Database spans can be inside tool spans; native inference is inside model wall
+  time. Inclusive stage totals must **not** be added as exclusive request costs.
+  Unattributed time and client/server differences are **not queue wait**. Queue
+  wait remains unavailable because it is not directly exposed here.
+
+With existing host Ollama `qwen3:8b` and `p03-mongo` already running, reproduce from
+the repository root using the installed virtual environment:
+
+```bash
+sh scripts/assistant_stage_timing.sh --label carol-stage50 --requests 50 --warmup 2
+```
+
+This creates a fresh loopback Uvicorn server and unique synthetic Mongo namespace,
+using production student auth, Assistant, Agent, native Ollama and real repository
+reads. Requests use actual network HTTP, **not** ASGITransport/TestClient or a
+scripted model. Business persistence is Mongo only in this process; the application
+SQL default and shared service configuration are unchanged. No existing data,
+volumes or environment files are deleted/overwritten. A synthetic signup happens
+outside measurement; JWTs remain in memory. Same synthetic account, fresh server
+conversation per request, no caller-carried history. The read-only search workload
+is fixed in `backend/assistant_trace_evidence.py` and recorded in environment.json.
+
+Protocol: concurrency **1**; exactly two warm-ups outside the 50; native model
+`num_ctx=4096`, `num_predict=128`, `think=false`, temperature 0.1; 60-second model-call
+timeout and 420-second client HTTP timeout. Existing Agent repair/iteration bounds
+remain in effect. No client retries, selective replacement or filtering of failed
+requests. Errors/timeouts stay in the JSONL and all-request nearest-rank p50/p95/p99.
+Unknown native inference/database/queue stages remain unavailable. This is a
+sequential attribution run, not a replacement for JMeter concurrency evidence.
+
+One separate failure request, also excluded from the 50, uses a reserved
+non-listening loopback port for the native model client. The override exists only
+on this isolated app; no production failure flag is added, no shared model is
+stopped. Its HTTP status and actual safe Agent outcome are recorded independently
+(HTTP 200 can still be an application failure), with bounded observed attempts.
+The first valid measured read supplies the successful trace.
+
+Raw sanitized observations are append-written under a new directory in ignored
+`loadtest/temp/assistant_trace/`; interrupted runs remain partial, not described as
+50 completed requests. The command reports the directory. To validate and preserve
+a complete 50-request submission without altering raw files:
+
+```bash
+.venv/bin/python -m backend.assistant_trace_submission <run-directory> --output-dir <new-submission-directory>
+```
+
+The exporter verifies all 50 unique traces, stage counts, source hashes and
+recomputed aggregates; it rejects sensitive patterns and refuses to overwrite an
+existing destination. It preserves warm-ups separately and includes successful/
+failed trace dossiers and hashes. Source/configuration hashes identify the exact
+instrumented working-tree code used, alongside its base commit. Shared-host CPU,
+Docker or model activity can affect timings; see the actual evidence notes rather
+than treating this as an idle-machine or deployed/AWS benchmark. Trapti's separate
+API → Kafka worker → Mongo document trace remains her evidence and is not replaced
+by this Assistant-only run. Redux DevTools screenshots remain pending.
+
+Recorded run (2026-11-15 local / 2026-11-16 UTC):
+[`loadtest/evidence_assistant_trace_stage50/`](loadtest/evidence_assistant_trace_stage50/)
+contains the 50 sanitized JSONL measurements, separate warm-ups, successful and
+controlled-failure traces, aggregate analysis, source/configuration hashes and
+hardware/background-activity notes. All 50 succeeded; end-to-end p50/p95/p99 were
+16.463/20.145/24.119 seconds. The backend regression suite overlapped warm-ups and
+early measured requests; other Docker workloads were present. Keep this shared-host
+limitation with any reuse of the numbers. Reported timeouts mean client HTTP
+deadlines; the existing model abstraction classifies internal transport failures
+as bounded `model_backend_error`, without identifying their timeout subtype.

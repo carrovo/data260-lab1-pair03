@@ -17,6 +17,7 @@ from backend.app.ai.confirm_action import (
     is_decline_message,
 )
 from backend.app.ai.ollama_client import ModelClient
+from backend.common.timing import timed_span
 
 
 logger = logging.getLogger("assistant")
@@ -435,7 +436,8 @@ def _execute_tool_call(
         trusted_arguments["student_id"] = student_id
 
     try:
-        result = implementation(db, **trusted_arguments)
+        with timed_span("tool", name):
+            result = implementation(db, **trusted_arguments)
     except TypeError as exc:
         return f"Malformed arguments for tool '{name}': {exc}"
     except Exception as exc:

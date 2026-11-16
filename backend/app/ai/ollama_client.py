@@ -81,7 +81,7 @@ class OllamaClient(ModelClient):
             }
 
         message = data.get("message", {})
-        return {
+        result = {
             "role": "assistant",
             "content": message.get("content"),
             "tool_calls": message.get("tool_calls"),
@@ -92,6 +92,10 @@ class OllamaClient(ModelClient):
                 "capacity_source": "request.options.num_ctx", "source": "ollama",
             },
         }
+        keys = ("total_duration", "load_duration", "prompt_eval_duration", "eval_duration")
+        if any(key in data for key in keys):
+            result["runtime"] = {key: data.get(key) for key in keys}
+        return result
 
 
 class FakeModelClient(ModelClient):

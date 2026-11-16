@@ -1,0 +1,209 @@
+{
+  "index": 1,
+  "phase": "measured",
+  "trace_id": "trace-f77e5d5679-measured-01",
+  "echoed_trace_id": "trace-f77e5d5679-measured-01",
+  "http_status": 200,
+  "outcome": "success",
+  "timeout": false,
+  "trace_correlated": true,
+  "end_to_end_ms": 14322.896084049717,
+  "error_category": null,
+  "injected_failure": false,
+  "response": {
+    "reply": "- Title: Pair03 Trace Data Intern\n- City: San Jose",
+    "api_tool_calls": 1,
+    "pending_confirmation": false
+  },
+  "timing": {
+    "trace_id": "trace-f77e5d5679-measured-01",
+    "http_status": 200,
+    "server_elapsed_ms": 14348.072416847572,
+    "model_elapsed_ms": 13973.044000100344,
+    "model_call_count": 2,
+    "native_inference_ms": 13859.293,
+    "tool_elapsed_ms": 67.34079192392528,
+    "tool_call_count": 1,
+    "database_elapsed_ms": 294.6777897886932,
+    "database_call_count": 14,
+    "database_inside_tool_ms": 31.970416894182563,
+    "queue_wait_ms": null,
+    "request_error": null,
+    "errors": [],
+    "dropped_spans": 0,
+    "spans": [
+      {
+        "id": 1,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 2.280249958857894,
+        "end_ms": 3.545332932844758,
+        "elapsed_ms": 1.265082973986864,
+        "error": null
+      },
+      {
+        "id": 2,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 3.7757079117000103,
+        "end_ms": 5.048624938353896,
+        "elapsed_ms": 1.2729170266538858,
+        "error": null
+      },
+      {
+        "id": 3,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 12.726624961942434,
+        "end_ms": 13.283666921779513,
+        "elapsed_ms": 0.557041959837079,
+        "error": null
+      },
+      {
+        "id": 4,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 13.442707946524024,
+        "end_ms": 13.924333034083247,
+        "elapsed_ms": 0.4816250875592232,
+        "error": null
+      },
+      {
+        "id": 5,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 14.07066686078906,
+        "end_ms": 14.533249894157052,
+        "elapsed_ms": 0.46258303336799145,
+        "error": null
+      },
+      {
+        "id": 6,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 14.645791845396161,
+        "end_ms": 15.167125035077333,
+        "elapsed_ms": 0.5213331896811724,
+        "error": null
+      },
+      {
+        "id": 7,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 15.254124999046326,
+        "end_ms": 15.583207830786705,
+        "elapsed_ms": 0.32908283174037933,
+        "error": null
+      },
+      {
+        "id": 8,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 15.993374865502119,
+        "end_ms": 16.78883284330368,
+        "elapsed_ms": 0.7954579778015614,
+        "error": null
+      },
+      {
+        "id": 9,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 16.94200001657009,
+        "end_ms": 17.635082826018333,
+        "elapsed_ms": 0.6930828094482422,
+        "error": null
+      },
+      {
+        "id": 10,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 17.846457893028855,
+        "end_ms": 18.40908289887011,
+        "elapsed_ms": 0.5626250058412552,
+        "error": null
+      },
+      {
+        "id": 11,
+        "parent_id": null,
+        "stage": "model",
+        "operation": "agent",
+        "start_ms": 18.505957908928394,
+        "end_ms": 7028.062833007425,
+        "elapsed_ms": 7009.556875098497,
+        "error": null,
+        "native_inference_ms": 6968.38
+      },
+      {
+        "id": 12,
+        "parent_id": null,
+        "stage": "tool",
+        "operation": "search_jobs",
+        "start_ms": 7030.50783299841,
+        "end_ms": 7097.848624922335,
+        "elapsed_ms": 67.34079192392528,
+        "error": null
+      },
+      {
+        "id": 13,
+        "parent_id": 12,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 7062.366207828745,
+        "end_ms": 7077.161749824882,
+        "elapsed_ms": 14.795541996136308,
+        "error": null
+      },
+      {
+        "id": 14,
+        "parent_id": 12,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 7080.314083024859,
+        "end_ms": 7097.488957922906,
+        "elapsed_ms": 17.174874898046255,
+        "error": null
+      },
+      {
+        "id": 15,
+        "parent_id": null,
+        "stage": "model",
+        "operation": "agent",
+        "start_ms": 7097.935207886621,
+        "end_ms": 14061.42233288847,
+        "elapsed_ms": 6963.487125001848,
+        "error": null,
+        "native_inference_ms": 6890.913
+      },
+      {
+        "id": 16,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 14069.063792005181,
+        "end_ms": 14301.438957918435,
+        "elapsed_ms": 232.37516591325402,
+        "error": null
+      },
+      {
+        "id": 17,
+        "parent_id": null,
+        "stage": "database",
+        "operation": "mongo_command",
+        "start_ms": 14318.485874915496,
+        "end_ms": 14341.877250000834,
+        "elapsed_ms": 23.39137508533895,
+        "error": null
+      }
+    ]
+  }
+}

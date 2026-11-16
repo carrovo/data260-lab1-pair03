@@ -21,6 +21,7 @@ from backend.app.ai.ollama_client import ModelClient, OllamaClient
 from backend.app.ai.tools import TOOL_IMPLEMENTATIONS, TOOL_SCHEMAS
 from backend.app.ai.memory import get_memory_store, MemoryModelClient, publish_consolidation
 from backend.common.assistant_memory import MemoryConflict
+from backend.common.timing import timed_span
 from backend.app.models import Student
 from backend.app.routers.student_auth import get_current_student, get_db
 from backend.app.schemas.assistant import (
@@ -152,13 +153,14 @@ def _handle_confirmation(
         )
 
     implementation = TOOL_IMPLEMENTATIONS[action.tool_name]
-    reply = _bounded_reply(
-        implementation(
-            db,
-            student_id=current_student.id,
-            **action.arguments,
+    with timed_span("tool", action.tool_name):
+        reply = _bounded_reply(
+            implementation(
+                db,
+                student_id=current_student.id,
+                **action.arguments,
+            )
         )
-    )
     return AssistantChatResponse(
         reply=reply,
         conversation=_confirmation_conversation(request, reply),

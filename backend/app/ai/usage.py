@@ -3,6 +3,7 @@ import logging
 
 from backend.app.ai.ollama_client import ModelClient
 from backend.common.tracing import get_trace_id
+from backend.common.timing import timed_span
 
 # Reuse the existing trace/access logger and its configured safe sink.
 logger = logging.getLogger("p03.http")
@@ -67,7 +68,10 @@ class UsageModelClient(ModelClient):
 
     def complete(self, messages, tools):
         try:
-            response = self.delegate.complete(messages, tools)
+            with timed_span("model", self.purpose) as span:
+                response = self.delegate.complete(messages, tools)
+                if span is not None:
+                    span.observe_model(response)
         except Exception:
             self.recorder.record(None, self.purpose)
             raise

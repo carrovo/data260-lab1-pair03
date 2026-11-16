@@ -1,0 +1,42 @@
+{
+  "timestamp_utc": "2026-11-16T05:21:01.728950+00:00",
+  "commit_sha": "58e09200d6534e4ae227485894f54370d29fd843",
+  "source_sha256": {
+    "backend/common/timing.py": "8630a5175f770de6a5b70bc33eaba46deb454aa3a940cad367d38863ac264527",
+    "backend/common/tracing.py": "a4b63e02424389bb6f38fda47fb1dfbafd378127fd2a890b2b33b6d33347939a",
+    "backend/app/ai/agent.py": "bd6f0dfa7bc4b4d14be6128fb49f6e1ad164252854010797c087b0f7312a1be2",
+    "backend/app/ai/usage.py": "8403cc33031b9f6cc6f3994d86a43919f8995cd89b1de2e35119ce19158d24aa",
+    "backend/app/ai/ollama_client.py": "08c3536537ea6c11bcd7f6404a67ec144bcdf207f42f5f8a53c917d51bc4a8ec",
+    "backend/app/routers/assistant.py": "66dfedac3353646cd888cd732c43c3f29f072b1fa370facae763cbb335e655b4",
+    "backend/assistant_trace_evidence.py": "5d24e748ca2e380822d4327f1cd04897ea95899c3725b33b1a97126e6ed1d4d1",
+    "backend/assistant_timing_report.py": "05a1e860c09934a352c95aa795bffaa70a13727d5a40f5b719dbb99cb0978f34"
+  },
+  "method": "Real network HTTP, isolated Uvicorn; live Ollama and real Mongo; production auth/Agent/tools, no fake model or ASGI transport.",
+  "host": {
+    "system": "Darwin",
+    "release": "24.6.0",
+    "architecture": "arm64"
+  },
+  "ollama_version": "ollama version is 0.40.6",
+  "mongo_version": "7.0.48",
+  "mongo_database": "p03_trace_carol_stage50_f77e5d5679",
+  "persistence": "mongo",
+  "model": "qwen3:8b",
+  "num_ctx": 4096,
+  "num_predict": 128,
+  "temperature": 0.1,
+  "think": false,
+  "concurrency": 1,
+  "warmup_requests": 2,
+  "measured_requests_requested": 50,
+  "model_timeout_seconds": 60,
+  "http_timeout_seconds": 420,
+  "client_retries": 0,
+  "workload": "Find jobs titled Pair03 Trace Data Intern in San Jose using search_jobs. Reply with only the matching title and city.",
+  "synthetic_fixture": {
+    "job_id": 1,
+    "title": "Pair03 Trace Data Intern",
+    "city": "San Jose"
+  },
+  "controlled_failure": "Separate request outside measured set; dependency override only on isolated app uses reserved non-listening loopback port, 1s model timeout/0.25s connect; shared Ollama stays running."
+}

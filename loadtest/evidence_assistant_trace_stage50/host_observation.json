@@ -1,0 +1,9 @@
+{
+  "timestamp_utc": "2026-11-16T05:27:53.552977+00:00",
+  "cpu": "Apple M4",
+  "logical_cpu_cores": 10,
+  "ram_bytes": 17179869184,
+  "hardware_source": "sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize",
+  "background_activity": "Backend regression suite overlapped warm-ups and the early measured requests; other Docker workloads are present. Shared-host attribution, not an idle-machine benchmark.",
+  "completed_requests_at_observation": 20
+}

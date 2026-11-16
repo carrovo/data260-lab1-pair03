@@ -484,3 +484,53 @@ Result:   PASS
   inference. 1309 -> 1194 remains measured probe prompt tokens; 3389 remains
   overlapping three-call request usage. No deployed/browser claim added.
   Redux DevTools screenshots remain pending. No AWS/JMeter/shared branch changes.
+
+2026-11-15 local / 2026-11-16 UTC — Carol Assistant traces and stage timing
+  Branch: feature/lab2-assistant-trace-evidence
+  Base: 58e09200d6534e4ae227485894f54370d29fd843; runtime hashes in environment.json.
+  Added monotonic request-local model/tool/SQL cursor/Mongo command timing.
+  Metadata only; no prompt/SQL/DB payload logging. Native inference is directly
+  reported prompt_eval_duration + eval_duration; DB/tool spans overlap.
+  Queue wait unavailable; residual time is not labeled queue wait.
+  Command: sh scripts/assistant_stage_timing.sh --label carol-stage50 --requests 50 --warmup 2
+  UTC start 2026-11-16T05:21:01.728950+00:00. Actual network HTTP to isolated
+  loopback Uvicorn, production authenticated routes/Agent/tools, live host Ollama
+  0.40.6/qwen3:8b and MongoDB 7.0.48 in a new synthetic database.
+  Apple M4, 10 logical cores, 16 GiB RAM; Darwin 24.6.0 arm64 (sysctl verified).
+  num_ctx=4096; num_predict=128; think=false; temperature=0.1; concurrency=1;
+  model deadline=60s; client deadline=420s; 2 warm-ups excluded; no client retries.
+  Same synthetic student, fresh conversation/request; actual read-only search_jobs.
+  All 50 measured requests retained: 50 success, 0 errors, 0 client HTTP timeouts.
+  End-to-end nearest-rank p50/p95/p99: 16463.086/20145.471/24119.175 ms.
+  Stage total/mean ms: model 720089.447/14401.789; native inference
+  704436.421/14088.728; tool 39380.023/787.600; DB 83573.552/1671.471;
+  nested DB inside tools 37564.601/751.292. Not additive inclusive stages.
+  100 model calls, 50 actual tool executions, 700 Mongo commands; model wall time
+  dominates; measured native inference is 97.83% of model wall time.
+  Successful trace: trace-f77e5d5679-measured-01; HTTP200/success, matching title
+  and city, 2 model calls/1 tool/14 DB commands, 14322.896ms end-to-end.
+  Failure trace: trace-f77e5d5679-failure-01, excluded from50; reserved non-listening
+  loopback model endpoint override on isolated app; HTTP200/safe_error, 648.993ms,
+  2 bounded attempts/0 tools/12 DB commands, model_backend_error. Shared services
+  unaffected. Internal transport-timeout subtype is unavailable; reported timeout
+  counts refer specifically to client HTTP deadlines.
+  Limitation: backend pytest overlapped warm-ups and early measured requests;
+  other Docker workloads present. Shared-host attribution, not idle-machine/JMeter
+  concurrency/deployed/browser/AWS evidence. No selective reruns or replacements.
+  Raw ignored path: loadtest/temp/assistant_trace/carol-stage50-f77e5d5679
+  Export: .venv/bin/python -m backend.assistant_trace_submission loadtest/temp/assistant_trace/carol-stage50-f77e5d5679 --output-dir loadtest/evidence_assistant_trace_stage50
+  Verified 50 ordered distinct traces, all stage counts, reproduced aggregates,
+  eight runtime source hashes; byte-identical safe raw copies with SHA256 manifest.
+  Submission: loadtest/evidence_assistant_trace_stage50/ (traces.md, summary.md,
+  measurements.jsonl, environment/host observations and separate warm-ups).
+  Focused: .venv/bin/python -m pytest -q backend/tests/test_assistant_stage_timing.py backend/tests/test_tracing.py backend/tests/test_ollama_client.py -x -rs
+  Result: 30 passed, 0 failed/skipped, 1 dependency warning.
+  Full: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 534 passed, 0 failed/skipped, 277 dependency warnings, 211.12s.
+  Categories: 1 Starlette/httpx deprecation, 276 mongomock datetime deprecations.
+  SQL harness after live run:
+  sh scripts/run_agent_harness.sh --persistence sql --label assistant-trace-final --output-dir loadtest/temp/agent_harness/assistant-trace-final
+  Result: 10/10 passed, exit0; H07 remains client_carried_history.
+  Own server shut down; synthetic DB retained; shared services not restarted.
+  No JMeter/AWS/Kafka flow run or partner evidence change; frontend unchanged.
+  Redux DevTools screenshots pending. No commit/push/merge in this checkpoint.

@@ -579,3 +579,73 @@ Starlette TestClient/httpx deprecation (1 here) and mongomock's datetime.utcnow
 Recorded live inference/evidence was reused, not rerun: final source-history
 privacy and summary order/category checks reproduce the exact stored after-history.
 Redux DevTools screenshots and deployed/browser compaction evidence remain pending.
+
+## Carol — Assistant trace and 50-request stage attribution (2026-11-15)
+
+Evidence: `loadtest/evidence_assistant_trace_stage50/` (50 JSONL observations,
+separate warm-ups, successful/failed trace dossiers, source hashes, reproducible
+analysis and sanitized synthetic responses). UTC start: 2026-11-16T05:21:01.728950.
+Base `58e09200d6534e4ae227485894f54370d29fd843` plus the eight instrumented source
+hashes in environment.json identifies the exact uncommitted runtime code used.
+
+Command: `sh scripts/assistant_stage_timing.sh --label carol-stage50 --requests 50 --warmup 2`.
+Actual authenticated network HTTP to a new loopback Uvicorn instance, production
+routers/Agent/tools, **live** host Ollama 0.40.6 `qwen3:8b`, **real** MongoDB 7.0.48
+in a unique synthetic namespace. This is not in-process ASGI or fake-model timing.
+Apple M4, 10 logical cores, 16 GiB RAM, Darwin 24.6.0 arm64; hardware verified with
+sysctl. Process-only Mongo business persistence; shared SQL default unchanged.
+Fresh server-backed conversation each request; same synthetic account; read-only
+`search_jobs` against the synthetic Pair03 Trace Data Intern in San Jose.
+
+Concurrency 1; two warm-ups excluded; no client retries/replacements; all measured
+outcomes retained. Model num_ctx 4096, num_predict 128, think=false, temperature 0.1;
+60-second model-call deadline, 420-second client HTTP deadline.
+
+| Measured requests | Successes | Errors | Client HTTP timeouts | p50 ms | p95 ms | p99 ms |
+|---:|---:|---:|---:|---:|---:|---:|
+| 50 | 50 | 0 | 0 | 16463.086 | 20145.471 | 24119.175 |
+
+Standard nearest-rank percentiles include every measured request. The existing
+model abstraction reports internal transport failures as `model_backend_error`;
+the timeout column specifically counts client HTTP deadlines, not inferred model
+transport-timeout subtypes. No measured row had a model/backend error.
+
+| Directly measured inclusive stage | Total ms | Mean per request ms | Coverage |
+|---|---:|---:|---:|
+| Model-call wall time | 720089.447 | 14401.789 | 50/50 |
+| Native prompt/decode inference | 704436.421 | 14088.728 | 50/50 |
+| Actual tool implementation | 39380.023 | 787.600 | 50/50 |
+| Mongo command round trips | 83573.552 | 1671.471 | 50/50 |
+| Mongo command time inside tools | 37564.601 | 751.292 | 50/50 |
+
+100 model calls, 50 real tool executions, 700 Mongo commands. Model-call wall time
+dominates the fully covered measured stages; directly reported native inference
+accounts for 97.83% of that model wall time. Native inference is inside model time;
+DB spans can be inside tool time. These rows must not be summed as exclusive
+request costs. DB instrumentation excludes unobserved pool/server-selection wait
+and repository materialization. Queue wait is **unavailable**; neither residual
+time nor client/server differences establish it. Server lifecycle timing can end
+after the client has received the response, so it is separately labeled.
+
+Successful trace `trace-f77e5d5679-measured-01`: HTTP 200, actual matching title/city
+response, 2 model calls, 1 search_jobs execution, 14 Mongo commands; 14322.896 ms
+client end-to-end. Failed trace `trace-f77e5d5679-failure-01`: separate controlled
+model-connect failure on the isolated app only, excluded from the 50; HTTP 200
+with **safe_error**, 648.993 ms end-to-end, 2 bounded model attempts, 0 tools,
+12 Mongo commands, observed model_backend_error. HTTP status alone is not success.
+The failure did not stop or reconfigure shared Ollama/Mongo services.
+
+Important limitation: backend regression tests overlapped warm-ups and early
+measured requests, and other Docker workloads were present. This is shared-host
+stage attribution, **not** an idle-machine capacity result, JMeter concurrency
+replacement, deployed gateway/browser result or AWS evidence. Synthetic namespace
+is retained; own HTTP server stopped; shared services were left unchanged.
+Trapti's API → Kafka worker → Mongo evidence was not modified.
+
+Verification after final production changes: full backend **534 passed, 0 failed,
+0 skipped, 277 warnings**, 211.12 seconds. Focused timing/tracing/Ollama **30 passed**,
+0 failed/skipped, 1 warning. Warnings: Starlette/httpx (1) and mongomock UTC datetime
+(276 in full run), not timing failures. Deterministic SQL harness **10/10**, exit 0,
+run separately after live measurements; H07 remains client-carried history. These
+regressions are distinct from the live timing evidence. No frontend files changed;
+frontend checks were not rerun. Redux DevTools screenshots remain pending.
