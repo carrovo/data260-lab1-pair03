@@ -465,3 +465,24 @@ def test_native_summary_schema_survives_memory_wrapper_without_weakening_validat
             assert stored['version'] == before['version'] + 1
             assert stored['messages'][-2:] == before['messages'][-2:]
         assert model.response_schema is None
+
+
+def test_compaction_probes_share_one_server_date_across_midnight(memory, monkeypatch):
+    from datetime import datetime, timezone
+    from backend.app.ai import agent
+    instants = iter([datetime(2026, 11, 30, 23, 59, tzinfo=timezone.utc),
+                     datetime(2026, 12, 1, tzinfo=timezone.utc)])
+    clock_reads = []
+    def clock():
+        value = next(instants); clock_reads.append(value); return value
+    monkeypatch.setattr(agent, '_utc_now', clock)
+    model = CompactModel()
+    with HarnessContext(model) as context:
+        cid = session(context, memory)
+        response = context.chat({'message':'/compact','conversation_id':cid}, trace_id='compact-request-date')
+        assert response.status_code == 200 and response.json()['compaction']['status'] == 'compacted'
+    probes = [call for call in model.calls if call['messages'][-1]['content'] == PROBE]
+    assert len(probes) == 2 and len(clock_reads) == 1
+    assert probes[0]['messages'][0] == probes[1]['messages'][0]
+    assert '2026-11-30 (UTC)' in probes[0]['messages'][0]['content']
+    assert '2026-12-01 through 2026-12-31' in probes[0]['messages'][0]['content']

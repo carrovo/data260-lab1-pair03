@@ -742,3 +742,34 @@ Warnings are existing Starlette/httpx and mongomock datetime deprecations.
 The ~269-second synchronous request leaves limited timeout headroom; deployed
 nginx/gateway/AWS behavior remains **unverified**. Screenshots remain pending for
 separate chat/folder delivery, including actual Redux DevTools and live UI capture.
+
+
+### Xuanhua Li — request-date correction (2026-11-16)
+
+The production Agent no longer uses the fixed `2029-10-15` demo reference.
+It captures the actual server date once per Agent request, with **UTC** as the
+explicit default because no application timezone is configured. Iterations and
+repairs share that date; compaction's before/after probes share one captured date.
+Explicit user dates, authorization and tool/confirmation guardrails are unchanged.
+Tests inject an aware clock; seed schedules and historical evidence are unchanged.
+
+Browser verification reported by Xuanhua Li confirmed `search_events` received
+`2026-12-01` through `2026-12-31` for “next month” in November 2026 on the isolated
+evidence runtime (frontend 5174, backend 9130). This is not an AWS/deployed-gateway
+verification. No additional live inference was run during this finalization.
+
+Reused focused date/AI/harness regressions: **234 passed**, 0 failed/skipped,
+214 dependency warnings, 21.66 s. Coverage includes month/year rollover, leap-year
+February, UTC boundaries, one date across repairs/probes, fresh dates across
+requests and preservation of explicit user date arguments.
+
+Final verification after the production edits:
+- Full backend: `python -m pytest -q backend/tests -rs` — **567 passed**,
+  0 failed/skipped, 323 warnings, 101.57 s. Existing repository virtualenv reused.
+- SQL harness: `python -m backend.harness.runner --persistence sql
+  --label request-date-final-20261116
+  --output-dir loadtest/temp/final-evidence/request-date-fix/sql-harness-final-20261116`
+  — **10/10**, exit 0; deterministic model, isolated SQLite, no live inference.
+  H07 remains client-carried history, not server-persistent-memory evidence.
+- Diff/conflict/sensitive-addition checks passed. Runtime logs and generated
+  harness reports remain ignored; older evidence is unchanged.

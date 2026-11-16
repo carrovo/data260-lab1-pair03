@@ -7,7 +7,7 @@ import json
 import hashlib
 import re
 
-from backend.app.ai.agent import SYSTEM_PROMPT, looks_like_prompt_injection, sanitize_tool_output
+from backend.app.ai.agent import build_system_prompt, looks_like_prompt_injection, sanitize_tool_output
 from backend.app.ai.tools import TOOL_SCHEMAS
 from backend.app.ai.usage import UsageModelClient
 from backend.common.assistant_memory import public_text
@@ -346,12 +346,13 @@ def compact(messages, client, recorder):
         return messages, {"status": "not_needed", "before_prompt_tokens": None,
                           "after_prompt_tokens": None, "measurement_source": "unknown",
                           "before_messages": len(messages), "after_messages": len(messages)}
+    system_prompt = build_system_prompt()  # Stable even if probes cross UTC midnight.
     plan = prepare_compaction(messages, client)
     # Same trusted prompt, tools and measurement suffix before and after. These
     # counters are measured; the separate preflight estimate is never substituted.
     def probe(history, purpose):
         _complete(client, recorder, purpose, [
-            {"role": "system", "content": SYSTEM_PROMPT}, *history,
+            {"role": "system", "content": system_prompt}, *history,
             {"role": "user", "content": PROBE},
         ], TOOL_SCHEMAS)
         return recorder.calls[-1]

@@ -95,11 +95,14 @@ output, set an ISO date explicitly:
 SEED_BASE_DATE=2031-01-15 .venv/bin/python -m backend.seed_final_data
 ```
 
-For reproducible assistant transcripts, the server-owned deterministic demo
-reference date is `2029-10-15`. Relative date phrases are calculated from that
-date, so “next month” means the complete range `2029-11-01` through
-`2029-11-30`. This assistant reference is independent of client conversation
-history and does not change or rerun the seed generator.
+The Assistant captures the actual server date for each request. There is no
+application timezone setting; **UTC is the explicit default**, independent of the
+host/browser timezone. For a request dated `2026-11-16` UTC, “next month” means
+`2026-12-01` through `2026-12-31`. All iterations/repairs and both compaction probes
+use their request's captured date. Explicit user dates/ranges remain unchanged;
+conversation content cannot override the server clock. Tests inject an aware clock
+for deterministic calendar checks. Fixed seed schedules and older transcript dates
+remain historical fixtures; this policy does not alter or rerun the seed generator.
 
 Each successful run verifies and reports these exact reserved demo counts:
 
