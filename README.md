@@ -557,3 +557,53 @@ results. Persistent-memory HTTP behavior is tested with isolated Mongo mocks;
 the real demo verifies Kafka/Mongo consolidation, not a live HTTP/Ollama deployment.
 H07 remains `client_carried_history`. Redux, token/context instrumentation, Part 6
 automatic compaction, live-model memory safety and AWS deployment are out of scope.
+
+### Student Redux state (Carol)
+
+The existing store now also owns `session`, `savedItems` and `assistant`. The
+jobs, companies, applications and events slice implementations are unchanged.
+Authentication initialization restores the existing `student_access_token` storage
+key. Credentials travel through closure-based thunks and the authenticated client;
+JWTs and confirmation tokens are excluded from Redux actions/state. A store-lifetime
+private runtime retains pending confirmation tokens across route navigation only.
+Logout, current-account 401 responses and a new sign-in clear student caches;
+generation/request guards discard previous-account completions.
+
+Use `/saved` to refresh or unsave opportunities, or Save for later on a job/event.
+The frontend needed a small authenticated HTTP facade: GET/POST
+`/auth/saved-items` and DELETE `/auth/saved-items/{job|event}/{id}` use the existing
+SQL/Mongo stores and authenticated identity. No business repository was changed.
+Assistant-triggered saves still require the production confirmation flow.
+
+Assistant public messages and a safe pending-action summary survive route changes.
+The client reads `X-Conversation-Id` from the backend response and then sends
+`conversation_id` without resending history. Without an ID it retains the existing
+public user/assistant history contract. CORS exposes that header for development.
+A missing in-memory confirmation token also blocks further submissions and
+explicitly requires New conversation; an active server session is ended during
+that restart. An expired/ended ID requires New conversation; that action ends an active server
+session before clearing the thread. A response explicitly confirming session end
+is respected even if asynchronous consolidation was unavailable. This UI does not
+claim that consolidation was queued. Reload restores authentication only: thread
+state/IDs and pending tokens are not durably persisted, and automatic refresh or
+cross-device thread restoration is not implemented.
+
+Run the installed frontend tooling from the repository root:
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run lint
+npm --prefix frontend run build
+```
+
+Redux DevTools submission evidence is still a manual step: the automated in-app
+browser does not provide the Redux DevTools extension. In a local development
+browser with that extension, use synthetic accounts and dialogue only. Open the
+Redux panel, sign in, select `session/ready`, and capture the `session` state and
+safe action. Send a synthetic Assistant question, navigate to Saved items and back,
+select `assistant/completed`, and capture its public messages/conversation ID and
+safe pending summary (if present). Optionally capture `savedItems/received` after
+saving a synthetic opportunity. Verify that neither State nor Action contains a
+JWT, password or `action_token`; do not capture Network headers, localStorage,
+private dialogue or real student information. These must be actual Redux-panel
+captures, not ordinary page screenshots or exported state dumps.

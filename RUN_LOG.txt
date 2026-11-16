@@ -392,3 +392,38 @@ Result:   PASS
   Evidence is the prior real Kafka/Mongo CLI run using production consumer dispatch,
   not a separately deployed worker. Final acknowledgement/opaque-entry fixes have
   automated coverage; real service verification was not rerun during this review.
+
+2026-11-15 — Carol: student Redux checkpoint (uncommitted review branch)
+  Branch: feature/lab2-redux-student-state
+  Base: 67eb3c3e7d1324a6887043f35e8bd137280f605b
+  Added session, savedItems and assistant slices to the existing store. Auth
+  adapter/client preserve existing JWT storage while keeping secrets out of Redux.
+  Added generation/request guards, account-bound cache clearing, saved-item UI,
+  server conversation ID/header handling and private transient confirmation vault.
+  Small backend gaps: authenticated saved-item facade over existing stores; expose
+  X-Conversation-Id for development CORS. Business repositories/slices unchanged.
+  npm --prefix frontend test: 31 passed, 0 failed/skipped.
+  npm --prefix frontend run lint; npm --prefix frontend run build: passed.
+  Focused backend routes/service checks: 8 passed, 1 deprecation warning.
+  Browser: synthetic login, Assistant navigation continuity, save/list/unsave,
+  logout and second-account isolation verified against isolated SQLite/Mongo mock
+  and deterministic model over real HTTP. Temporary test servers stopped.
+  No live deployment/model or automatic refresh/cross-device thread claim.
+  Redux DevTools extension unavailable in automation browser; actual panel
+  captures for session and assistant remain manual, steps in README.
+  No commit/push, JMeter, AWS, Kafka or token/context instrumentation performed.
+  Final full backend: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 490 passed, 0 failed/skipped, 110 dependency deprecation warnings,
+  94.90 seconds. git diff --check passed. No dependencies added/upgraded.
+
+  Redux final scoped review:
+  Verified expected branch/base and preserved all 28 checkpoint files.
+  Tightened saved-item HTTP request ID/type/extra-field validation; SQL and Mongo
+  mock coverage includes invalid IDs, unauthenticated writes and repeated deletes.
+  Missing confirmation-token memory now gives a restart instruction, blocks
+  submissions and ends an active server conversation on explicit restart.
+  Reran frontend: 32 tests passed, 0 failed/skipped; lint/build passed.
+  Reran focused saved-item/Student/Assistant checks: 8 passed, 1 warning.
+  Reused prior full backend result: 490 passed, 110 warnings; not rerun here.
+  Browser evidence remains the prior isolated SQL/Mongo-mock/deterministic-model
+  real-HTTP check, not live-service evidence. DevTools screenshots still pending.

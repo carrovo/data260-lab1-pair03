@@ -1,109 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  fetchCurrentStudent,
-  loginStudent,
-  signupStudent,
-} from '../api'
+import { useCallback, useEffect } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
+import { authenticate, initializeSession, logoutSession, selectSession } from '../store/sessionSlice.js'
 import AuthContext from './authContext'
 
-
-const TOKEN_STORAGE_KEY = 'student_access_token'
-
-function AuthProvider({ children }) {
-  const [savedToken] = useState(() =>
-    localStorage.getItem(TOKEN_STORAGE_KEY),
-  )
-  const [accessToken, setAccessToken] = useState(null)
-  const [student, setStudent] = useState(null)
-  const [initializing, setInitializing] = useState(Boolean(savedToken))
-
-  useEffect(() => {
-    if (!savedToken) {
-      return undefined
-    }
-
-    let active = true
-
-    async function restoreSession() {
-      try {
-        const currentStudent = await fetchCurrentStudent(savedToken)
-
-        if (active) {
-          setAccessToken(savedToken)
-          setStudent(currentStudent)
-        }
-      } catch (requestError) {
-        if (
-          active &&
-          (requestError.status === 401 || requestError.status === 403)
-        ) {
-          localStorage.removeItem(TOKEN_STORAGE_KEY)
-        }
-      } finally {
-        if (active) {
-          setInitializing(false)
-        }
-      }
-    }
-
-    restoreSession()
-
-    return () => {
-      active = false
-    }
-  }, [savedToken])
-
-  const saveSession = useCallback((authResponse) => {
-    localStorage.setItem(
-      TOKEN_STORAGE_KEY,
-      authResponse.access_token,
-    )
-    setAccessToken(authResponse.access_token)
-    setStudent(authResponse.student)
-
-    return authResponse
-  }, [])
-
-  const signIn = useCallback(
-    async (credentials) => {
-      const authResponse = await loginStudent(credentials)
-      return saveSession(authResponse)
-    },
-    [saveSession],
-  )
-
-  const signUp = useCallback(
-    async (studentData) => {
-      const authResponse = await signupStudent(studentData)
-      return saveSession(authResponse)
-    },
-    [saveSession],
-  )
-
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_STORAGE_KEY)
-    setAccessToken(null)
-    setStudent(null)
-  }, [])
-
-  const contextValue = useMemo(
-    () => ({
-      accessToken,
-      initializing,
-      isAuthenticated: Boolean(accessToken && student),
-      logout,
-      signIn,
-      signUp,
-      student,
-    }),
-    [accessToken, initializing, logout, signIn, signUp, student],
-  )
-
-  return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-    </AuthContext.Provider>
-  )
+export default function AuthProvider({ children }) {
+  const dispatch = useDispatch()
+  const session = useSelector(selectSession)
+  useEffect(() => { dispatch(initializeSession()) }, [dispatch])
+  const logout = useCallback(() => dispatch(logoutSession(session.generation)), [dispatch, session.generation])
+  return <AuthContext.Provider value={{
+    student: session.user,
+    initializing: !session.initialized || session.status === 'restoring',
+    isAuthenticated: session.status === 'authenticated',
+    logout,
+    signIn: credentials => dispatch(authenticate('loginStudent', credentials)),
+    signUp: data => dispatch(authenticate('signupStudent', data)),
+  }}>{children}</AuthContext.Provider>
 }
-
-export default AuthProvider

@@ -6,6 +6,7 @@ import {
   useLocation,
 } from 'react-router-dom'
 import ApplicationsPage from './pages/ApplicationsPage'
+import SavedItemsPage from './pages/SavedItemsPage'
 import AssistantPage from './pages/AssistantPage'
 import EventDetailPage from './pages/EventDetailPage'
 import EventsPage from './pages/EventsPage'
@@ -124,6 +125,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/applications" element={<ApplicationsPage />} />
             <Route path="/registrations" element={<RegistrationsPage />} />
+            <Route path="/saved" element={<SavedItemsPage />} />
             <Route path="/assistant" element={<AssistantPage />} />
           </Route>
           <Route element={<GuestOnlyRoute />}>

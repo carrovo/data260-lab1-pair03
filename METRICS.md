@@ -456,3 +456,47 @@ code fixes: 486 passed, 0 failed/skipped, 110 warnings, 94.28 seconds. Warnings 
 the existing Starlette/httpx and mongomock datetime deprecations. SQL harness:
 10/10 passed, exit 0 (`memory-final-review-20261115`); H07 retains its original
 client-carried-history scope. No live model/deployed-worker run was added.
+
+## Student Redux checkpoint (Carol, 2026-11-15)
+
+Scope: three slices added to the existing store: session/authentication, saved
+items and Assistant conversation. Business slices and persistence repositories
+remain unchanged. Identity generations and request IDs reject late responses;
+student caches clear at logout/account changes/current authentication failures.
+JWT and pending confirmation secrets remain outside Redux. The pre-existing JWT
+localStorage key is retained; no conversation or confirmation persistence is added.
+
+Frontend verification: `npm --prefix frontend test` — 32 passed, 0 failed,
+0 skipped (16 pre-existing business-store tests, 16 new state/client tests).
+`npm --prefix frontend run lint` and `npm --prefix frontend run build` passed.
+The tests cover restore/logout/401/account changes, delayed responses, saved-item
+loading/deduplication/mutations, stale refresh after confirmation, conversation ID
+versus history, navigation-lifetime state, both confirmation decisions, expiration,
+ended-session handling and token redaction.
+
+Browser verification used the real frontend and production FastAPI HTTP routes
+with isolated SQLite, Mongo mock and a deterministic model. Verified synthetic
+login → Assistant exchange → Saved items → Assistant with retained dialogue;
+job save → saved list → unsave; logout → second account with empty saved/thread
+state. Temporary loopback test servers were stopped afterward. This is not a
+Compose deployment, live Mongo/Kafka/Ollama, or cross-device restoration result.
+Confirmation approval/decline is covered by frontend client tests and existing
+backend production-path regressions, not a new live-model browser demonstration.
+
+Actual Redux DevTools captures remain pending; README gives exact safe capture
+steps for `session` and `assistant` (optionally `savedItems`). Browser page checks
+are not represented as DevTools evidence. No JMeter/performance run was performed.
+
+Backend validation: `.venv/bin/python -m pytest -q backend/tests -rs` —
+490 passed, 0 failed, 0 skipped, 110 existing dependency deprecation warnings,
+94.90 seconds. Focused saved-item/CORS/Student/Assistant service checks —
+8 passed, 0 failed/skipped, 1 warning. Both SQL and Mongo saved-item facade
+cases executed (Mongo uses mongomock). `git diff --check` passed.
+
+Final scoped review tightened the new saved-item request boundary to positive,
+strict integer IDs (rejecting booleans, coercion and extra identity fields), and
+added explicit restart behavior if a pending confirmation loses its private token.
+Frontend tests/lint/build and the 8 focused backend tests were rerun successfully.
+The 490-test full backend result above is reused from the preceding checkpoint;
+that complete suite and the isolated browser scenario were not rerun in this review.
+Manual Redux DevTools screenshots remain pending.

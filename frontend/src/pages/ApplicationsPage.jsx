@@ -26,7 +26,7 @@ function formatApplicationDate(appliedAt) {
 }
 
 function ApplicationsPage() {
-  const { accessToken, logout } = useAuth()
+  const { logout } = useAuth()
   const dispatch = useDispatch()
   const {
     items: applications,
@@ -57,8 +57,8 @@ function ApplicationsPage() {
   }, [])
 
   useEffect(() => {
-    dispatch(loadMyApplications({ token: accessToken, status: statusFilter }))
-  }, [accessToken, dispatch, statusFilter])
+    dispatch(loadMyApplications({ status: statusFilter }))
+  }, [dispatch, statusFilter])
 
   useEffect(() => {
     if (unauthorized) {
@@ -81,7 +81,6 @@ function ApplicationsPage() {
     try {
       const resumeBlob = await fetchApplicationResume(
         application.id,
-        accessToken,
       )
       const objectUrl = URL.createObjectURL(resumeBlob)
 
