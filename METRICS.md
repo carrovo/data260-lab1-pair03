@@ -327,8 +327,44 @@ generation speed is set by the CPU.
 node to drain stayed "Ready,SchedulingDisabled"; terminating that instance by hand finished the
 pause.
 
+### CRUD load test on AWS (JMeter, 2026-11-15)
+
+Plan `loadtest/handshake_aws.jmx` (the local plan with the student paths under `/gw`, so every
+request goes through the public load balancer on port 9036). Run from a MacBook over the
+internet against the EKS deployment above (2 x m6g.xlarge, one replica of every service,
+`PERSISTENCE=sql`, SEED 3 data), same four scenarios and loop count as the local runs
+(users per scenario 25, 50, 75, 100, 125 = 100 to 500 concurrent users). Results: `aws_100` to
+`aws_500` `.jtl` files and `report_aws_*` dashboards in `loadtest/` (not committed). The fastest
+request took about 75 ms, which is the network round trip to us-east-1.
+
+| Users | Samples | Errors | Average (ms) | Throughput (req/s) | Student login average (ms) |
+|---:|---:|---:|---:|---:|---:|
+| 100 | 6,850 | 0 (0.00%) | 114 | 93.1 | 696 |
+| 200 | 13,700 | 0 (0.00%) | 233 | 154.6 | 4,904 |
+| 300 | 20,550 | 0 (0.00%) | 426 | 186.3 | 17,026 |
+| 400 | 27,400 | 218 (0.80%) | 655 | 197.6 | 30,360 |
+| 500 | 34,250 | 189 (0.55%) | 899 | 193.4 | 43,938 |
+
+Throughput for 200 and 400 users is computed from the `.jtl` files; the others are from the
+dashboards.
+
+- First bottleneck: student login (bcrypt on one Student replica). The other endpoints stay
+  between 134 ms and 1.1 s at 500 users (company login 3.1 s).
+- Throughput flattens at about 195 requests per second from 300 users.
+- Errors only at 400 and 500 users: 8 and 9 student logins failed with HTTP 500; those virtual
+  users then had no token and every later request returned 401 (210 of 218 at 400 users, 180 of
+  189 at 500 users). Search, job detail and company endpoints had no errors.
+- No pod restarted (all 15 pods Running, 0 restarts, about 59 minutes after the cluster came
+  up); `scripts/aws_verify.sh` after the test: RESULT PASS (Kafka flow through the public address).
+- At 500 users the login is slower on AWS (43.9 s) than on Docker Desktop Kubernetes (11.4 s).
+  The cause was not isolated (one replica on 4 vCPU nodes shared with the Ollama pod, and the
+  network path from the load generator are candidates).
+- The Assistant load test was not run on AWS; it ran on a local machine (see the Assistant load
+  test section above).
+
 ### Where each test ran
 
-JMeter load tests (Compose and Docker Desktop Kubernetes sections above) and MongoDB mode
-(`PERSISTENCE=mongo`) ran locally. The AWS deployment ran with `PERSISTENCE=sql`; AWS results
-are the deployment checks, the Kafka flow check and the Assistant timings in this section.
+The 100 to 500 user JMeter runs were done twice: locally on Docker Desktop Kubernetes (sections
+above) and on AWS (section above). MongoDB mode (`PERSISTENCE=mongo`) and the Assistant load
+test ran locally. The AWS deployment ran with `PERSISTENCE=sql`; AWS results are the deployment
+checks, the Kafka flow check, the Assistant timings and the CRUD load test in this section.
