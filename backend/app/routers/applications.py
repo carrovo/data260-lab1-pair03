@@ -10,14 +10,16 @@ from fastapi.responses import FileResponse
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.application_status import ApplicationStatus
 from backend.app.config import settings
 from backend.app.models import Application, Job, Student
+from backend.app.persistence_views import application_views, mongo_mode
+from backend.app.repos import DuplicateRecord, make_repos
 from backend.app.routers.student_auth import get_current_student, get_db
 from backend.app.schemas.application import ApplicationResponse
+from backend.common.outgoing import publish_safely
 
 
 router = APIRouter(tags=["student applications"])
@@ -175,7 +177,11 @@ async def apply_to_job(
     current_student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    job = db.get(Job, job_id)
+    job = (
+        make_repos(db).jobs.get(job_id)
+        if mongo_mode()
+        else db.get(Job, job_id)
+    )
 
     if job is None:
         raise HTTPException(
@@ -183,42 +189,49 @@ async def apply_to_job(
             detail="Job not found.",
         )
 
-    existing_application_id = db.scalar(
-        select(Application.id).where(
-            Application.student_id == current_student.id,
-            Application.job_id == job_id,
-        )
-    )
-
-    if existing_application_id is not None:
+    repos = make_repos(db)
+    if repos.applications.exists(current_student.id, job_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=DUPLICATE_APPLICATION_DETAIL,
         )
 
     stored_resume = await store_validated_resume(resume)
-    application = Application(
-        student_id=current_student.id,
-        job_id=job_id,
-        resume_storage_key=stored_resume.storage_key,
-        resume_original_name=stored_resume.original_name,
-        resume_size_bytes=stored_resume.size_bytes,
-    )
-
     try:
-        db.add(application)
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
+        application = repos.applications.create(
+            student_id=current_student.id,
+            job_id=job_id,
+            resume_storage_key=stored_resume.storage_key,
+            resume_original_name=stored_resume.original_name,
+            resume_size_bytes=stored_resume.size_bytes,
+        )
+    except DuplicateRecord as exc:
         remove_file(stored_resume.path)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=DUPLICATE_APPLICATION_DETAIL,
         ) from exc
-    except SQLAlchemyError:
-        db.rollback()
+    except Exception:
         remove_file(stored_resume.path)
         raise
+
+    publish_safely(
+        "application.created",
+        {
+            "application_id": str(application.id),
+            "student_id": str(application.student_id),
+            "job_id": str(application.job_id),
+        },
+        key=str(application.id),
+    )
+    repos.activity.record(
+        current_student.id,
+        "apply",
+        {"application_id": application.id, "job_id": job_id},
+    )
+
+    if mongo_mode():
+        return application_views(db, [application])[0]
 
     statement = (
         select(Application)
@@ -241,6 +254,13 @@ def list_current_student_applications(
     current_student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
+    if mongo_mode():
+        rows = make_repos(db).applications.list_for_student(
+            current_student.id,
+            status_filter.value if status_filter is not None else None,
+        )
+        return application_views(db, rows)
+
     statement = select(Application).where(
         Application.student_id == current_student.id
     )
@@ -248,12 +268,70 @@ def list_current_student_applications(
         statement = statement.where(
             Application.status == status_filter.value
         )
-
     statement = statement.options(
         application_with_job_and_company()
     ).order_by(Application.applied_at.desc(), Application.id.desc())
 
     return db.scalars(statement).all()
+
+
+@router.put(
+    "/applications/{application_id}/resume",
+    response_model=ApplicationResponse,
+)
+async def update_application_resume(
+    application_id: int,
+    resume: UploadFile = File(...),
+    current_student: Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    repos = make_repos(db)
+    application = repos.applications.get(application_id)
+    if application is None or application.student_id != current_student.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found.",
+        )
+
+    old_resume_path = (
+        get_stored_resume_path(application.resume_storage_key)
+        if application.resume_storage_key
+        else None
+    )
+    stored_resume = await store_validated_resume(resume)
+
+    try:
+        application = repos.applications.update(
+            application,
+            resume_storage_key=stored_resume.storage_key,
+            resume_original_name=stored_resume.original_name,
+            resume_size_bytes=stored_resume.size_bytes,
+        )
+    except Exception:
+        db.rollback()
+        remove_file(stored_resume.path)
+        raise
+
+    remove_file(old_resume_path)
+    publish_safely(
+        "application.updated",
+        {
+            "application_id": str(application.id),
+            "student_id": str(application.student_id),
+            "job_id": str(application.job_id),
+        },
+        key=str(application.id),
+    )
+
+    if mongo_mode():
+        return application_views(db, [application])[0]
+
+    statement = (
+        select(Application)
+        .where(Application.id == application.id)
+        .options(application_with_job_and_company())
+    )
+    return db.scalar(statement)
 
 
 @router.get("/applications/{application_id}/resume")
@@ -262,7 +340,7 @@ def get_current_student_resume(
     current_student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    application = db.get(Application, application_id)
+    application = make_repos(db).applications.get(application_id)
     if application is None or application.student_id != current_student.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

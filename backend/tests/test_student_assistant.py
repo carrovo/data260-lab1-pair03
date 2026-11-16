@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -9,8 +10,9 @@ from sqlalchemy.orm import Session
 from backend.app.ai.agent import (
     MAX_HISTORY_CONTENT_LENGTH,
     MAX_HISTORY_MESSAGES,
-    SYSTEM_PROMPT,
+    build_system_prompt,
 )
+from backend.app.ai import agent as agent_module
 from backend.app.ai.confirmation_token import (
     CONFIRMATION_TOKEN_USE,
     create_confirmation_token,
@@ -21,6 +23,11 @@ from backend.app.config import settings
 from backend.app.main import app
 from backend.app.models import Company, Event, Job, SavedItem
 from backend.app.routers import assistant as assistant_router
+
+
+@pytest.fixture(autouse=True)
+def frozen_agent_request_date(monkeypatch):
+    monkeypatch.setattr(agent_module, "_utc_now", lambda: datetime(2026, 11, 16, tzinfo=timezone.utc))
 
 
 def _model_text(content="Here is a safe response."):
@@ -211,6 +218,16 @@ def test_authenticated_normal_response(assistant_test_context):
         ],
         "tool_calls": 0,
         "pending_action": None,
+        "compaction": None,
+        "usage": {
+            "calls": [{"index": 1, "purpose": "agent", "prompt_tokens": None,
+                       "completion_tokens": None, "context_capacity": None,
+                       "source": "unknown", "capacity_source": "unknown"}],
+            "model_calls": 1, "prompt_tokens": None, "completion_tokens": None,
+            "total_tokens": None, "latest_context_tokens": None, "context_capacity": None,
+            "context_percent": None, "warning": False, "context_call_index": 1,
+            "capacity_source": "unknown", "context_source": "unknown", "context_is_estimate": False,
+        },
     }
 
 
@@ -246,15 +263,15 @@ def test_request_rejects_client_security_fields(assistant_test_context):
         assert response.status_code == 422
 
 
-def test_model_student_id_cannot_override_authenticated_student(
+def test_model_student_id_is_rejected_as_an_undeclared_argument(
     assistant_test_context,
 ):
     client, engine, model_holder = assistant_test_context
-    authenticated_id, token = _signup(client, "authenticated@example.com")
+    _, token = _signup(client, "authenticated@example.com")
     other_id, _ = _signup(client, "other@example.com")
     identifiers = _seed_opportunities(engine)
 
-    pending, _ = _request_pending_action(
+    response, model = _request_pending_action(
         client,
         model_holder,
         token,
@@ -262,18 +279,11 @@ def test_model_student_id_cannot_override_authenticated_student(
         item_id=identifiers["first_job"],
         extra_arguments={"student_id": other_id},
     )
-    approved = _confirm(
-        client,
-        token,
-        pending["pending_action"]["action_token"],
-        True,
-    )
 
-    assert approved.status_code == 200
-    items = _saved_items(engine)
-    assert len(items) == 1
-    assert items[0].student_id == authenticated_id
-    assert items[0].student_id != other_id
+    assert response["pending_action"] is None
+    assert "after one repair attempt" in response["reply"].lower()
+    assert len(model.calls) == 2
+    assert _saved_items(engine) == []
 
 
 @pytest.mark.parametrize(
@@ -400,7 +410,7 @@ def test_system_prompt_is_present_on_every_normal_turn(
     for call in model.calls:
         assert call["messages"][0] == {
             "role": "system",
-            "content": SYSTEM_PROMPT,
+            "content": build_system_prompt(),
         }
 
 
@@ -413,7 +423,6 @@ def test_read_only_tool_executes_with_untrusted_framing(
     model = FakeModelClient([
         _model_tool_call("get_job_details", {
             "job_id": identifiers["first_job"],
-            "student_id": 999,
         }),
         _model_text("The internship is in San Jose."),
     ])
@@ -552,9 +561,15 @@ def test_altered_token_is_rejected(assistant_test_context):
         item_id=identifiers["first_job"],
     )
     action_token = pending["pending_action"]["action_token"]
-    replacement = "A" if action_token[-1] != "A" else "B"
+    # Change a character inside the signature. The final base64 character
+    # carries only 4 significant bits, so altering it can leave the token valid.
+    position = len(action_token) - 10
+    replacement = "A" if action_token[position] != "A" else "B"
+    altered_token = (
+        action_token[:position] + replacement + action_token[position + 1 :]
+    )
 
-    response = _confirm(client, token, action_token[:-1] + replacement, True)
+    response = _confirm(client, token, altered_token, True)
 
     assert response.status_code == 400
     assert _saved_items(engine) == []
@@ -657,11 +672,25 @@ def test_signed_token_rejects_unsupported_tools_and_invalid_arguments(
 
 def test_invalid_model_save_arguments_do_not_create_token(
     assistant_test_context,
+    monkeypatch,
 ):
     client, engine, model_holder = assistant_test_context
     _, token = _signup(client)
+    token_attempts = []
 
-    response, _ = _request_pending_action(
+    def unexpected_token_attempt(*args, **kwargs):
+        token_attempts.append((args, kwargs))
+        raise AssertionError(
+            "Invalid model arguments reached confirmation-token creation."
+        )
+
+    monkeypatch.setattr(
+        assistant_router,
+        "create_confirmation_token",
+        unexpected_token_attempt,
+    )
+
+    response, model = _request_pending_action(
         client,
         model_holder,
         token,
@@ -670,7 +699,56 @@ def test_invalid_model_save_arguments_do_not_create_token(
     )
 
     assert response["pending_action"] is None
-    assert "invalid" in response["reply"].lower()
+    assert "after one repair attempt" in response["reply"].lower()
+    assert len(model.calls) == 2
+    assert token_attempts == []
+    assert _saved_items(engine) == []
+
+
+@pytest.mark.parametrize("number", [float("nan"), float("inf"), -float("inf")])
+@pytest.mark.parametrize("argument_form", ["dictionary", "json_string"])
+def test_nonfinite_model_arguments_never_confirm_execute_or_write(
+    assistant_test_context,
+    monkeypatch,
+    number,
+    argument_form,
+):
+    client, engine, model_holder = assistant_test_context
+    _, token = _signup(client)
+    arguments = {"item_type": "job", "item_id": number}
+    if argument_form == "json_string":
+        arguments = json.dumps(arguments)
+    model = FakeModelClient([
+        _model_tool_call("save_job_or_event", arguments),
+        _model_tool_call("save_job_or_event", arguments),
+        _model_text("This third attempt must never run."),
+    ])
+    model_holder["client"] = model
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Non-finite arguments reached confirmation or execution")
+
+    monkeypatch.setattr(assistant_router, "create_confirmation_token", forbidden)
+    monkeypatch.setattr("backend.app.ai.agent.confirm_action", forbidden)
+    monkeypatch.setattr(
+        assistant_router,
+        "TOOL_IMPLEMENTATIONS",
+        {"save_job_or_event": forbidden},
+    )
+    response = client.post(
+        "/assistant/chat",
+        headers=_headers(token),
+        json={"message": "Save job 1.", "conversation": []},
+    )
+    assert response.status_code == 200
+    assert response.json()["pending_action"] is None
+    assert "after one repair attempt" in response.json()["reply"]
+    assert "finite" in response.json()["reply"]
+    assert len(model.calls) == 2
+    assert sum(
+        message.get("content", "").startswith("REPAIR_ATTEMPT:")
+        for message in model.calls[1]["messages"]
+    ) == 1
     assert _saved_items(engine) == []
 
 

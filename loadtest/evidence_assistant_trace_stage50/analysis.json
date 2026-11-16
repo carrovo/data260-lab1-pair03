@@ -1,0 +1,47 @@
+{
+  "expected_requests": 50,
+  "measured_requests": 50,
+  "complete": true,
+  "successes": 50,
+  "errors": 0,
+  "timeouts": 0,
+  "end_to_end_ms": {
+    "p50": 16463.08579109609,
+    "p95": 20145.47083294019,
+    "p99": 24119.175208965316
+  },
+  "stages": {
+    "model_elapsed_ms": {
+      "available_requests": 50,
+      "total_ms": 720089.447086677,
+      "mean_available_ms": 14401.78894173354
+    },
+    "native_inference_ms": {
+      "available_requests": 50,
+      "total_ms": 704436.421,
+      "mean_available_ms": 14088.72842
+    },
+    "tool_elapsed_ms": {
+      "available_requests": 50,
+      "total_ms": 39380.02320542,
+      "mean_available_ms": 787.6004641084
+    },
+    "database_elapsed_ms": {
+      "available_requests": 50,
+      "total_ms": 83573.5524664633,
+      "mean_available_ms": 1671.471049329266
+    },
+    "database_inside_tool_ms": {
+      "available_requests": 50,
+      "total_ms": 37564.600955694914,
+      "mean_available_ms": 751.2920191138983
+    }
+  },
+  "dominant_inclusive_measured_stage": "model_elapsed_ms",
+  "model_calls": 100,
+  "tool_calls": 50,
+  "database_calls": 700,
+  "requests_with_timing": 50,
+  "queue_wait_ms": null,
+  "overlap": "Inclusive DB command/cursor spans can be nested in tools; native inference is inside model-call wall time. These rows are not additive. No residual is called queue wait."
+}

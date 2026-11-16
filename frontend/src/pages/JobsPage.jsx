@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import { Link, useLocation } from 'react-router-dom'
-import { fetchJobs } from '../api'
+import { searchJobs, selectJobList } from '../store/jobsSlice'
 
 
 function formatJobDate(value) {
@@ -19,51 +20,18 @@ function JobsPage() {
   const location = useLocation()
   const [keyword, setKeyword] = useState('')
   const [city, setCity] = useState('')
-  const [jobs, setJobs] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const dispatch = useDispatch()
+  const { items: jobs, status, error: requestError } = useSelector(selectJobList)
+  const loading = status === 'idle' || status === 'loading'
+  const error = requestError?.message || ''
 
   useEffect(() => {
-    let cancelled = false
+    dispatch(searchJobs())
+  }, [dispatch])
 
-    async function loadJobs() {
-      try {
-        const data = await fetchJobs()
-
-        if (!cancelled) {
-          setJobs(data)
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setError(requestError.message)
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    loadJobs()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  async function handleSubmit(event) {
+  function handleSubmit(event) {
     event.preventDefault()
-    setLoading(true)
-    setError('')
-
-    try {
-      const data = await fetchJobs({ keyword, city })
-      setJobs(data)
-    } catch (requestError) {
-      setError(requestError.message)
-    } finally {
-      setLoading(false)
-    }
+    dispatch(searchJobs({ keyword, city }))
   }
 
   return (

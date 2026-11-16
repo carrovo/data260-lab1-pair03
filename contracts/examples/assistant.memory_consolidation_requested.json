@@ -1,0 +1,8 @@
+{
+  "event_id": "pair03-memory-example",
+  "event_type": "assistant.memory_consolidation_requested",
+  "trace_id": "pair03-memory-trace",
+  "occurred_at": "2026-01-01T00:00:00Z",
+  "producer": "assistant",
+  "payload": {"student_id": "1"}
+}

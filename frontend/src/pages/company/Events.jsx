@@ -1,17 +1,30 @@
 import { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
 
-import api from "../../services/api";
+import {
+  clearCreateEventState,
+  createMyEvent,
+  loadMyEvents,
+  loadRegistrants as loadEventRegistrants,
+  selectEventCreate,
+  selectMyEvents,
+  selectRegistrants,
+} from "../../store/eventsSlice";
 import Loading from "../../components/Loading";
 import ErrorMessage from "../../components/ErrorMessage";
 
 export default function Events() {
-  const [events, setEvents] = useState([]);
-  const [registrants, setRegistrants] = useState({});
+  const dispatch = useDispatch();
+  const myEvents = useSelector(selectMyEvents);
+  const createState = useSelector(selectEventCreate);
+  const registrantState = useSelector(selectRegistrants);
   const [expandedEvent, setExpandedEvent] = useState(null);
 
-  const [loading, setLoading] = useState(true);
-  const [posting, setPosting] = useState(false);
-  const [error, setError] = useState(null);
+  const events = myEvents.items;
+  const registrants = { [registrantState.eventId]: registrantState.items };
+  const loading = myEvents.status === "idle" || myEvents.status === "loading";
+  const posting = createState.status === "loading";
+  const error = createState.error || registrantState.error || myEvents.error;
 
   const [form, setForm] = useState({
     title: "",
@@ -25,47 +38,10 @@ export default function Events() {
     eligibility: "",
   });
 
-  const loadEvents = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await api.get("/companies/events");
-      setEvents(response.data || []);
-    } catch (err) {
-      setError(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    let active = true;
-
-    async function loadInitialEvents() {
-      try {
-        const response = await api.get("/companies/events");
-
-        if (active) {
-          setEvents(response.data || []);
-        }
-      } catch (err) {
-        if (active) {
-          setError(err);
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadInitialEvents();
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    dispatch(clearCreateEventState());
+    dispatch(loadMyEvents());
+  }, [dispatch]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -79,19 +55,16 @@ export default function Events() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    try {
-      setPosting(true);
-      setError(null);
+    const startsAt = new Date(
+      `${form.date}T${form.startTime}:00`
+    ).toISOString();
 
-      const startsAt = new Date(
-        `${form.date}T${form.startTime}:00`
-      ).toISOString();
+    const endsAt = new Date(
+      `${form.date}T${form.endTime}:00`
+    ).toISOString();
 
-      const endsAt = new Date(
-        `${form.date}T${form.endTime}:00`
-      ).toISOString();
-
-      await api.post("/companies/events", {
+    const result = await dispatch(
+      createMyEvent({
         title: form.title.trim(),
         description: form.description.trim(),
         city: form.city,
@@ -100,8 +73,10 @@ export default function Events() {
         location: form.location.trim() || null,
         major: form.major.trim() || null,
         eligibility: form.eligibility.trim() || null,
-      });
+      }),
+    );
 
+    if (createMyEvent.fulfilled.match(result)) {
       setForm({
         title: "",
         description: "",
@@ -113,12 +88,6 @@ export default function Events() {
         major: "",
         eligibility: "",
       });
-
-      await loadEvents();
-    } catch (err) {
-      setError(err);
-    } finally {
-      setPosting(false);
     }
   };
 
@@ -128,21 +97,10 @@ export default function Events() {
       return;
     }
 
-    try {
-      setError(null);
+    const result = await dispatch(loadEventRegistrants(eventId));
 
-      const response = await api.get(
-        `/companies/events/${eventId}/registrants`
-      );
-
-      setRegistrants((prev) => ({
-        ...prev,
-        [eventId]: response.data || [],
-      }));
-
+    if (loadEventRegistrants.fulfilled.match(result)) {
       setExpandedEvent(eventId);
-    } catch (err) {
-      setError(err);
     }
   };
 

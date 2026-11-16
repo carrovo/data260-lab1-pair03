@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from backend.common.tracing import TraceMiddleware
 from backend.app.application_status import ApplicationStatus
 from backend.app.config import settings
 from backend.app.database import Base
@@ -70,6 +71,7 @@ def company_test_context(tmp_path, monkeypatch):
     Base.metadata.create_all(engine)
 
     test_app = FastAPI()
+    test_app.add_middleware(TraceMiddleware, service="test")
 
     test_app.include_router(company_auth_router)
     test_app.include_router(company_profile_router)
@@ -594,3 +596,163 @@ def test_company_routes_require_company_auth(
     )
 
     assert student_role_response.status_code == 403
+
+# ---------------------------------------------------------------------------
+# Kafka producers: job.created and application.status_changed
+# ---------------------------------------------------------------------------
+
+
+class CapturingPublisher:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, topic, key, value):
+        import json
+
+        self.sent.append((topic, key, json.loads(value)))
+
+
+class BrokenPublisher:
+    def send(self, topic, key, value):
+        raise ConnectionError("kafka is down")
+
+
+@pytest.fixture
+def kafka_capture():
+    from backend.common import outgoing
+
+    publisher = CapturingPublisher()
+    outgoing.set_publisher(publisher)
+    yield publisher
+    outgoing.reset()
+
+
+def _job_payload():
+    return {
+        "title": "Data Analyst Intern",
+        "description": "Analyze business data.",
+        "city": "San Jose",
+        "category": "internship",
+        "location": "Downtown",
+        "is_remote": False,
+        "salary": "32.50",
+        "skills": "Python, SQL",
+        "deadline": (
+            datetime.now(timezone.utc) + timedelta(days=30)
+        ).isoformat(),
+    }
+
+
+def _seed_application(engine):
+    with Session(engine) as db:
+        company = db.scalar(select(Company))
+        student = Student(
+            email="student@example.com",
+            password_hash=hash_password("Password123"),
+            full_name="Test Student",
+            city="San Jose",
+            college_name="SJSU",
+            major="Data Science",
+            skills="Python, SQL",
+        )
+        db.add(student)
+        db.flush()
+        job = Job(
+            company_id=company.id,
+            title="ML Intern",
+            description="Machine learning internship.",
+            city="San Jose",
+            category="internship",
+            is_remote=False,
+        )
+        db.add(job)
+        db.flush()
+        application = Application(
+            student_id=student.id,
+            job_id=job.id,
+            status=ApplicationStatus.PENDING.value,
+        )
+        db.add(application)
+        db.commit()
+        return student.id, job.id, application.id
+
+
+def test_creating_a_job_publishes_job_created(
+    company_test_context, kafka_capture
+):
+    client, _ = company_test_context
+    headers = {**company_headers(client), "X-Trace-Id": "trace-abc"}
+
+    response = client.post(
+        "/api/companies/jobs", headers=headers, json=_job_payload()
+    )
+
+    assert response.status_code == 201
+    topic, key, event = kafka_capture.sent[0]
+    job_id = str(response.json()["id"])
+    assert topic == "job.created"
+    assert key == job_id
+    assert event["event_type"] == "job.created"
+    assert event["trace_id"] == "trace-abc"
+    assert event["payload"]["job_id"] == job_id
+    assert event["payload"]["title"] == "Data Analyst Intern"
+
+
+def test_job_is_still_created_when_kafka_is_down(company_test_context):
+    from backend.common import outgoing
+
+    outgoing.set_publisher(BrokenPublisher())
+    try:
+        client, _ = company_test_context
+        headers = company_headers(client)
+
+        response = client.post(
+            "/api/companies/jobs", headers=headers, json=_job_payload()
+        )
+
+        assert response.status_code == 201
+    finally:
+        outgoing.reset()
+
+
+def test_changing_status_publishes_application_status_changed(
+    company_test_context, kafka_capture
+):
+    client, engine = company_test_context
+    headers = company_headers(client)
+    student_id, job_id, application_id = _seed_application(engine)
+
+    response = client.put(
+        f"/api/companies/applications/{application_id}/status",
+        headers=headers,
+        json={"status": ApplicationStatus.REVIEWED.value},
+    )
+
+    assert response.status_code == 200
+    topic, _key, event = kafka_capture.sent[0]
+    assert topic == "application.status_changed"
+    assert event["payload"] == {
+        "application_id": str(application_id),
+        "student_id": str(student_id),
+        "job_id": str(job_id),
+        "old_status": ApplicationStatus.PENDING.value,
+        "new_status": ApplicationStatus.REVIEWED.value,
+    }
+    assert event["trace_id"]  # a trace id is always present
+
+
+def test_setting_the_same_status_publishes_nothing(
+    company_test_context, kafka_capture
+):
+    client, engine = company_test_context
+    headers = company_headers(client)
+    _student_id, _job_id, application_id = _seed_application(engine)
+
+    response = client.put(
+        f"/api/companies/applications/{application_id}/status",
+        headers=headers,
+        json={"status": ApplicationStatus.PENDING.value},
+    )
+
+    assert response.status_code == 200
+    assert kafka_capture.sent == []

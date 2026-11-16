@@ -1,0 +1,28 @@
+# EKS cluster for Pair 03 (eksctl create cluster -f aws/eks-cluster.yaml).
+# Graviton (arm64) nodes, because the images are built on an Apple-silicon Mac.
+# All nodes sit in ONE availability zone so the EBS volumes (MySQL, Mongo, Kafka,
+# uploads) are always reachable from every node. minSize 0 lets us pause the nodes.
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: p03-handshake
+  region: us-east-1
+availabilityZones: [us-east-1a, us-east-1b]
+iam:
+  withOIDC: true
+addons:
+  - name: vpc-cni
+  - name: coredns
+  - name: kube-proxy
+  - name: aws-ebs-csi-driver
+    wellKnownPolicies:
+      ebsCSIController: true
+managedNodeGroups:
+  - name: p03-nodes
+    instanceType: m6g.xlarge      # 4 vCPU, 16 GiB, Graviton
+    desiredCapacity: 2
+    minSize: 0
+    maxSize: 3
+    volumeSize: 40
+    availabilityZones: [us-east-1a]
+    labels: {pair: "p03"}

@@ -18,12 +18,13 @@ from sqlalchemy import Select, and_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from backend.app.config import settings
+from backend.app.repos import make_repos
+
 from backend.app.models import (
     Company,
     Event,
     Job,
-    SavedItem,
-    Student,
     StudentPreferences,
 )
 from backend.app.schemas.job import JobCategory
@@ -339,11 +340,12 @@ def get_student_preferences(
         if student_id is None or student_id < 1:
             return "Unable to read preferences: authenticated student missing."
 
-        student = db.get(Student, student_id)
+        repos = make_repos(db)
+        student = repos.students.get(student_id)
         if student is None:
             return "No authenticated student record was found."
 
-        preferences = db.get(StudentPreferences, student_id)
+        preferences = repos.preferences.get(student_id)
         if preferences is None:
             return "No saved job or event preferences were found."
 
@@ -413,6 +415,65 @@ def _job_search_statement(arguments: _JobSearchArguments) -> Select:
     )
 
 
+def _job_rows(db: Session, arguments: _JobSearchArguments) -> list[tuple[Any, Any]]:
+    """(job, company) rows. With PERSISTENCE=mongo the jobs come from MongoDB."""
+    if settings.persistence != "mongo":
+        return db.execute(_job_search_statement(arguments)).all()
+
+    skills = [
+        skill.strip()
+        for skill in (arguments.skills or "").split(",")
+        if skill.strip()
+    ]
+    jobs = make_repos(db).jobs.search_advanced(
+        title=arguments.title,
+        company=arguments.company,
+        category=arguments.category.value if arguments.category else None,
+        city=arguments.city,
+        is_remote=arguments.is_remote,
+        min_salary=arguments.min_salary,
+        skills=skills,
+        deadline_before=_end_boundary(arguments.deadline_before),
+        limit=MAX_TOOL_RESULTS,
+    )
+    return [(job, job.company) for job in jobs]
+
+
+def _job_row(db: Session, job_id: int) -> tuple[Any, Any] | None:
+    if settings.persistence != "mongo":
+        return db.execute(
+            select(Job, Company)
+            .join(Company, Job.company_id == Company.id)
+            .where(Job.id == job_id)
+        ).one_or_none()
+    job = make_repos(db).jobs.get(job_id)
+    return None if job is None else (job, job.company)
+
+
+def _event_rows(db: Session, arguments: _EventSearchArguments) -> list[tuple[Any, Any]]:
+    if settings.persistence != "mongo":
+        return db.execute(_event_search_statement(arguments)).all()
+
+    events = make_repos(db).events.search_advanced(
+        name=arguments.name,
+        city=arguments.city,
+        start=_start_boundary(arguments.start_date),
+        end=_end_boundary(arguments.end_date),
+        major=arguments.major,
+        eligibility=arguments.eligibility,
+        limit=MAX_TOOL_RESULTS,
+    )
+    return [(event, event.company) for event in events]
+
+
+def _target_exists(db: Session, model: Any, item_id: int) -> bool:
+    if settings.persistence != "mongo":
+        return db.get(model, item_id) is not None
+    repos = make_repos(db)
+    target = repos.jobs if model is Job else repos.events
+    return target.get(item_id) is not None
+
+
 def search_jobs(db: Session, **arguments: Any) -> str:
     """Search canonical jobs and return a bounded non-sensitive summary."""
 
@@ -420,16 +481,14 @@ def search_jobs(db: Session, **arguments: Any) -> str:
         validated = _JobSearchArguments.model_validate(
             _without_trusted_context(arguments)
         )
-        rows = db.execute(_job_search_statement(validated)).all()
+        rows = _job_rows(db, validated)
         if not rows and validated.title:
             fallback_title = _job_title_fallback(validated.title)
             if fallback_title is not None:
                 fallback_arguments = validated.model_copy(
                     update={"title": fallback_title}
                 )
-                rows = db.execute(
-                    _job_search_statement(fallback_arguments)
-                ).all()
+                rows = _job_rows(db, fallback_arguments)
         if not rows:
             return "No jobs matched those filters."
 
@@ -460,11 +519,7 @@ def get_job_details(db: Session, **arguments: Any) -> str:
         validated = _JobDetailsArguments.model_validate(
             _without_trusted_context(arguments)
         )
-        row = db.execute(
-            select(Job, Company)
-            .join(Company, Job.company_id == Company.id)
-            .where(Job.id == validated.job_id)
-        ).one_or_none()
+        row = _job_row(db, validated.job_id)
         if row is None:
             return f"No job was found with id {validated.job_id}."
 
@@ -535,7 +590,7 @@ def search_events(db: Session, **arguments: Any) -> str:
         validated = _EventSearchArguments.model_validate(
             _without_trusted_context(arguments)
         )
-        rows = db.execute(_event_search_statement(validated)).all()
+        rows = _event_rows(db, validated)
         if not rows:
             return "No events matched those filters."
 
@@ -574,50 +629,29 @@ def save_job_or_event(
         )
         if student_id is None or student_id < 1:
             return "Unable to save: authenticated student missing."
-        if db.get(Student, student_id) is None:
+        repos = make_repos(db)
+        if repos.students.get(student_id) is None:
             return "No authenticated student record was found."
 
         target_model = Job if validated.item_type == "job" else Event
-        if db.get(target_model, validated.item_id) is None:
+        if not _target_exists(db, target_model, validated.item_id):
             return (
                 f"No {validated.item_type} was found with id "
                 f"{validated.item_id}; nothing was saved."
             )
 
-        target_column = (
-            SavedItem.job_id
-            if validated.item_type == "job"
-            else SavedItem.event_id
-        )
-        existing_id = db.scalar(
-            select(SavedItem.id).where(
-                SavedItem.student_id == student_id,
-                target_column == validated.item_id,
-            )
-        )
-        if existing_id is not None:
+        if repos.saved_items.exists(
+            student_id, validated.item_type, validated.item_id
+        ):
             return (
                 f"This {validated.item_type} is already saved; "
                 "no duplicate was created."
             )
 
-        saved_item = SavedItem(
-            student_id=student_id,
-            item_type=validated.item_type,
-            job_id=(
-                validated.item_id
-                if validated.item_type == "job"
-                else None
-            ),
-            event_id=(
-                validated.item_id
-                if validated.item_type == "event"
-                else None
-            ),
-        )
-        db.add(saved_item)
         try:
-            db.commit()
+            repos.saved_items.create(
+                student_id, validated.item_type, validated.item_id
+            )
         except IntegrityError:
             _rollback_safely(db)
             return (
@@ -627,7 +661,19 @@ def save_job_or_event(
         except SQLAlchemyError:
             _rollback_safely(db)
             return "Unable to save because the database operation failed."
+        except Exception as error:
+            if type(error).__name__ == "DuplicateKeyError":
+                return (
+                    f"This {validated.item_type} is already saved; "
+                    "no duplicate was created."
+                )
+            raise
 
+        repos.activity.record(
+            student_id,
+            "save",
+            {"item_type": validated.item_type, "item_id": validated.item_id},
+        )
         return f"Saved {validated.item_type} #{validated.item_id}."
     except ValidationError as error:
         return _validation_error(error)

@@ -1,10 +1,15 @@
+import SaveItemButton from '../components/SaveItemButton'
 import { useEffect, useState } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import {
-  fetchEvent,
-  fetchMyRegistrations,
+  loadEvent,
+  loadMyRegistrations,
   registerForEvent,
-} from '../api'
+  selectEventDetail,
+  selectMyRegistrations,
+  selectRegisterState,
+} from '../store/eventsSlice'
 import useAuth from '../auth/useAuth'
 import { formatEventDateTime } from '../eventDateTime'
 
@@ -25,142 +30,82 @@ function registrationErrorMessage(requestError) {
 function EventDetailPage() {
   const { eventId } = useParams()
   const location = useLocation()
-  const { accessToken, isAuthenticated, logout } = useAuth()
-  const [event, setEvent] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [notFound, setNotFound] = useState(false)
-  const [registration, setRegistration] = useState(null)
-  const [checkingRegistration, setCheckingRegistration] = useState(false)
-  const [registering, setRegistering] = useState(false)
+  const { isAuthenticated, logout } = useAuth()
+  const dispatch = useDispatch()
+  const detail = useSelector(selectEventDetail)
+  const myRegistrations = useSelector(selectMyRegistrations)
+  const registerState = useSelector(selectRegisterState)
+  const [removedEventId, setRemovedEventId] = useState(null)
   const [registrationError, setRegistrationError] = useState('')
   const [registrationSuccess, setRegistrationSuccess] = useState('')
 
+  const removedAfterRegister = removedEventId === eventId
+  const event = removedAfterRegister ? null : detail.item
+  const loading = detail.status === 'idle' || detail.status === 'loading'
+  const notFound = removedAfterRegister || detail.notFound
+  const error = detail.error
+    ? detail.error.message || 'Unable to load this event.'
+    : ''
+  const registration = isAuthenticated
+    ? myRegistrations.items.find(
+        (item) => String(item.event_id) === String(eventId),
+      ) || null
+    : null
+  const checkingRegistration = myRegistrations.status === 'loading'
+  const registering = registerState.status === 'loading'
+
   useEffect(() => {
-    let cancelled = false
-
-    async function loadEvent() {
-      setLoading(true)
-      setError('')
-      setNotFound(false)
-
-      try {
-        const eventData = await fetchEvent(eventId)
-
-        if (!cancelled) {
-          setEvent(eventData)
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setEvent(null)
-
-          if (requestError.status === 404) {
-            setNotFound(true)
-          } else {
-            setError(requestError.message || 'Unable to load this event.')
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    loadEvent()
-
-    return () => {
-      cancelled = true
-    }
-  }, [eventId])
+    dispatch(loadEvent(eventId))
+  }, [dispatch, eventId])
 
   useEffect(() => {
     if (!isAuthenticated) {
-      return undefined
+      return
     }
 
-    let cancelled = false
-
-    async function loadExistingRegistration() {
-      setCheckingRegistration(true)
-      setRegistrationError('')
-
-      try {
-        const registrations = await fetchMyRegistrations(accessToken)
-        const existingRegistration = registrations.find(
-          (item) => String(item.event_id) === String(eventId),
-        )
-
-        if (!cancelled) {
-          setRegistration(existingRegistration || null)
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          if (requestError.status === 401) {
-            setRegistrationError(
-              'Your session has expired. Sign in again to register.',
-            )
-            logout()
-          } else {
-            setRegistrationError(
-              requestError.message ||
-                'Unable to check your event registrations.',
-            )
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setCheckingRegistration(false)
-        }
+    dispatch(loadMyRegistrations()).then((result) => {
+      if (!loadMyRegistrations.rejected.match(result)) {
+        return
       }
-    }
 
-    loadExistingRegistration()
-
-    return () => {
-      cancelled = true
-    }
-  }, [accessToken, eventId, isAuthenticated, logout])
+      if (result.payload?.status === 401) {
+        setRegistrationError('Your session has expired. Sign in again to register.')
+        logout()
+      } else {
+        setRegistrationError(
+          result.payload?.message || 'Unable to check your event registrations.',
+        )
+      }
+    })
+  }, [dispatch, eventId, isAuthenticated, logout])
 
   async function handleRegistration() {
-    setRegistering(true)
     setRegistrationError('')
     setRegistrationSuccess('')
 
-    try {
-      const registrationData = await registerForEvent(
-        eventId,
-        accessToken,
-      )
+    const result = await dispatch(registerForEvent({ eventId }))
 
-      setRegistration(registrationData)
+    if (registerForEvent.fulfilled.match(result)) {
       setRegistrationSuccess('You are registered for this event.')
-    } catch (requestError) {
-      setRegistrationError(registrationErrorMessage(requestError))
+      return
+    }
 
-      if (requestError.status === 401) {
+    const requestError = result.payload || {}
+    setRegistrationError(registrationErrorMessage(requestError))
+
+    if (requestError.status === 401) {
+      logout()
+    } else if (requestError.status === 404) {
+      setRemovedEventId(eventId)
+    } else if (requestError.status === 409) {
+      const refreshed = await dispatch(loadMyRegistrations())
+
+      if (
+        loadMyRegistrations.rejected.match(refreshed) &&
+        refreshed.payload?.status === 401
+      ) {
         logout()
-      } else if (requestError.status === 404) {
-        setEvent(null)
-        setNotFound(true)
-      } else if (requestError.status === 409) {
-        try {
-          const registrations = await fetchMyRegistrations(accessToken)
-          const existingRegistration = registrations.find(
-            (item) => String(item.event_id) === String(eventId),
-          )
-
-          if (existingRegistration) {
-            setRegistration(existingRegistration)
-          }
-        } catch (historyError) {
-          if (historyError.status === 401) {
-            logout()
-          }
-        }
       }
-    } finally {
-      setRegistering(false)
     }
   }
 
@@ -206,6 +151,7 @@ function EventDetailPage() {
                 <div>
                 <p className="page-eyebrow">UPCOMING EVENT</p>
                 <h1>{event.title}</h1>
+                <SaveItemButton type="event" id={eventId} />
                 <p className="company-name">
                   {event.company?.name || 'Independent event'}
                 </p>

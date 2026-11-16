@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from backend.app.database import SessionLocal
-from backend.app.models import Company, Job
+from backend.app.repos import make_repos
 from backend.app.schemas.job import JobResponse
 
 
@@ -43,38 +42,12 @@ def list_jobs(
     ),
     db: Session = Depends(get_db),
 ):
-    statement = (
-        select(Job)
-        .join(Job.company)
-        .options(selectinload(Job.company))
+    return make_repos(db).jobs.search(
+        keyword=(keyword or "").strip(),
+        city=(city or "").strip(),
+        limit=limit,
+        offset=offset,
     )
-
-    if keyword and keyword.strip():
-        search_pattern = f"%{keyword.strip()}%"
-
-        statement = statement.where(
-            or_(
-                Job.title.ilike(search_pattern),
-                Job.description.ilike(search_pattern),
-                Company.name.ilike(search_pattern),
-            )
-        )
-
-    if city and city.strip():
-        city_pattern = f"%{city.strip()}%"
-
-        statement = statement.where(
-            Job.city.ilike(city_pattern)
-        )
-
-    statement = (
-        statement
-        .order_by(Job.created_at.desc(), Job.id.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-
-    return db.scalars(statement).all()
 
 
 @router.get(
@@ -85,13 +58,7 @@ def get_job(
     job_id: int,
     db: Session = Depends(get_db),
 ):
-    statement = (
-        select(Job)
-        .where(Job.id == job_id)
-        .options(selectinload(Job.company))
-    )
-
-    job = db.scalar(statement)
+    job = make_repos(db).jobs.get(job_id)
 
     if job is None:
         raise HTTPException(

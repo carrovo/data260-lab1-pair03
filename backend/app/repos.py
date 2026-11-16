@@ -1,0 +1,764 @@
+"""Data access for the company-owned records (companies and jobs).
+
+Routers call make_repos(db) and never touch SQLAlchemy or pymongo for these
+records directly. settings.persistence picks the backend:
+
+  "sql"   the SQLAlchemy models in app/models.py (default; the unit tests)
+  "mongo" the MongoDB collections in common/mongo_store.py (Compose/Kubernetes)
+
+Both backends return objects with the same attributes (company.name,
+job.company.name ...), so response models work unchanged. Applications (with their resume
+metadata) and registrations follow the same switch; code that needs a job, event or
+student for them asks these repositories instead of joining tables.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any
+
+from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, selectinload
+
+from backend.app.config import settings
+from backend.app.models import (
+    Application,
+    Registration,
+    Company,
+    Event,
+    Job,
+    SavedItem,
+    Student,
+    StudentPreferences,
+)
+from backend.common.mongo_store import (
+    ActivityLogStore,
+    ApplicationStore,
+    RegistrationStore,
+    CompanyStore,
+    EventStore,
+    JobStore,
+    SavedItemStore,
+    SessionStore,
+    StudentPreferencesStore,
+    StudentStore,
+)
+
+
+_database: Any = None
+
+
+def get_mongo_database() -> Any:
+    """The MongoDB database (one shared client). Tests replace this function."""
+    global _database
+    if _database is None:
+        from pymongo import MongoClient
+
+        url = settings.mongo_url
+        if not url:
+            raise RuntimeError("MONGO_URL is not set but PERSISTENCE=mongo")
+        database = MongoClient(url)[settings.mongo_db]
+        CompanyStore(database).ensure_indexes()
+        JobStore(database).ensure_indexes()
+        EventStore(database).ensure_indexes()
+        StudentStore(database).ensure_indexes()
+        SavedItemStore(database).ensure_indexes()
+        SessionStore(database).ensure_indexes()
+        ActivityLogStore(database).ensure_indexes()
+        ApplicationStore(database).ensure_indexes()
+        RegistrationStore(database).ensure_indexes()
+        _database = database
+    return _database
+
+
+# --------------------------------------------------------------------- SQL
+
+
+class SqlCompanyRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def create(self, **fields: Any) -> Company:
+        company = Company(**fields)
+        self._db.add(company)
+        self._db.commit()
+        self._db.refresh(company)
+        return company
+
+    def get(self, company_id: int) -> Company | None:
+        return self._db.get(Company, int(company_id))
+
+    def get_by_email(self, email: str) -> Company | None:
+        return self._db.scalar(select(Company).where(Company.email == email))
+
+    def update(self, company: Company, data: dict[str, Any]) -> Company:
+        for field, value in data.items():
+            setattr(company, field, value)
+        self._db.add(company)
+        self._db.commit()
+        self._db.refresh(company)
+        return company
+
+    def get_many(self, company_ids: list[int]) -> dict[int, Company]:
+        if not company_ids:
+            return {}
+        rows = self._db.scalars(
+            select(Company).where(Company.id.in_([int(i) for i in company_ids]))
+        ).all()
+        return {row.id: row for row in rows}
+
+
+class SqlJobRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def create(self, company_id: int, data: dict[str, Any]) -> Job:
+        job = Job(company_id=company_id, **data)
+        self._db.add(job)
+        self._db.commit()
+        self._db.refresh(job)
+        return self.get(job.id)
+
+    def get(self, job_id: int) -> Job | None:
+        return self._db.scalar(
+            select(Job).where(Job.id == int(job_id)).options(selectinload(Job.company))
+        )
+
+    def get_many(self, job_ids: list[int]) -> dict[int, Job]:
+        if not job_ids:
+            return {}
+        rows = self._db.scalars(
+            select(Job)
+            .where(Job.id.in_([int(i) for i in job_ids]))
+            .options(selectinload(Job.company))
+        ).all()
+        return {row.id: row for row in rows}
+
+    def get_for_company(self, job_id: int, company_id: int) -> Job | None:
+        return self._db.scalar(
+            select(Job)
+            .where(Job.id == int(job_id), Job.company_id == int(company_id))
+            .options(selectinload(Job.company))
+        )
+
+    def list_for_company(self, company_id: int) -> list[Job]:
+        statement = (
+            select(Job)
+            .where(Job.company_id == int(company_id))
+            .options(selectinload(Job.company))
+            .order_by(Job.created_at.desc(), Job.id.desc())
+        )
+        return list(self._db.scalars(statement).all())
+
+    def search(
+        self, keyword: str = "", city: str = "", limit: int = 50, offset: int = 0
+    ) -> list[Job]:
+        statement = select(Job).join(Job.company).options(selectinload(Job.company))
+        if keyword:
+            pattern = f"%{keyword}%"
+            statement = statement.where(
+                or_(
+                    Job.title.ilike(pattern),
+                    Job.description.ilike(pattern),
+                    Company.name.ilike(pattern),
+                )
+            )
+        if city:
+            statement = statement.where(Job.city.ilike(f"%{city}%"))
+        statement = (
+            statement.order_by(Job.created_at.desc(), Job.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(self._db.scalars(statement).all())
+
+    def update(self, job: Job, data: dict[str, Any]) -> Job:
+        for field, value in data.items():
+            setattr(job, field, value)
+        self._db.commit()
+        self._db.refresh(job)
+        return self.get(job.id)
+
+    def delete(self, job: Job) -> None:
+        self._db.delete(job)
+        self._db.commit()
+
+
+class SqlEventRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def create(self, company_id: int | None, data: dict[str, Any]) -> Event:
+        event = Event(company_id=company_id, **data)
+        self._db.add(event)
+        self._db.commit()
+        self._db.refresh(event)
+        return self.get(event.id)
+
+    def get(self, event_id: int) -> Event | None:
+        return self._db.scalar(
+            select(Event)
+            .where(Event.id == int(event_id))
+            .options(selectinload(Event.company))
+        )
+
+    def get_for_company(self, event_id: int, company_id: int) -> Event | None:
+        return self._db.scalar(
+            select(Event)
+            .where(Event.id == int(event_id), Event.company_id == int(company_id))
+            .options(selectinload(Event.company))
+        )
+
+    def get_many(self, event_ids: list[int]) -> dict[int, Event]:
+        if not event_ids:
+            return {}
+        rows = self._db.scalars(
+            select(Event)
+            .where(Event.id.in_([int(i) for i in event_ids]))
+            .options(selectinload(Event.company))
+        ).all()
+        return {row.id: row for row in rows}
+
+    def list_for_company(self, company_id: int) -> list[Event]:
+        return list(
+            self._db.scalars(
+                select(Event)
+                .where(Event.company_id == int(company_id))
+                .options(selectinload(Event.company))
+                .order_by(Event.starts_at.asc(), Event.id.asc())
+            ).all()
+        )
+
+    def list_upcoming(self, keyword: str = "") -> list[Event]:
+        statement = (
+            select(Event)
+            .where(Event.starts_at >= func.now())
+            .options(selectinload(Event.company))
+        )
+        if keyword:
+            statement = statement.where(Event.title.ilike(f"%{keyword}%"))
+        statement = statement.order_by(Event.starts_at.asc(), Event.id.asc())
+        return list(self._db.scalars(statement).all())
+
+    def update(self, event: Event, data: dict[str, Any]) -> Event:
+        for field, value in data.items():
+            setattr(event, field, value)
+        self._db.commit()
+        self._db.refresh(event)
+        return self.get(event.id)
+
+    def delete(self, event: Event) -> None:
+        self._db.delete(event)
+        self._db.commit()
+
+
+# ------------------------------------------------------------------- Mongo
+
+
+class MongoCompanyRepo:
+    def __init__(self, store: CompanyStore) -> None:
+        self._store = store
+
+    def create(self, **fields: Any) -> SimpleNamespace:
+        return self._store.create(**fields)
+
+    def get(self, company_id: int) -> SimpleNamespace | None:
+        return self._store.get(company_id)
+
+    def get_by_email(self, email: str) -> SimpleNamespace | None:
+        return self._store.get_by_email(email)
+
+    def update(self, company: SimpleNamespace, data: dict[str, Any]) -> SimpleNamespace:
+        return self._store.update(company.id, data)
+
+    def get_many(self, company_ids: list[int]) -> dict[int, SimpleNamespace]:
+        return self._store.get_many(company_ids)
+
+    def ids_with_name_containing(self, text: str) -> list[int]:
+        return self._store.ids_with_name_containing(text)
+
+
+class MongoJobRepo:
+    def __init__(self, jobs: JobStore, companies: CompanyStore) -> None:
+        self._jobs = jobs
+        self._companies = companies
+
+    def _with_company(self, job: SimpleNamespace | None) -> SimpleNamespace | None:
+        if job is not None:
+            job.company = self._companies.get(job.company_id)
+        return job
+
+    def _with_companies(self, jobs: list[SimpleNamespace]) -> list[SimpleNamespace]:
+        by_id = self._companies.get_many(list({job.company_id for job in jobs}))
+        for job in jobs:
+            job.company = by_id.get(job.company_id)
+        return [job for job in jobs if job.company is not None]
+
+    def create(self, company_id: int, data: dict[str, Any]) -> SimpleNamespace:
+        job = self._jobs.create(company_id, **data)
+        return self._with_company(job)
+
+    def get(self, job_id: int) -> SimpleNamespace | None:
+        return self._with_company(self._jobs.get(job_id))
+
+    def get_for_company(self, job_id: int, company_id: int) -> SimpleNamespace | None:
+        return self._with_company(self._jobs.get_for_company(job_id, company_id))
+
+    def list_for_company(self, company_id: int) -> list[SimpleNamespace]:
+        return self._with_companies(self._jobs.list_for_company(company_id))
+
+    def search(
+        self, keyword: str = "", city: str = "", limit: int = 50, offset: int = 0
+    ) -> list[SimpleNamespace]:
+        company_ids = self._companies.ids_with_name_containing(keyword) if keyword else None
+        jobs = self._jobs.search(
+            keyword=keyword, city=city, company_ids=company_ids, limit=limit, offset=offset
+        )
+        return self._with_companies(jobs)
+
+    def get_many(self, job_ids: list[int]) -> dict[int, SimpleNamespace]:
+        jobs = self._jobs.get_many(job_ids)
+        by_id = self._companies.get_many(list({j.company_id for j in jobs.values()}))
+        for job in jobs.values():
+            job.company = by_id.get(job.company_id)
+        return {k: v for k, v in jobs.items() if v.company is not None}
+
+    def search_advanced(
+        self, *, company: str | None = None, **filters: Any
+    ) -> list[SimpleNamespace]:
+        """Assistant search: (job, company) rows, company name filter included."""
+        company_ids = None
+        if company:
+            company_ids = self._companies.ids_with_name_containing(company)
+            if not company_ids:
+                return []
+        return self._with_companies(
+            self._jobs.search_advanced(company_ids=company_ids, **filters)
+        )
+
+    def update(self, job: SimpleNamespace, data: dict[str, Any]) -> SimpleNamespace:
+        return self._with_company(self._jobs.update(job.id, data))
+
+    def delete(self, job: SimpleNamespace) -> None:
+        self._jobs.delete(job.id)
+
+
+class MongoEventRepo:
+    def __init__(self, events: EventStore, companies: CompanyStore) -> None:
+        self._events = events
+        self._companies = companies
+
+    def _with_company(self, event: SimpleNamespace | None) -> SimpleNamespace | None:
+        if event is not None:
+            event.company = (
+                self._companies.get(event.company_id)
+                if event.company_id is not None
+                else None
+            )
+        return event
+
+    def _with_companies(self, events: list[SimpleNamespace]) -> list[SimpleNamespace]:
+        ids = list({e.company_id for e in events if e.company_id is not None})
+        by_id = self._companies.get_many(ids)
+        for event in events:
+            event.company = by_id.get(event.company_id)
+        return events
+
+    def create(self, company_id: int | None, data: dict[str, Any]) -> SimpleNamespace:
+        return self._with_company(self._events.create(company_id, **data))
+
+    def get(self, event_id: int) -> SimpleNamespace | None:
+        return self._with_company(self._events.get(event_id))
+
+    def get_for_company(self, event_id: int, company_id: int) -> SimpleNamespace | None:
+        return self._with_company(self._events.get_for_company(event_id, company_id))
+
+    def get_many(self, event_ids: list[int]) -> dict[int, SimpleNamespace]:
+        events = self._events.get_many(event_ids)
+        self._with_companies(list(events.values()))
+        return events
+
+    def list_for_company(self, company_id: int) -> list[SimpleNamespace]:
+        return self._with_companies(self._events.list_for_company(company_id))
+
+    def list_upcoming(self, keyword: str = "") -> list[SimpleNamespace]:
+        return self._with_companies(self._events.list_upcoming(keyword))
+
+    def search_advanced(self, **filters: Any) -> list[SimpleNamespace]:
+        return self._with_companies(self._events.search_advanced(**filters))
+
+    def update(self, event: SimpleNamespace, data: dict[str, Any]) -> SimpleNamespace:
+        return self._with_company(self._events.update(event.id, data))
+
+    def delete(self, event: SimpleNamespace) -> None:
+        self._events.delete(event.id)
+
+
+# ------------------------------------------------------------ student side
+# SQL: students, student_preferences and saved_items tables. Sessions and the
+# activity log exist only in MongoDB, so the SQL versions do nothing (the JWT
+# is stateless there and the token and sign-in behaviour are unchanged).
+
+
+class SqlStudentRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def create(self, **fields: Any) -> Student:
+        student = Student(**fields)
+        self._db.add(student)
+        self._db.commit()
+        self._db.refresh(student)
+        return student
+
+    def get(self, student_id: int) -> Student | None:
+        return self._db.get(Student, int(student_id))
+
+    def get_by_email(self, email: str) -> Student | None:
+        return self._db.scalar(select(Student).where(Student.email == email))
+
+    def get_many(self, student_ids: list[int]) -> dict[int, Student]:
+        if not student_ids:
+            return {}
+        rows = self._db.scalars(
+            select(Student).where(Student.id.in_([int(i) for i in student_ids]))
+        ).all()
+        return {row.id: row for row in rows}
+
+    def search(
+        self,
+        name: str | None = None,
+        college: str | None = None,
+        skill: str | None = None,
+        city: str | None = None,
+        limit: int = 100,
+    ) -> list[Student]:
+        statement = select(Student)
+        for column, value in (
+            (Student.full_name, name),
+            (Student.college_name, college),
+            (Student.skills, skill),
+            (Student.city, city),
+        ):
+            if value and value.strip():
+                statement = statement.where(column.ilike(f"%{value.strip()}%"))
+        statement = statement.order_by(Student.full_name.asc()).limit(limit)
+        return list(self._db.scalars(statement).all())
+
+
+class SqlPreferencesRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def get(self, student_id: int) -> StudentPreferences | None:
+        return self._db.get(StudentPreferences, int(student_id))
+
+
+class SqlSavedItemRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def exists(self, student_id: int, item_type: str, item_id: int) -> bool:
+        column = SavedItem.job_id if item_type == "job" else SavedItem.event_id
+        return (
+            self._db.scalar(
+                select(SavedItem.id).where(
+                    SavedItem.student_id == int(student_id), column == int(item_id)
+                )
+            )
+            is not None
+        )
+
+    def create(self, student_id: int, item_type: str, item_id: int) -> None:
+        """Raises sqlalchemy IntegrityError if already saved."""
+        self._db.add(
+            SavedItem(
+                student_id=int(student_id),
+                item_type=item_type,
+                job_id=int(item_id) if item_type == "job" else None,
+                event_id=int(item_id) if item_type == "event" else None,
+            )
+        )
+        self._db.commit()
+
+
+class NoSessions:
+    """SQL mode: tokens are stateless, nothing to record or revoke."""
+
+    def start(self, student_id: int, token: str, expires_at: Any) -> None:
+        return None
+
+    def is_revoked(self, token: str) -> bool:
+        return False
+
+    def revoke(self, token: str) -> bool:
+        return False
+
+
+class NoActivity:
+    def record(self, student_id: int, action: str, detail: dict | None = None) -> None:
+        return None
+
+    def list_for_student(self, student_id: int, limit: int = 50) -> list:
+        return []
+
+
+class MongoStudentRepo:
+    def __init__(self, store: StudentStore) -> None:
+        self._store = store
+
+    def create(self, **fields: Any) -> SimpleNamespace:
+        return self._store.create(**fields)
+
+    def get(self, student_id: int) -> SimpleNamespace | None:
+        return self._store.get(student_id)
+
+    def get_by_email(self, email: str) -> SimpleNamespace | None:
+        return self._store.get_by_email(email)
+
+    def get_many(self, student_ids: list[int]) -> dict[int, SimpleNamespace]:
+        return self._store.get_many(student_ids)
+
+    def search(self, **filters: Any) -> list[SimpleNamespace]:
+        return self._store.search(**filters)
+
+
+class MongoPreferencesRepo:
+    def __init__(self, store: StudentPreferencesStore) -> None:
+        self._store = store
+
+    def get(self, student_id: int) -> SimpleNamespace | None:
+        return self._store.get(student_id)
+
+
+class MongoSavedItemRepo:
+    def __init__(self, store: SavedItemStore) -> None:
+        self._store = store
+
+    def exists(self, student_id: int, item_type: str, item_id: int) -> bool:
+        return self._store.get(student_id, item_type, item_id) is not None
+
+    def create(self, student_id: int, item_type: str, item_id: int) -> None:
+        """Raises pymongo DuplicateKeyError if already saved."""
+        self._store.create(student_id, item_type, item_id)
+
+
+class DuplicateRecord(Exception):
+    """The student already has this application or registration."""
+
+
+class SqlApplicationRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def create(self, **fields: Any) -> Application:
+        application = Application(**fields)
+        try:
+            self._db.add(application)
+            self._db.commit()
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise DuplicateRecord from exc
+        self._db.refresh(application)
+        return application
+
+    def get(self, application_id: int) -> Application | None:
+        return self._db.get(Application, int(application_id))
+
+    def exists(self, student_id: int, job_id: int) -> bool:
+        return (
+            self._db.scalar(
+                select(Application.id).where(
+                    Application.student_id == student_id,
+                    Application.job_id == job_id,
+                )
+            )
+            is not None
+        )
+
+    def list_for_student(self, student_id: int, status: str | None = None) -> list[Application]:
+        statement = select(Application).where(Application.student_id == student_id)
+        if status is not None:
+            statement = statement.where(Application.status == status)
+        statement = statement.order_by(Application.applied_at.desc(), Application.id.desc())
+        return list(self._db.scalars(statement).all())
+
+    def list_for_job(self, job_id: int) -> list[Application]:
+        statement = (
+            select(Application)
+            .where(Application.job_id == job_id)
+            .order_by(Application.applied_at.desc(), Application.id.desc())
+        )
+        return list(self._db.scalars(statement).all())
+
+    def count_for_job(self, job_id: int) -> int:
+        return self._db.scalar(
+            select(func.count()).select_from(Application).where(Application.job_id == job_id)
+        ) or 0
+
+    def update(self, application: Any, **fields: Any) -> Application:
+        for key, value in fields.items():
+            setattr(application, key, value)
+        self._db.commit()
+        self._db.refresh(application)
+        return application
+
+
+class SqlRegistrationRepo:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def create(self, student_id: int, event_id: int) -> Registration:
+        registration = Registration(student_id=student_id, event_id=event_id)
+        try:
+            self._db.add(registration)
+            self._db.commit()
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise DuplicateRecord from exc
+        self._db.refresh(registration)
+        return registration
+
+    def exists(self, student_id: int, event_id: int) -> bool:
+        return (
+            self._db.scalar(
+                select(Registration.id).where(
+                    Registration.student_id == student_id,
+                    Registration.event_id == event_id,
+                )
+            )
+            is not None
+        )
+
+    def list_for_student(self, student_id: int) -> list[Registration]:
+        return list(
+            self._db.scalars(
+                select(Registration).where(Registration.student_id == student_id)
+            ).all()
+        )
+
+    def list_for_event(self, event_id: int) -> list[Registration]:
+        statement = (
+            select(Registration)
+            .where(Registration.event_id == event_id)
+            .order_by(Registration.registered_at.desc(), Registration.id.desc())
+        )
+        return list(self._db.scalars(statement).all())
+
+    def count_for_event(self, event_id: int) -> int:
+        return self._db.scalar(
+            select(func.count()).select_from(Registration).where(Registration.event_id == event_id)
+        ) or 0
+
+
+class MongoApplicationRepo:
+    def __init__(self, store: ApplicationStore) -> None:
+        self._store = store
+
+    def create(self, **fields: Any) -> Any:
+        try:
+            return self._store.create(**fields)
+        except Exception as exc:
+            if type(exc).__name__ == "DuplicateKeyError":
+                raise DuplicateRecord from exc
+            raise
+
+    def get(self, application_id: int) -> Any:
+        return self._store.get(application_id)
+
+    def exists(self, student_id: int, job_id: int) -> bool:
+        return self._store.exists(student_id, job_id)
+
+    def list_for_student(self, student_id: int, status: str | None = None) -> list[Any]:
+        return self._store.list_for_student(student_id, status)
+
+    def list_for_job(self, job_id: int) -> list[Any]:
+        return self._store.list_for_job(job_id)
+
+    def count_for_job(self, job_id: int) -> int:
+        return self._store.count_for_job(job_id)
+
+    def update(self, application: Any, **fields: Any) -> Any:
+        return self._store.update(application.id, fields)
+
+
+class MongoRegistrationRepo:
+    def __init__(self, store: RegistrationStore) -> None:
+        self._store = store
+
+    def create(self, student_id: int, event_id: int) -> Any:
+        try:
+            return self._store.create(student_id=student_id, event_id=event_id)
+        except Exception as exc:
+            if type(exc).__name__ == "DuplicateKeyError":
+                raise DuplicateRecord from exc
+            raise
+
+    def exists(self, student_id: int, event_id: int) -> bool:
+        return self._store.exists(student_id, event_id)
+
+    def list_for_student(self, student_id: int) -> list[Any]:
+        return self._store.list_for_student(student_id)
+
+    def list_for_event(self, event_id: int) -> list[Any]:
+        return self._store.list_for_event(event_id)
+
+    def count_for_event(self, event_id: int) -> int:
+        return self._store.count_for_event(event_id)
+
+
+class Repos:
+    """The repositories for one request."""
+
+    def __init__(
+        self,
+        companies: Any,
+        jobs: Any,
+        events: Any,
+        students: Any = None,
+        preferences: Any = None,
+        saved_items: Any = None,
+        sessions: Any = None,
+        activity: Any = None,
+        applications: Any = None,
+        registrations: Any = None,
+    ) -> None:
+        self.companies = companies
+        self.jobs = jobs
+        self.events = events
+        self.students = students
+        self.preferences = preferences
+        self.saved_items = saved_items
+        self.sessions = sessions if sessions is not None else NoSessions()
+        self.activity = activity if activity is not None else NoActivity()
+        self.applications = applications
+        self.registrations = registrations
+
+
+def make_repos(db: Session) -> Repos:
+    if settings.persistence == "mongo":
+        database = get_mongo_database()
+        company_store, job_store = CompanyStore(database), JobStore(database)
+        return Repos(
+            MongoCompanyRepo(company_store),
+            MongoJobRepo(job_store, company_store),
+            MongoEventRepo(EventStore(database), company_store),
+            MongoStudentRepo(StudentStore(database)),
+            MongoPreferencesRepo(StudentPreferencesStore(database)),
+            MongoSavedItemRepo(SavedItemStore(database)),
+            SessionStore(database),
+            ActivityLogStore(database),
+            MongoApplicationRepo(ApplicationStore(database)),
+            MongoRegistrationRepo(RegistrationStore(database)),
+        )
+    return Repos(
+        SqlCompanyRepo(db),
+        SqlJobRepo(db),
+        SqlEventRepo(db),
+        SqlStudentRepo(db),
+        SqlPreferencesRepo(db),
+        SqlSavedItemRepo(db),
+        applications=SqlApplicationRepo(db),
+        registrations=SqlRegistrationRepo(db),
+    )

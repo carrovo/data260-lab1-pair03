@@ -1,0 +1,8 @@
+{
+  "event_id": "5f0c1c1e-8d0a-4b6e-9a55-0d6f3c1a0004",
+  "event_type": "event.registration_created",
+  "trace_id": "9c4b0f2d6a1e4f1d8a77b2c3d4e5f604",
+  "occurred_at": "2026-11-08T21:03:00Z",
+  "producer": "event",
+  "payload": {"registration_id": "1", "student_id": "1", "event_id": "1"}
+}

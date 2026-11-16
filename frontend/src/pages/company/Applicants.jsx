@@ -1,83 +1,48 @@
 import { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { Link, useParams } from "react-router-dom";
 
 import api from "../../services/api";
+import {
+  clearStatusError,
+  loadApplicants,
+  selectApplicants,
+  selectStatusUpdate,
+  updateApplicantStatus,
+} from "../../store/applicationsSlice";
 import Loading from "../../components/Loading";
 import ErrorMessage from "../../components/ErrorMessage";
 
 export default function Applicants() {
   const { jobId } = useParams();
 
-  const [applicants, setApplicants] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const dispatch = useDispatch();
+  const applicantState = useSelector(selectApplicants);
+  const statusUpdate = useSelector(selectStatusUpdate);
+  const [previewError, setPreviewError] = useState(null);
   const [resumeError, setResumeError] = useState(null);
 
-  const loadApplicants = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await api.get(
-        `/companies/jobs/${jobId}/applicants`
-      );
-
-      setApplicants(response.data || []);
-    } catch (err) {
-      setError(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const isCurrentJob = applicantState.jobId === String(jobId);
+  const applicants = isCurrentJob ? applicantState.items : [];
+  const loading =
+    !isCurrentJob ||
+    applicantState.status === "idle" ||
+    applicantState.status === "loading";
+  const error = previewError || statusUpdate.error || applicantState.error;
 
   useEffect(() => {
-    let active = true;
+    dispatch(clearStatusError());
+    dispatch(loadApplicants(jobId));
+  }, [dispatch, jobId]);
 
-    async function loadInitialApplicants() {
-      try {
-        const response = await api.get(
-          `/companies/jobs/${jobId}/applicants`
-        );
-
-        if (active) {
-          setApplicants(response.data || []);
-        }
-      } catch (err) {
-        if (active) {
-          setError(err);
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadInitialApplicants();
-
-    return () => {
-      active = false;
-    };
-  }, [jobId]);
-
-  const updateStatus = async (applicationId, status) => {
-    try {
-      setError(null);
-
-      await api.put(
-        `/companies/applications/${applicationId}/status`,
-        { status }
-      );
-
-      await loadApplicants();
-    } catch (err) {
-      setError(err);
-    }
+  const updateStatus = (applicationId, status) => {
+    setPreviewError(null);
+    dispatch(updateApplicantStatus({ applicationId, status, jobId }));
   };
 
   const previewResume = async (applicationId) => {
     try {
-      setError(null);
+      setPreviewError(null);
       setResumeError(null);
 
       const response = await api.get(
@@ -100,7 +65,7 @@ export default function Applicants() {
         return;
       }
 
-      setError(err);
+      setPreviewError(err);
     }
   };
 

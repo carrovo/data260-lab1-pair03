@@ -1,0 +1,15 @@
+# Resume files shared by the Company and Application services. ReadWriteOnce
+# works on a single-node cluster (Docker Desktop). On a multi-node cluster use
+# ReadWriteMany storage (for example EFS) or object storage instead.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: p03-uploads
+  labels:
+    app.kubernetes.io/name: p03-uploads
+    app.kubernetes.io/part-of: p03
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi

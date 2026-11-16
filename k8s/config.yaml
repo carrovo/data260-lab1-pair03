@@ -1,0 +1,14 @@
+# Non-secret settings shared by every pod. Passwords and the JWT key are NOT here:
+# they live in the Secret p03-secrets, created from .env.compose (see `make k8s-secret`).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: p03-config
+  labels:
+    app.kubernetes.io/part-of: p03
+data:
+  KAFKA_BOOTSTRAP: p03-kafka:9092
+  MONGO_URL: mongodb://p03-mongo:27017
+  MONGO_DB: p03_handshake
+  # sql (default) or mongo: where companies, jobs and events live.
+  PERSISTENCE: sql

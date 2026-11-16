@@ -2,16 +2,15 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from backend.app.models import (
     Company,
-    Event,
     Registration,
-    Student,
 )
+from backend.app.repos import make_repos
 from backend.app.routers.company_auth import (
     get_current_company,
     get_db,
@@ -44,17 +43,8 @@ def _owned_event_or_404(
     db: Session,
     event_id: int,
     company_id: int,
-) -> Event:
-    statement = (
-        select(Event)
-        .where(
-            Event.id == event_id,
-            Event.company_id == company_id,
-        )
-        .options(selectinload(Event.company))
-    )
-
-    event = db.scalar(statement)
+):
+    event = make_repos(db).events.get_for_company(event_id, company_id)
 
     if event is None:
         raise HTTPException(
@@ -75,19 +65,9 @@ def create_event(
     db: Session = Depends(get_db),
     current_company: Company = Depends(get_current_company),
 ):
-    event = Event(
-        company_id=current_company.id,
-        **payload.model_dump(),
-    )
-
-    db.add(event)
-    db.commit()
-    db.refresh(event)
-
-    return _owned_event_or_404(
-        db,
-        event.id,
+    return make_repos(db).events.create(
         current_company.id,
+        payload.model_dump(),
     )
 
 
@@ -99,14 +79,7 @@ def list_company_events(
     db: Session = Depends(get_db),
     current_company: Company = Depends(get_current_company),
 ):
-    statement = (
-        select(Event)
-        .where(Event.company_id == current_company.id)
-        .options(selectinload(Event.company))
-        .order_by(Event.starts_at.asc(), Event.id.asc())
-    )
-
-    return list(db.scalars(statement).all())
+    return make_repos(db).events.list_for_company(current_company.id)
 
 
 @router.get(
@@ -158,17 +131,7 @@ def update_company_event(
             detail="ends_at must be on or after starts_at.",
         )
 
-    for field, value in update_data.items():
-        setattr(event, field, value)
-
-    db.commit()
-    db.refresh(event)
-
-    return _owned_event_or_404(
-        db,
-        event.id,
-        current_company.id,
-    )
+    return make_repos(db).events.update(event, update_data)
 
 
 @router.delete(
@@ -186,15 +149,16 @@ def delete_company_event(
         current_company.id,
     )
 
-    if event.registrations:
+    registration_count = make_repos(db).registrations.count_for_event(event.id)
+
+    if registration_count:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cannot delete an event that already has registrations.",
         )
 
     try:
-        db.delete(event)
-        db.commit()
+        make_repos(db).events.delete(event)
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
@@ -220,20 +184,15 @@ def list_event_registrants(
         current_company.id,
     )
 
-    statement = (
-        select(Registration, Student)
-        .join(
-            Student,
-            Registration.student_id == Student.id,
-        )
-        .where(Registration.event_id == event.id)
-        .order_by(
-            Registration.registered_at.desc(),
-            Registration.id.desc(),
-        )
+    registrations = make_repos(db).registrations.list_for_event(event.id)
+    students = make_repos(db).students.get_many(
+        [registration.student_id for registration in registrations]
     )
-
-    rows = db.execute(statement).all()
+    rows = [
+        (registration, students[registration.student_id])
+        for registration in registrations
+        if registration.student_id in students
+    ]
 
     return [
         RegisteredStudentResponse(

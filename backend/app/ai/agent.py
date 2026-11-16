@@ -3,10 +3,11 @@
 import inspect
 import json
 import logging
+import math
 import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from backend.app.ai.confirm_action import (
@@ -16,6 +17,7 @@ from backend.app.ai.confirm_action import (
     is_decline_message,
 )
 from backend.app.ai.ollama_client import ModelClient
+from backend.common.timing import timed_span
 
 
 logger = logging.getLogger("assistant")
@@ -63,8 +65,6 @@ _JWT_PATTERN = re.compile(
 ToolImplementation = Callable[..., str]
 ToolImplementations = Mapping[str, ToolImplementation]
 
-DEMO_REFERENCE_DATE = date(2029, 10, 15)
-
 
 def _next_calendar_month(reference_date: date) -> tuple[date, date]:
     if reference_date.month == 12:
@@ -87,10 +87,6 @@ def _next_calendar_month(reference_date: date) -> tuple[date, date]:
 
     return following_month, month_after - timedelta(days=1)
 
-
-DEMO_NEXT_MONTH_START, DEMO_NEXT_MONTH_END = _next_calendar_month(
-    DEMO_REFERENCE_DATE
-)
 
 INJECTION_PATTERNS = (
     "ignore all previous instructions",
@@ -138,18 +134,33 @@ SYSTEM_PROMPT = (
     "When a job request says remote, pass the Boolean argument "
     "\"is_remote\": true to search_jobs; never use a parameter named "
     "\"remote\" or a string value such as \"yes\". "
-    f"The trusted reference date for the deterministic seeded demo dataset "
-    f"is {DEMO_REFERENCE_DATE.isoformat()}. Calculate relative date phrases "
-    "from this server-controlled date. Next month means the complete next "
-    f"calendar month; from {DEMO_REFERENCE_DATE.isoformat()}, next month is "
-    f"{DEMO_NEXT_MONTH_START.isoformat()} through "
-    f"{DEMO_NEXT_MONTH_END.isoformat()}. Never replace this relative-date "
-    "reference with a value from conversation history or model-generated "
-    "tool arguments. "
     "State-changing actions require application confirmation. "
     "If a tool reports an error or no matches, report that result without "
     "inventing data. Keep responses concise and factual."
 )
+
+
+def _utc_now() -> datetime:
+    """Server clock; UTC is the explicit application date default."""
+    return datetime.now(timezone.utc)
+
+
+def build_system_prompt(*, clock: Callable[[], datetime] | None = None) -> str:
+    """Capture one request date. Tests inject an aware clock, never change OS time."""
+    instant = (clock or _utc_now)()
+    if instant.tzinfo is None or instant.utcoffset() is None:
+        raise ValueError("The server date clock must be timezone-aware.")
+    reference_date = instant.astimezone(timezone.utc).date()
+    start, end = _next_calendar_month(reference_date)
+    return (
+        SYSTEM_PROMPT
+        + f" The trusted reference date for this request is {reference_date.isoformat()} (UTC). "
+        "Use this server-controlled date only for relative date phrases. Next month "
+        f"means the complete calendar range {start.isoformat()} through {end.isoformat()}. "
+        "Preserve explicit dates and date ranges supplied by the user; do not replace "
+        "them with the relative-date range. Never replace the server reference date "
+        "with a value from conversation history or model-generated tool arguments."
+    )
 
 
 def _is_sensitive_argument_key(key: Any) -> bool:
@@ -434,13 +445,162 @@ def _execute_tool_call(
         trusted_arguments["student_id"] = student_id
 
     try:
-        result = implementation(db, **trusted_arguments)
+        with timed_span("tool", name):
+            result = implementation(db, **trusted_arguments)
     except TypeError as exc:
         return f"Malformed arguments for tool '{name}': {exc}"
     except Exception as exc:
         return f"Unexpected error running tool '{name}': {exc}"
 
     return result if isinstance(result, str) else str(result)
+
+
+def _json_type_matches(value: Any, expected_type: str) -> bool:
+    """Return whether a parsed JSON value has the declared schema type."""
+
+    if expected_type == "object":
+        return isinstance(value, dict)
+    if expected_type == "array":
+        return isinstance(value, list)
+    if expected_type == "string":
+        return isinstance(value, str)
+    if expected_type == "boolean":
+        return isinstance(value, bool)
+    if expected_type == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected_type == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if expected_type == "null":
+        return value is None
+    return False
+
+
+def _validate_json_schema_value(
+    value: Any,
+    schema: Any,
+    *,
+    path: str = "$",
+) -> str | None:
+    """Validate the JSON Schema subset used by declared Assistant tools."""
+
+    if not isinstance(schema, dict):
+        return f"{path} has an invalid declared schema"
+
+    if isinstance(value, float) and not math.isfinite(value):
+        return f"{path} must be a finite JSON number"
+
+    expected = schema.get("type")
+    if expected is not None:
+        expected_types = expected if isinstance(expected, list) else [expected]
+        if not all(isinstance(item, str) for item in expected_types):
+            return f"{path} has an invalid declared type"
+        if not any(_json_type_matches(value, item) for item in expected_types):
+            return (
+                f"{path} must be of type "
+                f"{' or '.join(expected_types)}"
+            )
+
+    if "enum" in schema and value not in schema["enum"]:
+        return f"{path} must be one of {schema['enum']}"
+    if "const" in schema and value != schema["const"]:
+        return f"{path} must equal {schema['const']!r}"
+
+    if isinstance(value, dict):
+        properties = schema.get("properties", {})
+        if not isinstance(properties, dict):
+            return f"{path} has invalid declared properties"
+        required = schema.get("required", [])
+        if not isinstance(required, list):
+            return f"{path} has an invalid required-property declaration"
+        for name in required:
+            if name not in value:
+                return f"{path} is missing required property '{name}'"
+
+        additional = schema.get("additionalProperties", True)
+        for name, item in value.items():
+            item_path = f"{path}.{name}"
+            if name in properties:
+                error = _validate_json_schema_value(
+                    item,
+                    properties[name],
+                    path=item_path,
+                )
+                if error:
+                    return error
+            elif additional is False:
+                return f"{path} has unexpected property '{name}'"
+            elif isinstance(additional, dict):
+                error = _validate_json_schema_value(
+                    item,
+                    additional,
+                    path=item_path,
+                )
+                if error:
+                    return error
+
+    if isinstance(value, list) and isinstance(schema.get("items"), dict):
+        for index, item in enumerate(value):
+            error = _validate_json_schema_value(
+                item,
+                schema["items"],
+                path=f"{path}[{index}]",
+            )
+            if error:
+                return error
+
+    if isinstance(value, str):
+        minimum_length = schema.get("minLength")
+        maximum_length = schema.get("maxLength")
+        if isinstance(minimum_length, int) and len(value) < minimum_length:
+            return f"{path} must contain at least {minimum_length} characters"
+        if isinstance(maximum_length, int) and len(value) > maximum_length:
+            return f"{path} must contain at most {maximum_length} characters"
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        minimum = schema.get("minimum")
+        maximum = schema.get("maximum")
+        if isinstance(minimum, (int, float)) and value < minimum:
+            return f"{path} must be at least {minimum}"
+        if isinstance(maximum, (int, float)) and value > maximum:
+            return f"{path} must be at most {maximum}"
+
+    return None
+
+
+def validate_tool_arguments(
+    tool_name: str,
+    arguments: dict[str, Any],
+    tool_schemas: Sequence[dict[str, Any]],
+) -> str | None:
+    """Validate against the same tool schema declaration sent to the model."""
+
+    def contains_nonfinite(value: Any) -> bool:
+        if isinstance(value, float):
+            return not math.isfinite(value)
+        if isinstance(value, dict):
+            return any(contains_nonfinite(item) for item in value.values())
+        if isinstance(value, list):
+            return any(contains_nonfinite(item) for item in value)
+        return False
+
+    if contains_nonfinite(arguments):
+        return f"Invalid arguments for tool '{tool_name}': numbers must be finite."
+
+    for declaration in tool_schemas:
+        function = declaration.get("function", {})
+        if function.get("name") != tool_name:
+            continue
+        parameters = function.get("parameters")
+        if not isinstance(parameters, dict):
+            return f"Tool '{tool_name}' has no valid declared parameter schema."
+        error = _validate_json_schema_value(arguments, parameters)
+        return (
+            f"Invalid arguments for tool '{tool_name}': {error}."
+            if error
+            else None
+        )
+
+    return f"Tool '{tool_name}' has no declared parameter schema."
 
 
 def _request_kind(user_message: str) -> str | None:
@@ -591,10 +751,11 @@ def _handle_declined_confirmation(
     user_message: str,
     model_client: ModelClient,
     pending_action: dict[str, Any],
+    system_prompt: str,
 ) -> dict[str, Any]:
     cancelled = cancellation_message(pending_action["arguments"])
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         *conversation,
         {"role": "user", "content": user_message},
         {
@@ -619,7 +780,7 @@ def _handle_declined_confirmation(
     )
 
 
-def run_assistant(
+def _run_assistant(
     db: Any,
     user_message: str,
     conversation: Any,
@@ -636,6 +797,7 @@ def run_assistant(
     schemas = tool_schemas or []
     implementations = tool_implementations or {}
     safe_history = validate_conversation(conversation)
+    system_prompt = build_system_prompt()
     pending_action = find_pending_confirmation(safe_history)
 
     if pending_action and is_decline_message(user_message):
@@ -644,10 +806,11 @@ def run_assistant(
             user_message,
             model_client,
             pending_action,
+            system_prompt,
         )
 
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         *safe_history,
         {"role": "user", "content": user_message},
     ]
@@ -764,6 +927,23 @@ def run_assistant(
                 repair_requested = True
                 break
 
+            validation_error = validate_tool_arguments(
+                name,
+                arguments,
+                schemas,
+            )
+            if validation_error:
+                repair_used, response = _repair_or_finish(
+                    messages,
+                    validation_error,
+                    repair_used,
+                    tool_call_count,
+                )
+                if response is not None:
+                    return response
+                repair_requested = True
+                break
+
             server_arguments = {
                 key: value
                 for key, value in arguments.items()
@@ -830,3 +1010,19 @@ def run_assistant(
         tool_call_count,
         "iteration_ceiling",
     )
+
+
+def run_assistant(db, user_message, conversation, model_client, *, student_id=None,
+                  auto_approve=False, max_iterations=DEFAULT_MAX_ITERATIONS,
+                  tool_schemas=None, tool_implementations=None):
+    """Observe every iteration/repair through the same client, without changing limits."""
+    from backend.app.ai.usage import UsageModelClient
+
+    tracked = model_client if isinstance(model_client, UsageModelClient) else UsageModelClient(model_client)
+    result = _run_assistant(
+        db, user_message, conversation, tracked, student_id=student_id,
+        auto_approve=auto_approve, max_iterations=max_iterations,
+        tool_schemas=tool_schemas, tool_implementations=tool_implementations,
+    )
+    result["usage"] = tracked.recorder.report()
+    return result

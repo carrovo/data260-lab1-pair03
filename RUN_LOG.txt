@@ -117,3 +117,495 @@ The automated verification above used the repository's isolated test setup and
 deterministic model client. Live MySQL, Ollama, browser workflow, confirmation-
 gate, and prompt-injection demonstrations are documented separately in the
 report and pair verification recording.
+
+
+=====================================================================
+DATA 260 Lab 2 - Pair 03
+Run and Verification Log (Docker Compose, Kubernetes, load test)
+Verification date: 2026-11-11 (PST)
+Branch: feature/lab2-company-services
+=====================================================================
+
+Environment: Docker Desktop (Compose and its Kubernetes), JMeter 5.6, one laptop.
+Commands that need Docker, JMeter or kubectl were run by Trapti on her machine;
+their output was collected in the verify_*_output.txt files (git-ignored) and in
+JMeter's HTML reports (loadtest/report_*, git-ignored).
+
+[L2-1] Automated tests
+Command:  pytest backend/tests
+Result:   PASS - 396 passed, 1 skipped.
+
+[L2-2] Docker Compose, MySQL mode (PERSISTENCE=sql)
+Command:  docker compose --env-file .env.compose up -d --build ; make smoke
+Result:   PASS - company 9030, student 9031, job 9032, application 9033,
+          event 9034, assistant 9035 all report OK.
+
+[L2-3] Docker Compose, MongoDB mode (PERSISTENCE=mongo)
+Command:  sh scripts/verify_stack.sh
+Result:   PASS
+  - Mongo holds 50 companies, 300 jobs, 100 events; applications and
+    registrations stay in MySQL.
+  - 5-user JMeter trial: 110 requests, 0 errors. Duplicate apply/register
+    attempts return 409 by design and count as passes.
+  - 5 successful event registrations produced 5 new Mongo registration
+    documents; Kafka topic event.registration_created and the event worker agree.
+  - No publisher errors in the Application or Event service logs.
+
+[L2-4] Load test, JMeter, 0 errors at every level (see METRICS.md)
+  100 users:  6,850 requests, 105 req/s
+  300 users: 20,550 requests, 272 req/s
+  500 users: 34,250 requests, 404 req/s, mean 264 ms, p95 968 ms, p99 1,552 ms,
+             max 3,164 ms (re-run after the Kafka producers were merged).
+  Two bottlenecks were found and fixed: SQLAlchemy pool exhaustion at 300 users
+  (pool 5+10 raised to 20+20) and, at 500 users, the 40-thread worker pool
+  (raised to 120). The thread-pool explanation fits the logs but was not
+  isolated with a separate experiment.
+
+[L2-5] Kubernetes (namespace p03, Docker Desktop)
+Command:  sh scripts/verify_k8s.sh
+Result:   PASS - db-init and kafka-init completed, every deployment rolled out,
+          pymongo and confluent-kafka import inside the event, application and
+          job pods, smoke test OK on all six services, 5-user trial 110
+          requests with 0 errors, Kafka offsets and event-worker log agree.
+  Notes: the first run of the script failed because it checked the pods while
+  MySQL was restarting and the Job db-init was immutable; the script was fixed
+  to wait for every rollout. This run was in SQL mode and not load
+  tested at this point (see L2-8).
+
+[L2-6] Frontend and gateway (port 9036)
+Command:  sh scripts/verify_frontend.sh
+Result:   PASS - the gateway reports healthy; the app's own pages return 200;
+          10 student and 5 company API routes reach the correct service
+          (200, or 401 where a token is required); smoke test OK. Browser check
+          of student login, jobs, events and the company dashboard: working.
+
+[L2-8] Kubernetes load test and fixes (scripts/k8s_loadtest.sh, k8s_mongo.sh)
+Result:   PASS after three fixes; details and evidence in METRICS.md.
+  - First run (SQL): 300 users 10.25% errors, 500 users 21.78% errors. Cause:
+    0.5 CPU limit plus a synchronous /health queued behind bcrypt logins; the
+    kubelet restarted the Student pod. Fixed: async /health, probe timeouts,
+    CPU limit 2.
+  - Second run: 500 users 2.91% errors, all from 37 student logins
+    (QueuePool 20+20 exhausted). Fixed: Student pool 60+60.
+  - Third run, MySQL mode: 100 / 300 / 500 users, 0 errors, no pod restarts.
+  - MongoDB mode on Kubernetes: 50 companies, 300 jobs, 100 events in Mongo;
+    100 / 300 / 500 users, 0 errors, no pod restarts.
+  - Known: at 500 users the student login burst is slow (mean about 10 to 12 s,
+    max 24 to 27 s) because the Student service has one replica.
+
+[L2-9] Kafka topic prefix p03. (Kubernetes, SQL mode)
+Command:  sh scripts/k8s_mongo.sh off ; sh scripts/check_kafka_flow.sh
+Result:   PASS
+  - kafka-init created p03.<event type> and p03.<event type>.dlq for all five
+    event types; the services publish and the workers subscribe through
+    kafka_topic() only (backend/common/events.py).
+  - With a brand-new student: event registration 201 and job application 201;
+    p03.event.registration_created and p03.application.created each moved
+    from 0 to 1, the old unprefixed topics did not move, and the event worker
+    logged "processed ... attempts=1".
+  - Note: the earlier 5-user JMeter trial could not prove this, because the
+    same five students already had most events and jobs and every attempt
+    returned 409 (no message is published on a 409). check_kafka_flow.sh uses a
+    new student each run for that reason.
+
+[L2-10] Kafka failure cases (Kubernetes, scripts/kafka_failure_demo.sh, 2026-11-12)
+  Run on the job-index-worker (topic p03.job.created). Full output: kafka_failures_output.txt
+  (not committed; rerun the script to regenerate). Demo hooks in backend/workers/run.py are
+  off unless DEMO_FAILURE_HOOKS=1; the script switches them on and off again.
+  Case 1 - same event twice, same key:
+    - One event (same event_id) was published twice with key = job id.
+    - Result: 1 job_index document and 1 processed_events record. The log shows
+      "processed" once and "duplicate skipped" once.
+    - Why: the worker records "<consumer>:<event_id>" in processed_events (unique _id)
+      and skips an event it has seen; the database write is also an upsert.
+  Case 2 - worker killed during processing:
+    - A slow event paused for 25 s before its database write; the pod was force-deleted
+      during the pause (kubectl delete pod --grace-period=0 --force).
+    - Right after the kill: 0 job_index documents, 0 processed_events records.
+    - The replacement pod received the same event again and processed it
+      (processed attempts=1). Afterwards: 1 document, 1 record, consumer lag 0.
+    - The event was not lost and was processed again (at-least-once delivery). This is safe
+      because the offset is committed only after the database write (enable.auto.commit
+      is false) and the write is idempotent.
+  Case 3 - poison message, bounded retries, dead-letter topic:
+    - (a) invalid JSON -> dead-lettered at once (attempts=0).
+    - (b) a valid event whose handler always fails -> attempts 1/3, 2/3, 3/3, then
+      dead-lettered (attempts=3).
+    - Both messages are in p03.job.created.dlq. A good event published right after them was
+      processed normally (1 document, 1 record), so the pipeline kept running.
+
+[L2-11] Application Worker and application.updated (Kubernetes, merged tree 4ffdfbc, 2026-11-13)
+  Built by Xuanhua (branch feature/lab2-application-worker), merged and redeployed here.
+  - Full backend suite on the merged tree: 415 passed, 1 skipped.
+  - scripts/verify_k8s.sh: every pod Running, including p03-application-worker; 5-user
+    JMeter trial 0 errors.
+  - scripts/check_kafka_flow.sh with a brand-new student: event registration 201, application
+    created, resume replaced (PUT /applications/{id}/resume) 200. Offsets: p03.application.created
+    4407 -> 4408, p03.application.updated 0 -> 1, p03.event.registration_created 1192 -> 1193;
+    the old unprefixed topics did not move. The application worker logged "processed ... attempts=1"
+    for both application events and the event worker for the registration.
+
+[L2-12] Assistant load test (Docker Compose, 2026-11-13 22:24 PST)
+  Evidence label: 2026-11-13-pr3-assistant
+  Runner settings: 5, 10, 20 and 50 users; three Assistant chat iterations per
+    user; one login per user; 5-second ramp-up; 500 ms think time.
+  Environment: Apple M4 MacBook Air, 10 CPU cores, 16 GB RAM, Ollama 0.40.6,
+    qwen3:8b; Assistant reached host Ollama from Docker Compose.
+  Login result: 5/5, 10/10, 20/20 and 50/50 succeeded (85/85 total).
+  Assistant chat results:
+    - 5 users: 15/15 succeeded, 0 errors; p50 36,933 ms, p95/p99 47,537 ms.
+    - 10 users: 30/30 succeeded, 0 errors; p50 62,071 ms, p95 66,259 ms,
+      p99 67,428 ms.
+    - 20 users: 60/60 succeeded, 0 errors; p50 120,492 ms, p95 124,361 ms,
+      p99 126,213 ms.
+    - 50 users: 120/150 succeeded, 30 errors (80% success); p50 240,693 ms,
+      p95 289,255 ms, p99 299,736 ms.
+  Totals: 225/255 Assistant chats and 310/340 JMeter samples succeeded.
+  The 50-user failures were 20 HTTP 500 responses and 10
+    NoHttpResponseException responses; this level is not reliable.
+  Percentiles use the corrected standard nearest-rank calculation. Saturation
+    begins around 10 users as latency rises sharply with little throughput gain.
+  Tracked evidence: loadtest/summary_assistant_2026-11-13-pr3-assistant.md
+
+[L2-13] AWS deployment (Amazon EKS + ECR, 2026-11-13 / 2026-11-14)
+  Cluster p03-handshake (Kubernetes 1.34, us-east-1, one availability zone), managed node group of
+  2 x m6g.xlarge (Graviton), namespace p03, gp3 volumes (EBS CSI driver). Eight images in ECR
+  (p03-<service>, tag lab2, arm64). Scripts: aws_preflight, aws_ecr_push, aws_ebs_csi, aws_deploy,
+  aws_verify, aws_pause, aws_ollama (docs/AWS_DEPLOYMENT.md). No account id or secret is committed.
+  - aws_deploy.sh: every pod Running; seed (SEED=3) loaded 300 jobs, 100 events, 1,500 applications
+    and 600 registrations. The frontend gateway has an AWS load balancer on port 9036.
+  - aws_verify.sh through the public address (2026-11-13 23:22 PST): /healthz 200; student sign-in
+    200; job search 200; scripts/check_kafka_flow.sh RESULT: PASS.
+  - Pause and resume: nodes scaled to 0 (2026-11-13 23:34, 2026-11-14 23:09) and back to 2; the
+    cluster, volumes, images and load balancer address stayed. Both times one node stayed
+    "Ready,SchedulingDisabled" for over 10 minutes; its instance was terminated by hand (node group
+    already at 0, so no replacement started) and the node list ended empty.
+  - Evidence screenshots (kept locally, not in git): ECR repositories and tag, EKS cluster, kubectl
+    nodes/pods/services, public jobs page, logged-in page, end-to-end request, Assistant answer.
+
+[L2-14] Kafka flow check with exact MongoDB documents (AWS, 2026-11-14)
+  scripts/check_kafka_flow.sh now looks up the registration and application documents it creates
+  (registrations, applications) and their processed_events entries instead of counting log lines.
+  - Run 1, right after a cluster resume: topic offsets +1 on each p03.* topic, registration 602 and
+    application 1502 correct, but the 30 s wait ended before application.updated was applied:
+    application.created was processed at 06:28:28 UTC and application.updated, published at the
+    same moment, at 06:31:36 UTC (about 3 minutes later; worker re-joining after the restart is the
+    likely cause, not confirmed). Final document correct, 1 attempt each, nothing lost or duplicated.
+  - Run 2 (steady state): RESULT: PASS with all five document checks (student 203, registration
+    603, application 1503).
+
+[L2-15] Assistant on AWS (in-cluster Ollama, 2026-11-14)
+  Ollama 0.40.16 in a pod (p03-ollama) with qwen3:8b on its own 30 GB volume; the Assistant pod
+  reaches it at http://p03-ollama:11434. The nodes have no GPU: generation about 4.7 tokens/s.
+  - First attempt (no length cap): the model chose search_jobs (first call 1m0s), but the second
+    call, writing the answer, hit the Assistant client's 240 s limit (HTTP 500 after 4m0s).
+  - Load balancer idle timeout (60 s default) closed the first browser request; raised to 300 s.
+  - With OLLAMA_NUM_PREDICT=256 (AWS overlay only; unset everywhere else, so local runs are
+    unchanged): the whole flow completes. Assistant log run_complete exit="normal" tool_calls=1,
+    POST /assistant/chat 200 after 175.1 s (cold) and 149.0 s (warm); the answer call took 1m50s.
+  - The gateway (nginx) gave up at its 120 s limit, so the browser showed an error although the
+    Assistant had returned 200; proxy_read_timeout raised to 280 s. After that the Assistant
+    answer "What jobs are open in San Jose?" reached the browser (login -> search_jobs -> answer).
+  - Model load after idle: one-word reply took 61 s and 84 s. Ask one question before a demo.
+
+[L2-16] Assistant load test on AWS (JMeter, 2026-11-16)
+  Plan loadtest/assistant_aws.jmx (assistant.jmx with paths under /gw). Command per level:
+  jmeter -n -t assistant_aws.jmx -Jhost=$LB -Jstudent_port=9036 -Jassistant_port=9036 -Jusers=N
+  -Jrampup=5 -Jloops=1 -Jthink_ms=500 -l assistant_aws_N.jtl, N = 5, 10, 20, 50.
+  Chat average: 87.3 s (5 users, 0 errors), 160.1 s (10, 0 errors), 259.3 s (20, 15 x HTTP 504),
+  217.5 s (50, 36 x 504 and 10 x 500). 504 = gateway proxy_read_timeout 280 s. Student login 0
+  errors at every level. CPU-only Ollama, one pod; the cause of the 10 x 500 was not isolated.
+  Cluster paused afterwards (aws_pause.sh down); one node was terminated by hand.
+
+[L2-7] Where each check was run
+  - Student Assistant: Xuanhua's laptop (Ollama, qwen3:8b) and AWS (see [L2-15]).
+  - JMeter load tests: Docker Compose and Docker Desktop Kubernetes (see METRICS.md).
+  - Deployment, Kafka flow check and Assistant timings: AWS EKS (see [L2-13] to [L2-15]).
+
+[Xuanhua Li harness checkpoint — 2026-11-15]
+  Branch feature/lab2-agent-harness; base dd6a7e17c4c91e2e8c0a29524773bd3cd8a7be4a.
+  Added deterministic H01-H10 evaluation through production auth, Agent, tools,
+  confirmation, sanitizer and tracing, with isolated SQL/SQLite fixtures.
+  Agent validates declared typed schemas before confirmation/execution, including
+  rejection of non-finite numbers. Reports separate requested decisions, token
+  attempts, issued tokens and observed outcomes; actual client classes are recorded.
+  Focused command (harness, ai_core, student_assistant, ai_tools, ollama_client):
+    .venv/bin/python -m pytest -q backend/tests/test_agent_harness.py backend/tests/test_ai_core.py backend/tests/test_student_assistant.py backend/tests/test_ai_tools.py backend/tests/test_ollama_client.py -rs
+  Result: 178 passed, 0 failed/skipped, 1 warning.
+  Full command: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 465 passed, 0 failed/skipped, 61 warnings, 76.66 s.
+  Runner: sh scripts/run_agent_harness.sh --persistence sql --label checkpoint-20261115
+  Run twice with --output-dir loadtest/temp/agent_harness/checkpoint-20261115-a
+  and -b respectively: both exit 0, 10/10 pass, normalized JSON identical after
+  removing timestamp/elapsed time. Safe evidence is ignored temporary JSON/Markdown.
+  H07 is client-carried history. No claim of live-model resistance, Mongo harness
+  coverage or server-persistent memory. README records command and validator limits;
+  METRICS.md records results. Existing deployment/performance entries preserved.
+
+[Xuanhua Li Assistant memory — 2026-11-15]
+  Base 6124c45ec9ec3e5e2f645a065bdc18374e8531da; branch feature/lab2-assistant-memory.
+  Added Mongo-only assistant_rules/student_memory/conversations independently of
+  business PERSISTENCE (still sql by default). Explicit preference learning,
+  bounded untrusted prompt data, authenticated /memory, opaque conversation IDs,
+  stored-history precedence, ownership, eight-hour expiry and end lifecycle.
+  Added assistant.memory_consolidation_requested and assistant-memory-worker;
+  versioned atomic replacement/event receipts protect concurrent entries/replay.
+  Shared topic initializer uses kafka_topic() for every topic and DLQ. Existing
+  workers and their failure-demo behavior retained; no tools/repository changes.
+  Focused command:
+    .venv/bin/python -m pytest -q backend/tests/test_assistant_memory.py backend/tests/test_compose.py backend/tests/test_k8s.py backend/tests/test_contracts.py backend/tests/test_workers.py backend/tests/test_topic_prefix.py backend/tests/test_messaging.py backend/tests/test_agent_harness.py backend/tests/test_student_assistant.py -rs
+  Result: 144 passed, 0 failed/skipped, 30 warnings.
+  Full command: .venv/bin/python -m pytest -q backend/tests -rs
+  First full run: 475 passed, 1 failed (old service route-list assertion).
+  Updated exact list for new routes. After the final idempotent seed CLI/test
+  refinement: 476 passed, 0 failed/skipped, 88 warnings, 98.30 seconds.
+  Harness: sh scripts/run_agent_harness.sh --persistence sql --label memory-check-20261115 --output-dir loadtest/temp/agent_harness/memory-check-20261115
+  Result: 10/10 pass, exit 0; H07 remains client_carried_history.
+  Real Kafka/Mongo command (temporary worker, current source mounted):
+    docker run --rm --network p03-net -v /Users/carol/Documents/data260-lab1-pair03:/workspace -w /workspace -e PYTHONPATH=/workspace -e PYTHONDONTWRITEBYTECODE=1 -e MONGO_URL=mongodb://p03-mongo:27017 -e KAFKA_BOOTSTRAP=p03-kafka:9092 p03-worker:dev python -m backend.memory_demo --label carol-20261115-memory --output-dir loadtest/temp/assistant-memory/carol-20261115-memory
+  Result: 63 -> 30 entries, all duplicate groups merged, three newer corrections
+  selected, 27 unrelated topics retained. Event 052e0c31-4f18-4507-b981-846039679967;
+  trace memory-demo-71cd9f874a704fa1ab14771887433921; processed receipt at
+  2026-11-15T21:50:20.859119Z. Full ignored evidence: loadtest/temp/assistant-memory/carol-20261115-memory/memory-evidence.json.
+  Real topic initializer passed in the same isolated namespace. No services were
+  restarted, volumes erased, or production accounts used. Demo data/topics remain
+  for inspection. No model inference/mistakes; deterministic consolidation only.
+  Real --seed-only rerun retained 30 entries; no merged duplicates resurrected.
+  Compose rendered using non-secret placeholders; Kubernetes base rendered locally.
+  Memory HTTP/model interaction uses deterministic model + mongomock tests; live
+  HTTP/Ollama, Kubernetes/AWS deployment and Redux/context instrumentation not run.
+  No local official PDF available; supplied requirements used. Code awaits review;
+  no commit or push in this checkpoint.
+
+[Xuanhua Li memory final review — 2026-11-15]
+  Reviewed complete implementation and new files at base 6124c45. Fixed memory
+  request publication: local producer buffering is insufficient; opt-in callback
+  acknowledgement required, bounded to two seconds. Unavailable/error/timeout
+  returns 503; end reports ended=true and consolidation_enqueued=false on failure.
+  Timeout is unknown delivery, never reported successful. No outbox or changes
+  to unrelated producer behavior. Memory-worker DLQ sends must be acknowledged
+  before offset commit. Confirmed tests cover failure/no callback/timeout/ack.
+  Fixed opaque entries with colliding IDs being overwritten; retained separately.
+  Whole credential-bearing dialogue turns are omitted rather than partially saved.
+  Added two-consumer CAS, post-completion addition/replay, private-token storage
+  and end/publication failure tests. Auth ownership, stored-history precedence,
+  read-time expiry and existing Agent safeguards preserved.
+  Focused: .venv/bin/python -m pytest -q backend/tests/test_assistant_memory.py backend/tests/test_messaging.py backend/tests/test_topic_prefix.py backend/tests/test_agent_harness.py backend/tests/test_student_assistant.py backend/tests/test_workers.py -rs
+  Result: 100 passed, 0 failed/skipped, 50 warnings.
+  Full: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 486 passed, 0 failed/skipped, 110 warnings, 94.28 seconds.
+  Harness: sh scripts/run_agent_harness.sh --persistence sql --label memory-final-review-20261115 --output-dir loadtest/temp/agent_harness/memory-final-review-20261115
+  Result: 10/10 pass, exit 0. Compile/shell/diff checks pass.
+  Preserved sanitized synthetic evidence under loadtest/evidence_assistant_memory_2026-11-15.json
+  and loadtest/summary_assistant_memory_2026-11-15.md; ignored original unchanged.
+  Evidence is the prior real Kafka/Mongo CLI run using production consumer dispatch,
+  not a separately deployed worker. Final acknowledgement/opaque-entry fixes have
+  automated coverage; real service verification was not rerun during this review.
+
+2026-11-15 — Xuanhua Li: student Redux checkpoint (uncommitted review branch)
+  Branch: feature/lab2-redux-student-state
+  Base: 67eb3c3e7d1324a6887043f35e8bd137280f605b
+  Added session, savedItems and assistant slices to the existing store. Auth
+  adapter/client preserve existing JWT storage while keeping secrets out of Redux.
+  Added generation/request guards, account-bound cache clearing, saved-item UI,
+  server conversation ID/header handling and private transient confirmation vault.
+  Small backend gaps: authenticated saved-item facade over existing stores; expose
+  X-Conversation-Id for development CORS. Business repositories/slices unchanged.
+  npm --prefix frontend test: 31 passed, 0 failed/skipped.
+  npm --prefix frontend run lint; npm --prefix frontend run build: passed.
+  Focused backend routes/service checks: 8 passed, 1 deprecation warning.
+  Browser: synthetic login, Assistant navigation continuity, save/list/unsave,
+  logout and second-account isolation verified against isolated SQLite/Mongo mock
+  and deterministic model over real HTTP. Temporary test servers stopped.
+  No live deployment/model or automatic refresh/cross-device thread claim.
+  Redux DevTools extension unavailable in automation browser; actual panel
+  captures for session and assistant remain manual, steps in README.
+  No commit/push, JMeter, AWS, Kafka or token/context instrumentation performed.
+  Final full backend: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 490 passed, 0 failed/skipped, 110 dependency deprecation warnings,
+  94.90 seconds. git diff --check passed. No dependencies added/upgraded.
+
+  Redux final scoped review:
+  Verified expected branch/base and preserved all 28 checkpoint files.
+  Tightened saved-item HTTP request ID/type/extra-field validation; SQL and Mongo
+  mock coverage includes invalid IDs, unauthenticated writes and repeated deletes.
+  Missing confirmation-token memory now gives a restart instruction, blocks
+  submissions and ends an active server conversation on explicit restart.
+  Reran frontend: 32 tests passed, 0 failed/skipped; lint/build passed.
+  Reran focused saved-item/Student/Assistant checks: 8 passed, 1 warning.
+  Reused prior full backend result: 490 passed, 110 warnings; not rerun here.
+  Browser evidence remains the prior isolated SQL/Mongo-mock/deterministic-model
+  real-HTTP check, not live-service evidence. DevTools screenshots still pending.
+
+2026-11-15 local — Xuanhua Li: Agent observability checkpoint (uncommitted review)
+  Branch: feature/lab2-agent-observability
+  Base: 562d0d6bc5345ac3dab7612d9556c7bc9abc4370
+  Added per-call Ollama counters, overlapping request totals and separately
+  labeled latest-call occupancy estimates; configurable request num_ctx default
+  4096, UI warning strictly above 70%, auto-compaction threshold default 80%.
+  /compact uses server-owned Mongo history, source-validated extractive summary,
+  two-message tail and existing ownership/expiry/version CAS. At most three
+  compaction calls, once per HTTP request. Pending confirmation blocks compaction.
+  No credentials/tokens/private tool payloads are persisted by summary/metrics.
+  Focused command: .venv/bin/python -m pytest -q backend/tests/test_agent_observability.py backend/tests/test_ollama_client.py backend/tests/test_ai_core.py backend/tests/test_student_assistant.py backend/tests/test_assistant_memory.py -rs
+  Result: 132 passed, 0 failed/skipped, 218 dependency deprecation warnings.
+  npm --prefix frontend test: 35 passed, 0 failed/skipped.
+  npm --prefix frontend run lint; npm --prefix frontend run build: passed.
+  sh scripts/run_agent_harness.sh --persistence sql --label observability-final --output-dir loadtest/temp/agent_harness/observability-final
+  Result: H01–H10 10/10 passed, exit 0; H07 remains client-carried history.
+  Live command: .venv/bin/python -m backend.observability_demo --label local-observability
+  Actual UTC 2026-11-16T03:42:24.444521+00:00: measured probe prompts 1309 ->
+  1168; 12 -> 3 stored messages; input-sensitive follow-up recalled city/next step.
+  After strengthening other-facts coverage, ran a distinct fresh namespace:
+  .venv/bin/python -m backend.observability_demo --label coverage-validated
+  Actual UTC 2026-11-16T03:46:44.612370+00:00: measured 1309 -> 1194 prompt
+  tokens, 12 -> 3 messages. Three-call request totals 3243 prompt/146 completion;
+  latest-call estimated occupancy 1196/4096 = 29.19921875%. Recall 1195/19,
+  San Jose + eligibility step, no learned entries or resubmitted client history.
+  Actual host Ollama 0.40.6/qwen3:8b and local Mongo; authenticated ASGI routes
+  with isolated SQLite fixtures. Not a deployed server/browser/worker check.
+  No shared restart, volume/database reset, environment overwrite or secret output.
+  Both ignored raw files preserved, tracked synthetic summary:
+  loadtest/summary_assistant_observability_2026-11-15.md
+  Final quote-validation/logging hardening has automated coverage; observed final
+  live summary revalidated unchanged. No extra live run claimed afterward.
+  Existing Redux DevTools capture checklist remains pending. No JMeter or AWS run.
+  Final complete backend after code changes:
+  .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 518 passed, 0 failed/skipped, 277 dependency deprecation warnings,
+  40.49 seconds. Final frontend tests/lint/build passed (35 tests).
+  Final SQL harness rerun:
+  sh scripts/run_agent_harness.sh --persistence sql --label observability-review --output-dir loadtest/temp/agent_harness/observability-review
+  Result: 10/10 passed, exit 0. Compile/import, shell syntax, conflict/secret and
+  diff checks passed. Checkpoint remains uncommitted; no push/merge/deployment.
+  Final authorized save review:
+  Preserved all 20 checkpoint files; reviewed full diff/new files directly.
+  Fixed A/B/A correction ordering, quote-category/order validation, malformed
+  summary-shaped history and JSON-quoted credential keys; private source data
+  fails before any compaction model call. Added 8 focused adversarial cases.
+  Reran focused backend: 140 passed, 218 warnings; complete backend: 526 passed,
+  0 failed/skipped, 276 warnings in 40.80 seconds. Frontend: 35 passed,
+  lint/build passed. SQL harness observability-finalize: 10/10, exit 0.
+  Warning review: one Starlette TestClient/httpx deprecation, 275 mongomock
+  datetime.utcnow deprecations; no new application warning category or fixes
+  to unrelated dependencies. Original 277-warning run preserved above.
+  Live artifact is unchanged under final validation/privacy checks; no new live
+  inference. 1309 -> 1194 remains measured probe prompt tokens; 3389 remains
+  overlapping three-call request usage. No deployed/browser claim added.
+  Redux DevTools screenshots remain pending. No AWS/JMeter/shared branch changes.
+
+2026-11-15 local / 2026-11-16 UTC — Xuanhua Li Assistant traces and stage timing
+  Branch: feature/lab2-assistant-trace-evidence
+  Base: 58e09200d6534e4ae227485894f54370d29fd843; runtime hashes in environment.json.
+  Added monotonic request-local model/tool/SQL cursor/Mongo command timing.
+  Metadata only; no prompt/SQL/DB payload logging. Native inference is directly
+  reported prompt_eval_duration + eval_duration; DB/tool spans overlap.
+  Queue wait unavailable; residual time is not labeled queue wait.
+  Command: sh scripts/assistant_stage_timing.sh --label carol-stage50 --requests 50 --warmup 2
+  UTC start 2026-11-16T05:21:01.728950+00:00. Actual network HTTP to isolated
+  loopback Uvicorn, production authenticated routes/Agent/tools, live host Ollama
+  0.40.6/qwen3:8b and MongoDB 7.0.48 in a new synthetic database.
+  Apple M4, 10 logical cores, 16 GiB RAM; Darwin 24.6.0 arm64 (sysctl verified).
+  num_ctx=4096; num_predict=128; think=false; temperature=0.1; concurrency=1;
+  model deadline=60s; client deadline=420s; 2 warm-ups excluded; no client retries.
+  Same synthetic student, fresh conversation/request; actual read-only search_jobs.
+  All 50 measured requests retained: 50 success, 0 errors, 0 client HTTP timeouts.
+  End-to-end nearest-rank p50/p95/p99: 16463.086/20145.471/24119.175 ms.
+  Stage total/mean ms: model 720089.447/14401.789; native inference
+  704436.421/14088.728; tool 39380.023/787.600; DB 83573.552/1671.471;
+  nested DB inside tools 37564.601/751.292. Not additive inclusive stages.
+  100 model calls, 50 actual tool executions, 700 Mongo commands; model wall time
+  dominates; measured native inference is 97.83% of model wall time.
+  Successful trace: trace-f77e5d5679-measured-01; HTTP200/success, matching title
+  and city, 2 model calls/1 tool/14 DB commands, 14322.896ms end-to-end.
+  Failure trace: trace-f77e5d5679-failure-01, excluded from50; reserved non-listening
+  loopback model endpoint override on isolated app; HTTP200/safe_error, 648.993ms,
+  2 bounded attempts/0 tools/12 DB commands, model_backend_error. Shared services
+  unaffected. Internal transport-timeout subtype is unavailable; reported timeout
+  counts refer specifically to client HTTP deadlines.
+  Limitation: backend pytest overlapped warm-ups and early measured requests;
+  other Docker workloads present. Shared-host attribution, not idle-machine/JMeter
+  concurrency/deployed/browser/AWS evidence. No selective reruns or replacements.
+  Raw ignored path: loadtest/temp/assistant_trace/carol-stage50-f77e5d5679
+  Export: .venv/bin/python -m backend.assistant_trace_submission loadtest/temp/assistant_trace/carol-stage50-f77e5d5679 --output-dir loadtest/evidence_assistant_trace_stage50
+  Verified 50 ordered distinct traces, all stage counts, reproduced aggregates,
+  eight runtime source hashes; byte-identical safe raw copies with SHA256 manifest.
+  Submission: loadtest/evidence_assistant_trace_stage50/ (traces.md, summary.md,
+  measurements.jsonl, environment/host observations and separate warm-ups).
+  Focused: .venv/bin/python -m pytest -q backend/tests/test_assistant_stage_timing.py backend/tests/test_tracing.py backend/tests/test_ollama_client.py -x -rs
+  Result: 30 passed, 0 failed/skipped, 1 dependency warning.
+  Full: .venv/bin/python -m pytest -q backend/tests -rs
+  Result: 534 passed, 0 failed/skipped, 277 dependency warnings, 211.12s.
+  Categories: 1 Starlette/httpx deprecation, 276 mongomock datetime deprecations.
+  SQL harness after live run:
+  sh scripts/run_agent_harness.sh --persistence sql --label assistant-trace-final --output-dir loadtest/temp/agent_harness/assistant-trace-final
+  Result: 10/10 passed, exit0; H07 remains client_carried_history.
+  Own server shut down; synthetic DB retained; shared services not restarted.
+  No JMeter/AWS/Kafka flow run or partner evidence change; frontend unchanged.
+  Redux DevTools screenshots pending. No commit/push/merge in this checkpoint.
+
+2026-11-16 — Xuanhua Li: verified bounded compaction fix
+  Worktree: /private/tmp/data260-final-evidence-xuanhua
+  Branch: feature/lab2-final-evidence-xuanhua
+  Base: 406c85e96a98e1877c3b0b47862c7f2c2fa7ea5a.
+  Native Ollama JSON Schema now selects bounded quote IDs from a canonical source,
+  avoiding duplicated full dialogue/quote inventory and unbounded string generation.
+  Exact grounding, negations/corrections, global chronology and source provenance
+  retained; infeasible coverage/context/output limits fail before inference.
+  Configured output caps respected; per-call summary maximum512, actual reserve399.
+  Context4096, 240s timeout, thresholds and ownership/version-CAS checks unchanged.
+  Completed focused verification (reused for final save):
+  .venv/bin/python -m pytest -q backend/tests/test_compaction_budget.py backend/tests/test_agent_observability.py backend/tests/test_ollama_client.py backend/tests/test_assistant_memory.py backend/tests/test_assistant_stage_timing.py -rs
+  95 passed,0 failed/skipped,256 dependency warnings,2.00s.
+  Completed full backend after final production edits:
+  .venv/bin/python -m pytest -q backend/tests -rs
+  559 passed,0 failed/skipped,316 dependency warnings,103.47s.
+  Completed SQL harness:
+  sh scripts/run_agent_harness.sh --persistence sql --label budget-verified --output-dir loadtest/temp/final-evidence/compaction-budget/sql-harness-verified
+  10/10 passed,exit0; H07 remains client_carried_history.
+  Existing installed virtualenv reused; its temporary worktree link was removed.
+  No dependencies installed. No inference/suites rerun during final save review.
+  Controlled live command (run once, not a reusable retry loop):
+  PYTHONPATH=/private/tmp/data260-final-evidence-xuanhua /Users/carol/Documents/data260-lab1-pair03/.venv/bin/python loadtest/temp/final-evidence/compaction-budget/verify_once.py
+  Actual UTC start2026-11-16T09:59:47.951892+00:00; local PST2026-11-16.
+  Trace:xuanhua-budget-compact-c0694baa3a; real network HTTP via frontend5174 to
+  isolated integrated backend9130, real local Mongo/Ollama qwen3:8b.
+  Exactly one same-owner source-identical copy; HTTP200/compacted.
+  Measured prompt/completion: before2922/2, selection1558/238, after2505/2.
+  Probe2922 ->2505 =417 fewer prompt tokens (14.27%); messages32 ->3.
+  Request total7227 tokens across3 calls; latest occupancy2507/4096=61.20605%.
+  Preflight3573 input +399 reserved output are ESTIMATES, not measured counters.
+  Total client268825.108ms (~269s); gateway/AWS behavior not verified.
+  One recall with only conversation_id/question: HTTP200,2517/45 measured tokens,
+  one model call/zero tools. City, unsubmitted/unknown status and eligibility-step
+  checks matched;75 actual stored-catalog source references and fact coverage verified.
+  City learned memory also existed; city recall alone is not summary proof.
+  Original conversation remains version13/messages32/hash unchanged. Prior
+  invalid-JSON/no-reduction/timeout attempts and original log remain preserved.
+  Ignored local evidence: loadtest/temp/final-evidence/compaction-budget/.
+  No screenshot, private login, raw log/dialogue or temporary evidence staged.
+  Screenshots remain separate chat/folder delivery; intended five-prompt set pending.
+  Isolated servers and synthetic data left available; shared services unchanged.
+
+2026-11-16 — Xuanhua Li: production request-date correction
+  Branch feature/lab2-final-evidence-xuanhua; base
+  764b1474f28df8f6bb8bba2b3f2d7934f33c7594.
+  Replaced import-time October 2029 reference with one actual UTC date per
+  Agent request; paired compaction probes reuse one date. No configured app
+  timezone exists, so UTC is explicit. User-specified dates remain unchanged.
+  Deterministic tests freeze the injected clock; no seed/data fixture changes.
+  User-reported browser check on isolated frontend5174/backend9130 confirmed
+  search_events start_date2026-12-01/end_date2026-12-31 for next month.
+  Backend reload was verified via health and loaded prompt, without inference.
+  Reused focused date/AI/harness regressions:234 passed,0 failed/skipped,
+  214 warnings,21.66s. No live inference rerun during finalization.
+  Original conversations, failed/successful prior evidence and separate worktree
+  handoff files preserved; screenshots/private login/runtime logs not staged.
+  Final full backend (existing virtualenv, after production changes):
+  /Users/carol/Documents/data260-lab1-pair03/.venv/bin/python -m pytest -q backend/tests -rs
+  567 passed,0 failed/skipped,323 warnings,101.57s.
+  Final SQL harness (same interpreter):
+  python -m backend.harness.runner --persistence sql --label request-date-final-20261116 --output-dir loadtest/temp/final-evidence/request-date-fix/sql-harness-final-20261116
+  10/10 passed,exit0; deterministic model/isolated SQLite; H07 client-carried history.
+  Logs/reports remain ignored under loadtest/temp/final-evidence/request-date-fix/.
+  Diff/conflict/sensitive-addition checks passed; no live inference/load test rerun.

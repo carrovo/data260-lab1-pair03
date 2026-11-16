@@ -8,6 +8,7 @@ const publicNavigation = [
 ]
 
 const studentNavigation = [
+  { label: 'Saved items', path: '/saved', icon: '♡' },
   { label: 'Applications', path: '/applications', icon: '≡' },
   { label: 'My Registrations', path: '/registrations', icon: '✓' },
   { label: 'Assistant', path: '/assistant', icon: '✦' },

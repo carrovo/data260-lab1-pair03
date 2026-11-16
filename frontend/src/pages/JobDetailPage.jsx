@@ -1,10 +1,15 @@
+import SaveItemButton from '../components/SaveItemButton'
 import { useEffect, useRef, useState } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import { Link, useLocation, useParams } from 'react-router-dom'
+import { loadJob, selectJobDetail } from '../store/jobsSlice'
 import {
-  fetchJob,
-  fetchMyApplications,
-  submitApplication,
-} from '../api'
+  loadMyApplications,
+  selectApplicationForJob,
+  selectMyApplications,
+  selectSubmitState,
+  submitJobApplication,
+} from '../store/applicationsSlice'
 import useAuth from '../auth/useAuth'
 
 
@@ -62,104 +67,54 @@ function applicationErrorMessage(requestError) {
 function JobDetailPage() {
   const { jobId } = useParams()
   const location = useLocation()
-  const { accessToken, isAuthenticated, logout } = useAuth()
+  const { isAuthenticated, logout } = useAuth()
   const resumeInputRef = useRef(null)
-  const [job, setJob] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [notFound, setNotFound] = useState(false)
+  const dispatch = useDispatch()
+  const detail = useSelector(selectJobDetail)
+  const myApplications = useSelector(selectMyApplications)
+  const submitState = useSelector(selectSubmitState)
+  const storedApplication = useSelector((state) =>
+    selectApplicationForJob(state, jobId),
+  )
+  const [removedJobId, setRemovedJobId] = useState(null)
   const [resumeFile, setResumeFile] = useState(null)
-  const [application, setApplication] = useState(null)
-  const [checkingApplication, setCheckingApplication] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
   const [applicationError, setApplicationError] = useState('')
   const [applicationSuccess, setApplicationSuccess] = useState('')
 
+  const removedAfterSubmit = removedJobId === jobId
+  const job = removedAfterSubmit ? null : detail.item
+  const loading = detail.status === 'idle' || detail.status === 'loading'
+  const notFound = removedAfterSubmit || detail.notFound
+  const error = detail.error?.message || ''
+  const application = isAuthenticated ? storedApplication : null
+  const checkingApplication = myApplications.status === 'loading'
+  const submitting = submitState.status === 'loading'
+
   useEffect(() => {
-    let cancelled = false
-
-    async function loadJob() {
-      setLoading(true)
-      setError('')
-      setNotFound(false)
-
-      try {
-        const jobData = await fetchJob(jobId)
-
-        if (!cancelled) {
-          setJob(jobData)
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setJob(null)
-
-          if (requestError.status === 404) {
-            setNotFound(true)
-          } else {
-            setError(requestError.message)
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    loadJob()
-
-    return () => {
-      cancelled = true
-    }
-  }, [jobId])
+    dispatch(loadJob(jobId))
+  }, [dispatch, jobId])
 
   useEffect(() => {
     if (!isAuthenticated) {
-      return undefined
+      return
     }
 
-    let cancelled = false
-
-    async function loadExistingApplication() {
-      setCheckingApplication(true)
-      setApplicationError('')
-
-      try {
-        const applications = await fetchMyApplications(accessToken)
-        const existingApplication = applications.find(
-          (item) => String(item.job_id) === String(jobId),
-        )
-
-        if (!cancelled) {
-          setApplication(existingApplication || null)
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          if (requestError.status === 401) {
-            setApplicationError(
-              'Your session has expired. Sign in again to apply.',
-            )
-            logout()
-          } else {
-            setApplicationError(
-              requestError.message ||
-                'Unable to check your existing applications.',
-            )
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setCheckingApplication(false)
-        }
+    dispatch(loadMyApplications({})).then((result) => {
+      if (!loadMyApplications.rejected.match(result)) {
+        return
       }
-    }
 
-    loadExistingApplication()
-
-    return () => {
-      cancelled = true
-    }
-  }, [accessToken, isAuthenticated, jobId, logout])
+      if (result.payload?.status === 401) {
+        setApplicationError('Your session has expired. Sign in again to apply.')
+        logout()
+      } else {
+        setApplicationError(
+          result.payload?.message ||
+            'Unable to check your existing applications.',
+        )
+      }
+    })
+  }, [dispatch, isAuthenticated, jobId, logout])
 
   function handleResumeChange(event) {
     const selectedFile = event.target.files?.[0] || null
@@ -178,52 +133,41 @@ function JobDetailPage() {
       return
     }
 
-    setSubmitting(true)
     setApplicationError('')
     setApplicationSuccess('')
 
-    try {
-      const submittedApplication = await submitApplication(
-        jobId,
-        resumeFile,
-        accessToken,
-      )
+    const result = await dispatch(
+      submitJobApplication({ jobId, resumeFile }),
+    )
 
-      setApplication(submittedApplication)
+    if (submitJobApplication.fulfilled.match(result)) {
       setResumeFile(null)
       setApplicationSuccess(
-        `Application submitted with status ${submittedApplication.status}.`,
+        `Application submitted with status ${result.payload.status}.`,
       )
 
       if (resumeInputRef.current) {
         resumeInputRef.current.value = ''
       }
-    } catch (requestError) {
-      setApplicationError(applicationErrorMessage(requestError))
+      return
+    }
 
-      if (requestError.status === 401) {
+    const requestError = result.payload || {}
+    setApplicationError(applicationErrorMessage(requestError))
+
+    if (requestError.status === 401) {
+      logout()
+    } else if (requestError.status === 404) {
+      setRemovedJobId(jobId)
+    } else if (requestError.status === 409) {
+      const refreshed = await dispatch(loadMyApplications({}))
+
+      if (
+        loadMyApplications.rejected.match(refreshed) &&
+        refreshed.payload?.status === 401
+      ) {
         logout()
-      } else if (requestError.status === 404) {
-        setJob(null)
-        setNotFound(true)
-      } else if (requestError.status === 409) {
-        try {
-          const applications = await fetchMyApplications(accessToken)
-          const existingApplication = applications.find(
-            (item) => String(item.job_id) === String(jobId),
-          )
-
-          if (existingApplication) {
-            setApplication(existingApplication)
-          }
-        } catch (historyError) {
-          if (historyError.status === 401) {
-            logout()
-          }
-        }
       }
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -271,6 +215,7 @@ function JobDetailPage() {
                 <div>
                   <p className="page-eyebrow">JOB OPPORTUNITY</p>
                   <h1>{job.title}</h1>
+                  <SaveItemButton type="job" id={jobId} />
                   <p className="company-name">{job.company.name}</p>
                 </div>
               </div>

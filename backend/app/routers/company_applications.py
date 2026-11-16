@@ -1,23 +1,22 @@
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.application_status import ApplicationStatus
 from backend.app.models import (
     Application,
-    Company,
-    Job,
-    Student,
 )
+from backend.app.repos import make_repos
 from backend.app.routers.applications import get_stored_resume_path
 from backend.app.routers.company_auth import (
     get_current_company,
     get_db,
 )
+from backend.common.outgoing import publish_safely
 
 
 router = APIRouter(
@@ -50,8 +49,8 @@ def _owned_job_or_404(
     db: Session,
     job_id: int,
     company_id: int,
-) -> Job:
-    job = db.get(Job, job_id)
+) -> Any:
+    job = make_repos(db).jobs.get(job_id)
 
     if job is None:
         raise HTTPException(
@@ -72,7 +71,7 @@ def _application_or_404(
     db: Session,
     application_id: int,
 ) -> Application:
-    application = db.get(Application, application_id)
+    application = make_repos(db).applications.get(application_id)
 
     if application is None:
         raise HTTPException(
@@ -87,7 +86,7 @@ def _verify_company_owns_application(
     db: Session,
     application: Application,
     company_id: int,
-) -> Job:
+) -> Any:
     return _owned_job_or_404(
         db,
         application.job_id,
@@ -97,7 +96,7 @@ def _verify_company_owns_application(
 
 def _applicant_response(
     application: Application,
-    student: Student,
+    student: Any,
 ) -> ApplicantResponse:
     return ApplicantResponse(
         application_id=application.id,
@@ -121,7 +120,7 @@ def _applicant_response(
 def list_job_applicants(
     job_id: int,
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     job = _owned_job_or_404(
         db,
@@ -129,24 +128,15 @@ def list_job_applicants(
         current_company.id,
     )
 
-    statement = (
-        select(Application, Student)
-        .join(
-            Student,
-            Application.student_id == Student.id,
-        )
-        .where(Application.job_id == job.id)
-        .order_by(
-            Application.applied_at.desc(),
-            Application.id.desc(),
-        )
+    applications = make_repos(db).applications.list_for_job(job.id)
+    students = make_repos(db).students.get_many(
+        [application.student_id for application in applications]
     )
 
-    rows = db.execute(statement).all()
-
     return [
-        _applicant_response(application, student)
-        for application, student in rows
+        _applicant_response(application, students[application.student_id])
+        for application in applications
+        if application.student_id in students
     ]
 
 
@@ -156,7 +146,7 @@ def list_job_applicants(
 def preview_application_resume(
     application_id: int,
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     application = _application_or_404(
         db,
@@ -204,7 +194,7 @@ def update_application_status(
     application_id: int,
     payload: ApplicationStatusUpdate,
     db: Session = Depends(get_db),
-    current_company: Company = Depends(get_current_company),
+    current_company: Any = Depends(get_current_company),
 ):
     application = _application_or_404(
         db,
@@ -217,10 +207,7 @@ def update_application_status(
         current_company.id,
     )
 
-    student = db.get(
-        Student,
-        application.student_id,
-    )
+    student = make_repos(db).students.get(application.student_id)
 
     if student is None:
         raise HTTPException(
@@ -228,10 +215,23 @@ def update_application_status(
             detail="Student not found.",
         )
 
-    application.status = payload.status.value
+    old_status = application.status
+    application = make_repos(db).applications.update(
+        application, status=payload.status.value
+    )
 
-    db.commit()
-    db.refresh(application)
+    if old_status != application.status:
+        publish_safely(
+            "application.status_changed",
+            {
+                "application_id": str(application.id),
+                "student_id": str(application.student_id),
+                "job_id": str(application.job_id),
+                "old_status": old_status,
+                "new_status": application.status,
+            },
+            key=str(application.id),
+        )
 
     return _applicant_response(
         application,

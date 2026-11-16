@@ -783,7 +783,7 @@ def test_saves_are_isolated_by_trusted_student(ai_tool_context):
     }
 
 
-def test_agent_overrides_model_supplied_student_id(ai_tool_context):
+def test_agent_rejects_model_supplied_student_id(ai_tool_context):
     engine, identifiers = ai_tool_context
     model = FakeModelClient([
         _tool_call(
@@ -808,14 +808,14 @@ def test_agent_overrides_model_supplied_student_id(ai_tool_context):
             tool_schemas=TOOL_SCHEMAS,
             tool_implementations=TOOL_IMPLEMENTATIONS,
         )
-        saved_item = db.scalar(select(SavedItem))
+        saved_count = db.scalar(select(func.count(SavedItem.id)))
 
-    assert result["reply"] == "The job was saved."
-    assert saved_item.student_id == identifiers["partial_student"]
-    assert saved_item.student_id != identifiers["primary_student"]
+    assert "after one repair attempt" in result["reply"]
+    assert len(model.calls) == 2
+    assert saved_count == 0
 
 
-def test_agent_discards_model_student_id_without_trusted_context(
+def test_agent_rejects_save_without_trusted_context(
     ai_tool_context,
 ):
     engine, identifiers = ai_tool_context
@@ -825,7 +825,6 @@ def test_agent_discards_model_student_id_without_trusted_context(
             {
                 "item_type": "job",
                 "item_id": identifiers["data_intern"],
-                "student_id": identifiers["primary_student"],
             },
         ),
         _text_response("The save was not authorized."),
