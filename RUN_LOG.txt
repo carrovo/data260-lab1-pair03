@@ -577,3 +577,26 @@ Result:   PASS
   No screenshot, private login, raw log/dialogue or temporary evidence staged.
   Screenshots remain separate chat/folder delivery; intended five-prompt set pending.
   Isolated servers and synthetic data left available; shared services unchanged.
+
+2026-11-16 — Xuanhua Li: production request-date correction
+  Branch feature/lab2-final-evidence-xuanhua; base
+  764b1474f28df8f6bb8bba2b3f2d7934f33c7594.
+  Replaced import-time October 2029 reference with one actual UTC date per
+  Agent request; paired compaction probes reuse one date. No configured app
+  timezone exists, so UTC is explicit. User-specified dates remain unchanged.
+  Deterministic tests freeze the injected clock; no seed/data fixture changes.
+  User-reported browser check on isolated frontend5174/backend9130 confirmed
+  search_events start_date2026-12-01/end_date2026-12-31 for next month.
+  Backend reload was verified via health and loaded prompt, without inference.
+  Reused focused date/AI/harness regressions:234 passed,0 failed/skipped,
+  214 warnings,21.66s. No live inference rerun during finalization.
+  Original conversations, failed/successful prior evidence and separate worktree
+  handoff files preserved; screenshots/private login/runtime logs not staged.
+  Final full backend (existing virtualenv, after production changes):
+  /Users/carol/Documents/data260-lab1-pair03/.venv/bin/python -m pytest -q backend/tests -rs
+  567 passed,0 failed/skipped,323 warnings,101.57s.
+  Final SQL harness (same interpreter):
+  python -m backend.harness.runner --persistence sql --label request-date-final-20261116 --output-dir loadtest/temp/final-evidence/request-date-fix/sql-harness-final-20261116
+  10/10 passed,exit0; deterministic model/isolated SQLite; H07 client-carried history.
+  Logs/reports remain ignored under loadtest/temp/final-evidence/request-date-fix/.
+  Diff/conflict/sensitive-addition checks passed; no live inference/load test rerun.

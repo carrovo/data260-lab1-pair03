@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 from backend.app.ai.agent import (
     MAX_HISTORY_CONTENT_LENGTH,
     MAX_HISTORY_MESSAGES,
-    SYSTEM_PROMPT,
+    build_system_prompt,
 )
+from backend.app.ai import agent as agent_module
 from backend.app.ai.confirmation_token import (
     CONFIRMATION_TOKEN_USE,
     create_confirmation_token,
@@ -22,6 +23,11 @@ from backend.app.config import settings
 from backend.app.main import app
 from backend.app.models import Company, Event, Job, SavedItem
 from backend.app.routers import assistant as assistant_router
+
+
+@pytest.fixture(autouse=True)
+def frozen_agent_request_date(monkeypatch):
+    monkeypatch.setattr(agent_module, "_utc_now", lambda: datetime(2026, 11, 16, tzinfo=timezone.utc))
 
 
 def _model_text(content="Here is a safe response."):
@@ -404,7 +410,7 @@ def test_system_prompt_is_present_on_every_normal_turn(
     for call in model.calls:
         assert call["messages"][0] == {
             "role": "system",
-            "content": SYSTEM_PROMPT,
+            "content": build_system_prompt(),
         }
 
 

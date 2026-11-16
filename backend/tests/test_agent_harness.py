@@ -1,6 +1,7 @@
 import json
 import re
 from dataclasses import fields
+from datetime import datetime, timezone
 
 import pytest
 
@@ -286,7 +287,9 @@ def test_h08_reports_exact_model_visible_defended_message(harness_results):
     )
 
 
-def test_normalized_repeat_runs_are_identical():
+def test_normalized_repeat_runs_are_identical(monkeypatch):
+    monkeypatch.setattr("backend.app.ai.agent._utc_now",
+                        lambda: datetime(2026, 11, 16, tzinfo=timezone.utc))
     first = make_report(
         run_required_cases("sql"),
         label="repeat",

@@ -1,11 +1,11 @@
 import logging
+from datetime import date, datetime, timezone
 
 import pytest
 
 from backend.app.ai.agent import (
-    DEMO_NEXT_MONTH_END,
-    DEMO_NEXT_MONTH_START,
-    DEMO_REFERENCE_DATE,
+    build_system_prompt,
+    _next_calendar_month,
     MAX_HISTORY_CONTENT_LENGTH,
     MAX_HISTORY_MESSAGES,
     SYSTEM_PROMPT,
@@ -13,10 +13,16 @@ from backend.app.ai.agent import (
     sanitize_tool_output,
     validate_conversation,
 )
+from backend.app.ai import agent as agent_module
 from backend.app.ai.confirm_action import confirm_action
 from backend.app.ai.ollama_client import FakeModelClient, OllamaClient
 from backend.app.ai.tools import TOOL_SCHEMAS as DATABASE_TOOL_SCHEMAS
 from backend.app.config import settings
+
+
+@pytest.fixture(autouse=True)
+def frozen_agent_clock(monkeypatch):
+    monkeypatch.setattr(agent_module, "_utc_now", lambda: datetime(2026, 11, 16, tzinfo=timezone.utc))
 
 
 TOOL_SCHEMAS = [
@@ -126,14 +132,15 @@ def run_with_tools(model, implementations, **overrides):
     return run_assistant(**arguments)
 
 
-def test_system_prompt_defines_remote_argument_and_demo_date_guidance():
-    assert DEMO_REFERENCE_DATE.isoformat() == "2029-10-15"
-    assert DEMO_NEXT_MONTH_START.isoformat() == "2029-11-01"
-    assert DEMO_NEXT_MONTH_END.isoformat() == "2029-11-30"
+def test_system_prompt_defines_remote_argument_and_request_date_guidance():
+    prompt = build_system_prompt()
+    assert "2026-11-16 (UTC)" in prompt
+    assert "2029-10-15" not in prompt
     assert '"is_remote": true' in SYSTEM_PROMPT
     assert 'parameter named "remote"' in SYSTEM_PROMPT
-    assert "trusted reference date" in SYSTEM_PROMPT
-    assert "2029-11-01 through 2029-11-30" in SYSTEM_PROMPT
+    assert "trusted reference date" in prompt
+    assert "2026-12-01 through 2026-12-31" in prompt
+    assert "Preserve explicit dates and date ranges" in prompt
     assert "Omit optional search filters that the user did not state" in (
         SYSTEM_PROMPT
     )
@@ -142,7 +149,7 @@ def test_system_prompt_defines_remote_argument_and_demo_date_guidance():
     assert "do not invent a city" in SYSTEM_PROMPT
 
 
-def test_every_model_call_receives_server_owned_demo_reference_date(
+def test_every_model_call_receives_server_owned_request_reference_date(
     recording_tools,
 ):
     _, implementations = recording_tools
@@ -150,8 +157,8 @@ def test_every_model_call_receives_server_owned_demo_reference_date(
         model_tool_call("unknown_tool"),
         model_tool_call("search_events", {
             "major": "Computer Science",
-            "start_date": "2029-11-01",
-            "end_date": "2029-11-30",
+            "start_date": "2026-12-01",
+            "end_date": "2026-12-31",
         }),
         model_text("I found a verified event."),
     ])
@@ -172,10 +179,10 @@ def test_every_model_call_receives_server_owned_demo_reference_date(
     for call in model.calls:
         assert call["messages"][0] == {
             "role": "system",
-            "content": SYSTEM_PROMPT,
+            "content": build_system_prompt(),
         }
-        assert "2029-10-15" in call["messages"][0]["content"]
-        assert "2029-11-01 through 2029-11-30" in (
+        assert "2026-11-16" in call["messages"][0]["content"]
+        assert "2026-12-01 through 2026-12-31" in (
             call["messages"][0]["content"]
         )
 
@@ -991,3 +998,57 @@ def test_tool_evidence_redacts_sensitive_arguments(
     assert "visible-confirmation-token" not in structured_logs
     assert "mysql://" not in structured_logs
     assert "visible-api-key" not in structured_logs
+
+
+@pytest.mark.parametrize('reference,start,end', [
+    (date(2026, 11, 16), date(2026, 12, 1), date(2026, 12, 31)),
+    (date(2026, 12, 31), date(2027, 1, 1), date(2027, 1, 31)),
+    (date(2026, 1, 31), date(2026, 2, 1), date(2026, 2, 28)),
+    (date(2024, 1, 31), date(2024, 2, 1), date(2024, 2, 29)),
+])
+def test_next_calendar_month_handles_rollover_and_leap_year(reference, start, end):
+    assert _next_calendar_month(reference) == (start, end)
+    prompt = build_system_prompt(clock=lambda: datetime.combine(reference, datetime.min.time(), tzinfo=timezone.utc))
+    assert f'{start.isoformat()} through {end.isoformat()}' in prompt
+
+
+def test_request_date_uses_documented_utc_default_not_clock_local_date():
+    from datetime import timedelta
+    instant = datetime(2026, 11, 30, 23, 30, tzinfo=timezone(timedelta(hours=-8)))
+    prompt = build_system_prompt(clock=lambda: instant)
+    assert '2026-12-01 (UTC)' in prompt
+    assert '2027-01-01 through 2027-01-31' in prompt
+    with pytest.raises(ValueError, match='timezone-aware'):
+        build_system_prompt(clock=lambda: datetime(2026, 11, 16))
+
+
+def test_request_date_refreshes_between_requests_but_not_between_model_calls(monkeypatch, recording_tools):
+    calls = []
+    instants = iter([datetime(2026, 11, 30, 23, 59, tzinfo=timezone.utc),
+                     datetime(2026, 12, 1, tzinfo=timezone.utc)])
+    def clock():
+        value = next(instants); calls.append(value); return value
+    monkeypatch.setattr(agent_module, '_utc_now', clock)
+    _, implementations = recording_tools
+    first = FakeModelClient([model_tool_call('echo'), model_text('Done')])
+    second = FakeModelClient([model_text('Done')])
+    run_with_tools(first, implementations)
+    run_with_tools(second, implementations)
+    assert len(calls) == 2
+    assert len(first.calls) == 2
+    assert all('2026-11-30 (UTC)' in call['messages'][0]['content'] for call in first.calls)
+    assert all('2026-12-01 through 2026-12-31' in call['messages'][0]['content'] for call in first.calls)
+    assert '2026-12-01 (UTC)' in second.calls[0]['messages'][0]['content']
+    assert '2027-01-01 through 2027-01-31' in second.calls[0]['messages'][0]['content']
+
+
+def test_explicit_user_event_dates_are_not_rewritten_to_relative_range(recording_tools):
+    observed, implementations = recording_tools
+    explicit = {'major': 'Computer Science', 'start_date': '2029-11-01', 'end_date': '2029-11-30'}
+    model = FakeModelClient([model_tool_call('search_events', explicit), model_text('Verified results')])
+    result = run_with_tools(model, implementations,
+        user_message='Find computer science events from 2029-11-01 through 2029-11-30.')
+    assert result['reply'] == 'Verified results'
+    assert observed[0]['arguments'] == explicit
+    assert 'Preserve explicit dates and date ranges' in model.calls[0]['messages'][0]['content']
+    assert '2026-11-16 (UTC)' in model.calls[0]['messages'][0]['content']
