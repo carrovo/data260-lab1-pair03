@@ -11,6 +11,15 @@ const EXAMPLE_PROMPTS = [
   'What jobs match my saved preferences?',
 ]
 
+// The model writes **bold** Markdown; show it as bold text instead of raw asterisks.
+function renderInline(text) {
+  return String(text).split(/(\*\*[^*\n]+\*\*)/g).map((part, i) =>
+    part.startsWith('**') && part.endsWith('**') && part.length > 4
+      ? <strong key={i}>{part.slice(2, -2)}</strong>
+      : part
+  )
+}
+
 function AssistantPage() {
   const dispatch = useDispatch()
   const state = useSelector(selectAssistant)
@@ -118,7 +127,7 @@ function AssistantPage() {
                   <span className="assistant-message-author">
                     {entry.role === 'user' ? 'You' : 'Assistant'}
                   </span>
-                  <p>{entry.content}</p>
+                  <p>{entry.role === 'assistant' ? renderInline(entry.content) : entry.content}</p>
                 </article>
               ))}
             </div>
